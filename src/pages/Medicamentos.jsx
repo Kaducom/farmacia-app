@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { db } from "../db";
 import Scanner from "../components/Scanner";
+import Notificacao from "../components/Notificacao";
 
 function Medicamentos() {
   const [medicamentos, setMedicamentos] = useState([]);
@@ -13,10 +14,13 @@ function Medicamentos() {
   const [diasPre, setDiasPre] = useState("");
   const [editando, setEditando] = useState(null);
   const [mostrarScanner, setMostrarScanner] = useState(false);
+  const [confirmar, setConfirmar] = useState(null);
+  const [notificacao, setNotificacao] = useState(null);
 
   async function carregar() {
     const dados = await db.medicamentos.toArray();
     setMedicamentos(dados);
+    verificarVencimentos(dados);
   }
 
   useEffect(() => {
@@ -54,7 +58,7 @@ function Medicamentos() {
   async function salvar() {
     if (!nome || !validade) {
       alert("Preenche tudo aí 😄");
-      return false;
+      return;
     }
 
     try {
@@ -75,12 +79,26 @@ function Medicamentos() {
       limparFormulario();
       setAbrirModal(false);
       carregar();
-
-      return true;
     } catch (err) {
       console.error(err);
       alert("Erro ao salvar 😢");
-      return false;
+    }
+  }
+
+  function verificarVencimentos(lista) {
+    const hoje = new Date();
+    setNotificacao(null);
+
+    for (let med of lista) {
+      const validade = new Date(med.validade);
+      const diff = Math.ceil(
+        (validade - hoje) / (1000 * 60 * 60 * 24)
+      );
+
+      if (diff <= 1) {
+        setNotificacao(`⚠️ ${med.nome} vence hoje ou amanhã!`);
+        return;
+      }
     }
   }
 
@@ -106,7 +124,12 @@ function Medicamentos() {
   function diasRestantes(data) {
     const hoje = new Date();
     const validade = new Date(data);
-    return Math.ceil((validade - hoje) / (1000 * 60 * 60 * 24));
+
+    const diff = Math.ceil(
+      (validade - hoje) / (1000 * 60 * 60 * 24)
+    );
+
+    return diff < 0 ? 0 : diff;
   }
 
   function calcularStatus(med) {
@@ -136,13 +159,13 @@ function Medicamentos() {
     reader.readAsDataURL(file);
   }
 
-  // 🔥 SCANNER COMO TELA SEPARADA (ANTI BUG)
+  // 📷 SCANNER
   if (mostrarScanner) {
     return (
-      <div className="p-4">
+      <div className="p-4 dark:bg-gray-900 min-h-screen text-black dark:text-white">
         <button
           onClick={() => setMostrarScanner(false)}
-          className="bg-red-500 text-white p-2 rounded-xl mb-4"
+          className="bg-red-500 text-white px-4 py-2 rounded-full shadow-md mb-4"
         >
           ⬅ Voltar
         </button>
@@ -158,8 +181,11 @@ function Medicamentos() {
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Medicamentos 💊</h1>
+    <div className="dark:bg-gray-900 min-h-screen text-black dark:text-white p-2">
+
+      {notificacao && (
+        <Notificacao mensagem={notificacao} tipo="alerta" />
+      )}
 
       {/* LISTA */}
       <div className="space-y-3">
@@ -167,51 +193,52 @@ function Medicamentos() {
           const status = calcularStatus(m);
           const dias = diasRestantes(m.validade);
 
-          const cor =
-            status === "remover"
-              ? "bg-red-200"
-              : status === "pre"
-              ? "bg-yellow-200"
-              : "bg-green-200";
-
           return (
             <div
               key={m.id}
-              className={`p-4 rounded-2xl shadow-md ${cor} flex justify-between items-center`}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-4 flex gap-4 items-center"
             >
-              <div>
-                {m.imagem && (
-                  <img
-                    src={m.imagem}
-                    className="w-16 h-16 object-cover rounded-xl mb-2"
-                  />
-                )}
+              {m.imagem && (
+                <img
+                  src={m.imagem}
+                  className="w-14 h-14 rounded-xl object-cover"
+                />
+              )}
 
-                <p className="font-bold text-lg">{m.nome}</p>
-                <p className="text-sm text-gray-600">
-                  Validade: {m.validade}
+              <div className="flex-1">
+                <p className="font-semibold text-lg">{m.nome}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-300">
+                  Vence em {dias} dias
                 </p>
 
-                <p className="text-xs font-semibold mt-1">
-                  {status === "remover" && `⚠️ Remover em ${dias} dias`}
-                  {status === "pre" && `🟡 Pré-vencido`}
-                  {status === "ok" && `🟢 Vence em ${dias} dias`}
-                </p>
+                <span
+                  className={`text-xs px-3 py-1 rounded-full font-semibold ${
+                    status === "remover"
+                      ? "bg-red-100 text-red-600"
+                      : status === "pre"
+                      ? "bg-yellow-100 text-yellow-600"
+                      : "bg-green-100 text-green-600"
+                  }`}
+                >
+                  {status === "remover"
+                    ? "Remover"
+                    : status === "pre"
+                    ? "Pré-vencido"
+                    : "Em dia"}
+                </span>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
                 <button
                   onClick={() => abrirEdicao(m)}
-                  className="bg-blue-500 text-white px-3 py-1 rounded-xl"
+                  className="bg-blue-500 text-white px-4 py-1 rounded-full shadow-md text-sm"
                 >
                   Editar
                 </button>
 
                 <button
-                  onClick={() => {
-                    if (confirm("Tem certeza?")) remover(m.id);
-                  }}
-                  className="bg-red-500 text-white px-3 py-1 rounded-xl"
+                  onClick={() => setConfirmar(m)}
+                  className="bg-red-500 text-white px-4 py-1 rounded-full shadow-md text-sm"
                 >
                   X
                 </button>
@@ -221,24 +248,50 @@ function Medicamentos() {
         })}
       </div>
 
+      {/* CONFIRMAR DELETE */}
+      {confirmar && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl text-center space-y-3">
+            <p>Tem certeza que deseja excluir?</p>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  remover(confirmar.id);
+                  setConfirmar(null);
+                }}
+                className="bg-red-500 text-white p-2 rounded-full w-full shadow"
+              >
+                Sim
+              </button>
+
+              <button
+                onClick={() => setConfirmar(null)}
+                className="bg-gray-300 dark:bg-gray-600 p-2 rounded-full w-full"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* BOTÃO + */}
       <button
         onClick={() => {
           limparFormulario();
           setAbrirModal(true);
         }}
-        className="fixed bottom-6 right-6 bg-blue-500 text-white text-3xl w-14 h-14 rounded-full shadow-lg"
+        className="fixed bottom-20 right-4 bg-blue-500 text-white w-14 h-14 rounded-full shadow-xl text-2xl"
       >
         +
       </button>
 
       {/* MODAL */}
       {abrirModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div
-            className="bg-white p-6 rounded-2xl w-full max-w-md space-y-3"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl w-full max-w-md space-y-3">
+
             <h2 className="text-xl font-bold">
               {editando ? "Editar Medicamento" : "Adicionar Medicamento"}
             </h2>
@@ -247,35 +300,33 @@ function Medicamentos() {
               placeholder="Nome"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              className="border p-2 w-full rounded-xl"
+              className="border dark:border-gray-600 bg-white dark:bg-gray-700 p-2 w-full rounded-xl"
             />
 
             <input
               type="date"
               value={validade}
               onChange={(e) => setValidade(e.target.value)}
-              className="border p-2 w-full rounded-xl"
+              className="border dark:border-gray-600 bg-white dark:bg-gray-700 p-2 w-full rounded-xl"
             />
 
             <input
               type="number"
               value={diasRemover}
               onChange={(e) => setDiasRemover(e.target.value)}
-              className="border p-2 w-full rounded-xl"
-              placeholder="Dias para remover"
+              className="border dark:border-gray-600 bg-white dark:bg-gray-700 p-2 w-full rounded-xl"
             />
 
             <input
               type="number"
               value={diasPre}
               onChange={(e) => setDiasPre(e.target.value)}
-              className="border p-2 w-full rounded-xl"
-              placeholder="Pré-vencido (opcional)"
+              className="border dark:border-gray-600 bg-white dark:bg-gray-700 p-2 w-full rounded-xl"
             />
 
             <button
               onClick={() => setMostrarScanner(true)}
-              className="bg-green-500 text-white p-2 rounded-xl w-full"
+              className="bg-green-500 text-white p-2 rounded-full shadow-md w-full"
             >
               📷 Escanear código
             </button>
@@ -284,7 +335,7 @@ function Medicamentos() {
               type="file"
               accept="image/*"
               onChange={handleImagem}
-              className="border p-2 w-full rounded-xl"
+              className="border dark:border-gray-600 p-2 w-full rounded-xl"
             />
 
             {imagem && (
@@ -297,7 +348,7 @@ function Medicamentos() {
             <div className="flex gap-2">
               <button
                 onClick={salvar}
-                className="bg-blue-500 text-white p-2 rounded-xl w-full"
+                className="bg-blue-500 text-white p-2 rounded-full shadow-md w-full"
               >
                 Salvar
               </button>
@@ -307,11 +358,12 @@ function Medicamentos() {
                   limparFormulario();
                   setAbrirModal(false);
                 }}
-                className="bg-gray-200 p-2 rounded-xl w-full"
+                className="bg-gray-300 dark:bg-gray-600 p-2 rounded-full w-full"
               >
                 Cancelar
               </button>
             </div>
+
           </div>
         </div>
       )}

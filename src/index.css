@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 🔥 ESSA PARTE É O SEGREDO */
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-gray-100 dark:bg-gray-900 text-black dark:text-white;
+  transition: background 0.3s, color 0.3s;
+}

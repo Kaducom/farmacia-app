@@ -16,9 +16,10 @@ function Receitas() {
     carregar();
   }, []);
 
-  function verificar() {
+  // 🔥 recalcula automático (sem botão)
+  useEffect(() => {
     if (!dataReceita) {
-      alert("Coloca a data da receita 😄");
+      setResultado(null);
       return;
     }
 
@@ -30,19 +31,22 @@ function Receitas() {
 
     const status = hoje <= limite ? "valida" : "vencida";
 
-    setResultado(status);
-  }
+    setResultado({
+      status,
+      dataFinal: limite,
+    });
+  }, [dataReceita, diasValidade]);
 
   async function salvar() {
     if (!resultado) {
-      alert("Verifica primeiro 😄");
+      alert("Preenche a data primeiro 😄");
       return;
     }
 
     await db.receitas.add({
       dataReceita,
       diasValidade: Number(diasValidade),
-      status: resultado
+      status: resultado.status,
     });
 
     setDataReceita("");
@@ -57,45 +61,59 @@ function Receitas() {
     carregar();
   }
 
+  function formatarData(data) {
+    return new Date(data).toLocaleDateString();
+  }
+
+  function calcularDataFinal(r) {
+    const data = new Date(r.dataReceita);
+    data.setDate(data.getDate() + r.diasValidade);
+    return formatarData(data);
+  }
+
+  // 🔥 hoje formatado pra bloquear datas futuras
+  const hojeFormatado = new Date().toISOString().split("T")[0];
+
   return (
-    <div className="max-w-xl mx-auto">
+    <div className="max-w-xl mx-auto text-black dark:text-white">
+
       <h1 className="text-2xl font-bold mb-4">Receitas 📄</h1>
 
-      <div className="bg-white p-4 rounded-2xl shadow space-y-3">
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md space-y-3 transition">
+
         <input
           type="date"
+          max={hojeFormatado}
           value={dataReceita}
           onChange={(e) => setDataReceita(e.target.value)}
-          className="border p-2 w-full rounded-xl"
+          className="border dark:border-gray-600 bg-white dark:bg-gray-700 p-2 w-full rounded-xl"
         />
 
         <input
           type="number"
           value={diasValidade}
           onChange={(e) => setDiasValidade(e.target.value)}
-          className="border p-2 w-full rounded-xl"
+          className="border dark:border-gray-600 bg-white dark:bg-gray-700 p-2 w-full rounded-xl"
         />
 
-        <button
-          onClick={verificar}
-          className="bg-blue-500 text-white p-2 rounded-xl w-full"
-        >
-          Verificar
-        </button>
-
+        {/* 🔥 RESULTADO EM TEMPO REAL */}
         {resultado && (
-          <div className="text-center font-bold">
-            {resultado === "valida" ? (
-              <p className="text-green-600">✅ Válida</p>
+          <div className="text-center font-semibold text-sm mt-2">
+            {resultado.status === "valida" ? (
+              <p className="text-green-600 dark:text-green-400">
+                ✅ Receita válida até {formatarData(resultado.dataFinal)}
+              </p>
             ) : (
-              <p className="text-red-600">❌ Vencida</p>
+              <p className="text-red-600 dark:text-red-400">
+                ❌ Receita venceu em {formatarData(resultado.dataFinal)}
+              </p>
             )}
           </div>
         )}
 
         <button
           onClick={salvar}
-          className="bg-green-500 text-white p-2 rounded-xl w-full"
+          className="bg-green-500 text-white p-2 rounded-full shadow-md w-full hover:scale-105 transition"
         >
           Salvar Receita
         </button>
@@ -106,20 +124,23 @@ function Receitas() {
         {lista.map((r) => (
           <div
             key={r.id}
-            className="bg-gray-100 p-3 rounded-xl flex justify-between items-center"
+            className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl flex justify-between items-center transition"
           >
             <div>
               <p className="text-sm">
-                📅 {r.dataReceita}
+                📅 {formatarData(r.dataReceita)}
               </p>
+
               <p className="text-xs">
-                {r.status === "valida" ? "✅ Válida" : "❌ Vencida"}
+                {r.status === "valida"
+                  ? `✅ Válida até ${calcularDataFinal(r)}`
+                  : `❌ Venceu em ${calcularDataFinal(r)}`}
               </p>
             </div>
 
             <button
               onClick={() => remover(r.id)}
-              className="bg-red-500 text-white px-2 py-1 rounded"
+              className="bg-red-500 text-white px-3 py-1 rounded-full shadow"
             >
               X
             </button>
