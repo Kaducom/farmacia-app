@@ -278,19 +278,22 @@ function Medicamentos() {
 
       {/* BOTÃO + */}
       <button
-        onClick={() => {
-          limparFormulario();
-          setAbrirModal(true);
-        }}
-        className="fixed bottom-20 right-4 bg-blue-500 text-white w-14 h-14 rounded-full shadow-xl text-2xl"
-      >
-        +
-      </button>
+  onClick={() => {
+    limparFormulario();
+    setAbrirModal(true);
+  }}
+  className="fixed bottom-6 right-6 w-16 h-16 rounded-full 
+             bg-blue-500 text-white text-3xl 
+             shadow-[0_8px_30px_rgba(0,0,0,0.3)]
+             active:scale-95 transition"
+>
+  +
+</button>
 
       {/* MODAL */}
       {abrirModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl w-full max-w-md space-y-3">
+        <div className="fixed inset-0 bg-black/40 flex items-end justify-center">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-t-3xl w-full max-w-md animate-modal">
 
             <h2 className="text-xl font-bold">
               {editando ? "Editar Medicamento" : "Adicionar Medicamento"}

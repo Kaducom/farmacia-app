@@ -3,9 +3,18 @@ import { db } from "../db";
 
 function Receitas() {
   const [dataReceita, setDataReceita] = useState("");
-  const [diasValidade, setDiasValidade] = useState(30);
+  const [diasValidade, setDiasValidade] = useState("");
   const [resultado, setResultado] = useState(null);
   const [lista, setLista] = useState([]);
+  const [tipo, setTipo] = useState("antibiotico");
+  const [erro, setErro] = useState("");
+
+  const tiposReceita = {
+    antibiotico: 10,
+    controlado: 30,
+    popular: 180,
+    outros: null,
+  };
 
   async function carregar() {
     const dados = await db.receitas.toArray();
@@ -16,10 +25,21 @@ function Receitas() {
     carregar();
   }, []);
 
-  // 🔥 recalcula automático (sem botão)
-  useEffect(() => {
+  function verificar() {
+    setErro("");
+
     if (!dataReceita) {
-      setResultado(null);
+      setErro("Selecione a data da receita");
+      return;
+    }
+
+    let dias =
+      tipo === "outros"
+        ? Number(diasValidade)
+        : tiposReceita[tipo];
+
+    if (!dias || dias <= 0) {
+      setErro("Informe os dias de validade");
       return;
     }
 
@@ -27,31 +47,34 @@ function Receitas() {
     const data = new Date(dataReceita);
 
     const limite = new Date(data);
-    limite.setDate(limite.getDate() + Number(diasValidade));
+    limite.setDate(limite.getDate() + dias);
 
     const status = hoje <= limite ? "valida" : "vencida";
 
     setResultado({
       status,
       dataFinal: limite,
+      dias,
     });
-  }, [dataReceita, diasValidade]);
+  }
 
   async function salvar() {
     if (!resultado) {
-      alert("Preenche a data primeiro 😄");
+      setErro("Clique em verificar antes de salvar");
       return;
     }
 
     await db.receitas.add({
       dataReceita,
-      diasValidade: Number(diasValidade),
+      diasValidade: resultado.dias,
       status: resultado.status,
     });
 
     setDataReceita("");
-    setDiasValidade(30);
+    setDiasValidade("");
     setResultado(null);
+    setTipo("antibiotico");
+    setErro("");
 
     carregar();
   }
@@ -71,7 +94,6 @@ function Receitas() {
     return formatarData(data);
   }
 
-  // 🔥 hoje formatado pra bloquear datas futuras
   const hojeFormatado = new Date().toISOString().split("T")[0];
 
   return (
@@ -79,26 +101,60 @@ function Receitas() {
 
       <h1 className="text-2xl font-bold mb-4">Receitas 📄</h1>
 
-      <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md space-y-3 transition">
+      {/* ERRO BONITO */}
+      {erro && (
+        <div className="bg-red-100 text-red-600 p-3 rounded-xl text-center mb-3 animate-fadeIn">
+          ⚠️ {erro}
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md space-y-3">
 
         <input
           type="date"
           max={hojeFormatado}
           value={dataReceita}
-          onChange={(e) => setDataReceita(e.target.value)}
-          className="border dark:border-gray-600 bg-white dark:bg-gray-700 p-2 w-full rounded-xl"
+          onChange={(e) => {
+            setDataReceita(e.target.value);
+            setErro("");
+          }}
+          className={`border p-2 w-full rounded-xl dark:bg-gray-700 dark:border-gray-600
+            ${!dataReceita && erro ? "border-red-500" : ""}
+          `}
         />
 
-        <input
-          type="number"
-          value={diasValidade}
-          onChange={(e) => setDiasValidade(e.target.value)}
-          className="border dark:border-gray-600 bg-white dark:bg-gray-700 p-2 w-full rounded-xl"
-        />
+        <select
+          value={tipo}
+          onChange={(e) => {
+            setTipo(e.target.value);
+            setErro("");
+          }}
+          className="border p-2 w-full rounded-xl dark:bg-gray-700 dark:border-gray-600"
+        >
+          <option value="antibiotico">Antibiótico (10 dias)</option>
+          <option value="controlado">Controlado (30 dias)</option>
+          <option value="popular">Popular (180 dias)</option>
+          <option value="outros">Outros</option>
+        </select>
 
-        {/* 🔥 RESULTADO EM TEMPO REAL */}
+        {tipo === "outros" && (
+          <input
+            type="number"
+            placeholder="Dias de validade"
+            value={diasValidade}
+            onChange={(e) => {
+              setDiasValidade(e.target.value);
+              setErro("");
+            }}
+            className={`border p-2 w-full rounded-xl dark:bg-gray-700 dark:border-gray-600
+              ${erro && !diasValidade ? "border-red-500" : ""}
+            `}
+          />
+        )}
+
+        {/* RESULTADO */}
         {resultado && (
-          <div className="text-center font-semibold text-sm mt-2">
+          <div className="text-center font-semibold text-sm">
             {resultado.status === "valida" ? (
               <p className="text-green-600 dark:text-green-400">
                 ✅ Receita válida até {formatarData(resultado.dataFinal)}
@@ -112,8 +168,15 @@ function Receitas() {
         )}
 
         <button
+          onClick={verificar}
+          className="bg-blue-500 text-white p-2 rounded-full shadow-md w-full"
+        >
+          Verificar
+        </button>
+
+        <button
           onClick={salvar}
-          className="bg-green-500 text-white p-2 rounded-full shadow-md w-full hover:scale-105 transition"
+          className="bg-green-500 text-white p-2 rounded-full shadow-md w-full"
         >
           Salvar Receita
         </button>
@@ -124,7 +187,7 @@ function Receitas() {
         {lista.map((r) => (
           <div
             key={r.id}
-            className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl flex justify-between items-center transition"
+            className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl flex justify-between items-center"
           >
             <div>
               <p className="text-sm">
@@ -140,7 +203,7 @@ function Receitas() {
 
             <button
               onClick={() => remover(r.id)}
-              className="bg-red-500 text-white px-3 py-1 rounded-full shadow"
+              className="bg-red-500 text-white px-3 py-1 rounded-full"
             >
               X
             </button>

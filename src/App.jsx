@@ -7,6 +7,8 @@ import Doutor from "./pages/Doutor";
 function App() {
   const [pagina, setPagina] = useState("medicamentos");
   const [menuAberto, setMenuAberto] = useState(false);
+  const [animando, setAnimando] = useState(false);
+  const [startX, setStartX] = useState(0);
 
   // 🔥 já inicia correto (SEM useEffect bugado)
   const [dark, setDark] = useState(() => {
@@ -26,7 +28,7 @@ function App() {
 
   if (dark) {
     html.classList.add("dark");
-    localStorage.setItem("tema", "dark");
+    localStorage.setItem("tema", "dark"); 
   } else {
     html.classList.remove("dark");
     localStorage.setItem("tema", "light");
@@ -40,22 +42,45 @@ function App() {
     if (pagina === "doutor") return <Doutor />;
   }
 
+  
+
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-black dark:text-white transition-colors duration-300">
+
+    <div className="min-h-screen flex justify-center bg-black">
+  <div className="w-full max-w-md min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col">
+
+    <div
+  className="p-4 flex-1 pb-20"
+  onTouchStart={(e) => setStartX(e.touches[0].clientX)}
+  onTouchEnd={(e) => {
+    const endX = e.changedTouches[0].clientX;
+
+    if (endX - startX > 80) {
+      // swipe → volta pra medicamentos
+      setPagina("medicamentos");
+    }
+  }}
+>
+  {renderPagina()}
+</div>
 
       {/* TOPO estilo iPhone */}
-      <div className="flex items-center p-4 backdrop-blur-md bg-white/70 dark:bg-gray-800/70 shadow-sm">
-        <button
-          onClick={() => setMenuAberto(true)}
-          className="text-2xl"
-        >
-          ≡
-        </button>
+      <div className="flex items-center px-4 py-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md shadow-sm">
+  <button
+    onClick={() => setMenuAberto(true)}
+    className="text-xl z-10"
+  >
+    ☰
+  </button>
 
-        <h1 className="ml-4 font-semibold text-lg capitalize">
-          {pagina}
-        </h1>
-      </div>
+  <h1 className="flex-1 text-center font-semibold text-lg capitalize">
+    {pagina}
+  </h1>
+
+  <div className="w-6" />
+</div>
+
+
 
       {/* MENU */}
       {menuAberto && (
@@ -66,7 +91,6 @@ function App() {
             {/* LINKS */}
             <div className="flex flex-col gap-3">
               <h2 className="font-bold mb-2">Farmácia 💊</h2>
-
               {[
                 { nome: "medicamentos", label: "Medicamentos" },
                 { nome: "receitas", label: "Receitas" },
@@ -76,7 +100,12 @@ function App() {
                 <button
                   key={item.nome}
                   onClick={() => {
-                    setPagina(item.nome);
+                    setAnimando(true);
+
+setTimeout(() => {
+  setPagina(item.nome);
+  setAnimando(false);
+}, 150);
                     setMenuAberto(false);
                   }}
                   className={`p-2 rounded-full shadow-md transition px-4 text-left
@@ -115,7 +144,37 @@ function App() {
       )}
 
       {/* CONTEÚDO */}
-      <div className="p-4">{renderPagina()}</div>
+        <div
+  className={`p-4 flex-1 ${
+    animando ? "animate-exit" : "animate-enter"
+  }`}
+>
+  {renderPagina()}
+</div>
+      </div>
+      <div className="fixed bottom-0 left-0 right-0 flex justify-center">
+  <div className="w-full max-w-md bg-white dark:bg-gray-800 border-t dark:border-gray-700 flex justify-around py-2">
+
+    {[
+      { nome: "medicamentos", icon: "💊" },
+      { nome: "receitas", icon: "📄" },
+      { nome: "posologia", icon: "⚖️" },
+      { nome: "doutor", icon: "🤖" },
+    ].map((item) => (
+      <button
+        key={item.nome}
+        onClick={() => setPagina(item.nome)}
+        className={`flex flex-col items-center text-xs transition
+          ${pagina === item.nome ? "text-blue-500 scale-110" : "text-gray-400"}
+        `}
+      >
+        <span className="text-xl">{item.icon}</span>
+        {item.nome}
+      </button>
+    ))}
+
+  </div>
+</div>
     </div>
   );
 }
