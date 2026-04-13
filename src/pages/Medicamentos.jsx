@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { db } from "../db";
 import Scanner from "../components/Scanner";
 import Notificacao from "../components/Notificacao";
+import ToastStack from "../components/ToastStack";
 
 function Medicamentos() {
   const [medicamentos, setMedicamentos] = useState([]);
@@ -15,6 +16,9 @@ function Medicamentos() {
   const [notificacao, setNotificacao] = useState(null);
   const [erro, setErro] = useState("");
   const [preview, setPreview] = useState(null);
+  const [diasPre, setDiasPre] = useState("");
+  const [diasRemover, setDiasRemover] = useState(7);
+  const [toasts, setToasts] = useState([]);
 
   async function carregar() {
     const dados = await db.medicamentos.toArray();
@@ -25,6 +29,20 @@ function Medicamentos() {
   useEffect(() => {
     carregar();
   }, []);
+
+  function addToast(msg, tipo = "alerta") {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, msg, tipo }]);
+
+    // remove automático
+    setTimeout(() => {
+      removerToast(id);
+    }, 4000);
+  }
+
+  function removerToast(id) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }
 
   async function remover(id) {
     await db.medicamentos.delete(id);
@@ -38,7 +56,13 @@ function Medicamentos() {
       return;
     }
 
-    const dados = { nome, validade, imagem };
+    const dados = {
+      nome,
+      validade,
+      imagem,
+      diasPreVencido: diasPre ? Number(diasPre) : null,
+      diasRemover: Number(diasRemover),
+    };
 
     if (editando) {
       await db.medicamentos.update(editando.id, dados);
@@ -51,12 +75,44 @@ function Medicamentos() {
     carregar();
   }
 
+  function verificarVencimentos(lista) {
+    const hoje = new Date();
+
+    let vencidos = 0;
+    let proximos = 0;
+
+    lista.forEach((med) => {
+      const validade = new Date(med.validade);
+      const diff = Math.ceil(
+        (validade - hoje) / (1000 * 60 * 60 * 24)
+      );
+
+      if (diff < 0) {
+        vencidos++;
+        addToast(`❌ ${med.nome} está vencido`, "erro");
+      } else if (med.diasPreVencido && diff <= med.diasPreVencido) {
+        proximos++;
+        addToast(`⚠️ ${med.nome} perto de vencer`, "alerta");
+      }
+    });
+
+    if (vencidos > 0) {
+      setNotificacao(`❌ ${vencidos} medicamento(s) vencido(s)`);
+    } else if (proximos > 0) {
+      setNotificacao(`⚠️ ${proximos} perto do vencimento`);
+    } else {
+      setNotificacao(null);
+    }
+  }
+
   function limparFormulario() {
     setNome("");
     setValidade("");
     setImagem(null);
     setEditando(null);
     setErro("");
+    setDiasPre("");
+    setDiasRemover(7);
   }
 
   function abrirEdicao(med) {
@@ -64,20 +120,9 @@ function Medicamentos() {
     setNome(med.nome);
     setValidade(med.validade);
     setImagem(med.imagem || null);
+    setDiasPre(med.diasPreVencido || "");
+    setDiasRemover(med.diasRemover || 7);
     setAbrirModal(true);
-  }
-
-  function verificarVencimentos(lista) {
-    const hoje = new Date();
-    for (let med of lista) {
-      const validade = new Date(med.validade);
-      const diff = Math.ceil((validade - hoje) / (1000 * 60 * 60 * 24));
-
-      if (diff <= 1) {
-        setNotificacao(`⚠️ ${med.nome} vence hoje ou amanhã!`);
-        return;
-      }
-    }
   }
 
   function diasRestantes(data) {
@@ -90,9 +135,11 @@ function Medicamentos() {
     return new Date(data).toLocaleDateString();
   }
 
-  function calcularStatus(dias) {
+  function calcularStatus(med) {
+    const dias = diasRestantes(med.validade);
+
     if (dias <= 0) return "vencido";
-    if (dias <= 5) return "alerta";
+    if (med.diasPreVencido && dias <= med.diasPreVencido) return "alerta";
     return "ok";
   }
 
@@ -105,35 +152,20 @@ function Medicamentos() {
     reader.readAsDataURL(file);
   }
 
-  if (mostrarScanner) {
-    return (
-      <div className="p-4">
-        <button
-          onClick={() => setMostrarScanner(false)}
-          className="bg-red-500 text-white px-4 py-2 rounded-full mb-4"
-        >
-          ⬅ Voltar
-        </button>
-
-        <Scanner
-          onScan={(codigo) => {
-            setMostrarScanner(false);
-          }}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="p-3 pb-28">
 
-      {notificacao && <Notificacao mensagem={notificacao} tipo="alerta" />}
+      <ToastStack notificacoes={toasts} remover={removerToast} />
+
+      {notificacao && (
+        <Notificacao mensagem={notificacao} tipo="alerta" />
+      )}
 
       {/* LISTA */}
       <div className="space-y-4">
         {medicamentos.map((m) => {
           const dias = diasRestantes(m.validade);
-          const status = calcularStatus(dias);
+          const status = calcularStatus(m);
 
           return (
             <div
@@ -142,10 +174,7 @@ function Medicamentos() {
               className="bg-white dark:bg-gray-800 rounded-2xl shadow-md overflow-hidden"
             >
               {m.imagem && (
-                <img
-                  src={m.imagem}
-                  className="w-full h-40 object-cover"
-                />
+                <img src={m.imagem} className="w-full h-40 object-cover" />
               )}
 
               <div className="p-4 space-y-2">
@@ -171,9 +200,7 @@ function Medicamentos() {
 
                 <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
                   <p>📅 Validade: {formatarData(m.validade)}</p>
-                  <p>
-                    ⏳ Vence em {dias} dias
-                  </p>
+                  <p>⏳ Vence em {dias} dias</p>
                 </div>
 
                 <div className="flex gap-2 pt-2">
@@ -251,6 +278,22 @@ function Medicamentos() {
               <img src={imagem} className="w-20 h-20 rounded-xl mx-auto" />
             )}
 
+            <input
+              type="number"
+              placeholder="Pré-vencimento (dias)"
+              value={diasPre}
+              onChange={(e) => setDiasPre(e.target.value)}
+              className="p-2 w-full rounded-xl border"
+            />
+
+            <input
+              type="number"
+              placeholder="Remover antes (dias)"
+              value={diasRemover}
+              onChange={(e) => setDiasRemover(e.target.value)}
+              className="p-2 w-full rounded-xl border"
+            />
+
             <div className="flex gap-2">
               <button
                 onClick={salvar}
@@ -261,41 +304,6 @@ function Medicamentos() {
 
               <button
                 onClick={() => setAbrirModal(false)}
-                className="bg-gray-300 p-2 rounded-full w-full"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* PREVIEW IMAGEM */}
-      {preview && (
-        <div
-          onClick={() => setPreview(null)}
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
-        >
-          <img src={preview} className="max-w-[90%] rounded-2xl" />
-        </div>
-      )}
-
-      {/* CONFIRMAR DELETE */}
-      {confirmar && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl text-center space-y-3">
-            <p>Deseja Excluir o Item "{confirmar.nome}"?</p>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => remover(confirmar.id)}
-                className="bg-red-500 text-white p-2 rounded-full w-full"
-              >
-                Sim
-              </button>
-
-              <button
-                onClick={() => setConfirmar(null)}
                 className="bg-gray-300 p-2 rounded-full w-full"
               >
                 Cancelar
