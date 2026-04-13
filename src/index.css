@@ -58,3 +58,11 @@ html {
 .animate-modal {
   animation: modalUp 0.3s ease;
 }
+/* SAFE AREA estilo iOS */
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}

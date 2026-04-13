@@ -5,17 +5,16 @@ import Notificacao from "../components/Notificacao";
 
 function Medicamentos() {
   const [medicamentos, setMedicamentos] = useState([]);
-
   const [imagem, setImagem] = useState(null);
   const [abrirModal, setAbrirModal] = useState(false);
   const [nome, setNome] = useState("");
   const [validade, setValidade] = useState("");
-  const [diasRemover, setDiasRemover] = useState(7);
-  const [diasPre, setDiasPre] = useState("");
   const [editando, setEditando] = useState(null);
   const [mostrarScanner, setMostrarScanner] = useState(false);
   const [confirmar, setConfirmar] = useState(null);
   const [notificacao, setNotificacao] = useState(null);
+  const [erro, setErro] = useState("");
+  const [preview, setPreview] = useState(null);
 
   async function carregar() {
     const dados = await db.medicamentos.toArray();
@@ -29,71 +28,50 @@ function Medicamentos() {
 
   async function remover(id) {
     await db.medicamentos.delete(id);
+    setConfirmar(null);
     carregar();
-  }
-
-  async function buscarProduto(codigo) {
-    try {
-      const res = await fetch(
-        `https://world.openfoodfacts.org/api/v0/product/${codigo}.json`
-      );
-
-      const data = await res.json();
-
-      if (data.status === 1) {
-        const nomeProduto =
-          data.product.product_name || "Produto não identificado";
-        setNome(nomeProduto);
-        alert("Produto encontrado 😄");
-      } else {
-        setNome("Produto não identificado");
-        alert("Produto não encontrado 😢");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao buscar produto");
-    }
   }
 
   async function salvar() {
     if (!nome || !validade) {
-      alert("Preenche tudo aí 😄");
+      setErro("⚠️ Preencha nome e validade");
       return;
     }
 
-    try {
-      const dados = {
-        nome,
-        validade,
-        diasRemover: Number(diasRemover),
-        diasPreVencido: diasPre ? Number(diasPre) : null,
-        imagem,
-      };
+    const dados = { nome, validade, imagem };
 
-      if (editando) {
-        await db.medicamentos.update(editando.id, dados);
-      } else {
-        await db.medicamentos.add(dados);
-      }
-
-      limparFormulario();
-      setAbrirModal(false);
-      carregar();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar 😢");
+    if (editando) {
+      await db.medicamentos.update(editando.id, dados);
+    } else {
+      await db.medicamentos.add(dados);
     }
+
+    limparFormulario();
+    setAbrirModal(false);
+    carregar();
+  }
+
+  function limparFormulario() {
+    setNome("");
+    setValidade("");
+    setImagem(null);
+    setEditando(null);
+    setErro("");
+  }
+
+  function abrirEdicao(med) {
+    setEditando(med);
+    setNome(med.nome);
+    setValidade(med.validade);
+    setImagem(med.imagem || null);
+    setAbrirModal(true);
   }
 
   function verificarVencimentos(lista) {
     const hoje = new Date();
-    setNotificacao(null);
-
     for (let med of lista) {
       const validade = new Date(med.validade);
-      const diff = Math.ceil(
-        (validade - hoje) / (1000 * 60 * 60 * 24)
-      );
+      const diff = Math.ceil((validade - hoje) / (1000 * 60 * 60 * 24));
 
       if (diff <= 1) {
         setNotificacao(`⚠️ ${med.nome} vence hoje ou amanhã!`);
@@ -102,51 +80,19 @@ function Medicamentos() {
     }
   }
 
-  function limparFormulario() {
-    setNome("");
-    setValidade("");
-    setDiasRemover(7);
-    setDiasPre("");
-    setImagem(null);
-    setEditando(null);
-  }
-
-  function abrirEdicao(med) {
-    setEditando(med);
-    setNome(med.nome);
-    setValidade(med.validade);
-    setDiasRemover(med.diasRemover);
-    setDiasPre(med.diasPreVencido || "");
-    setImagem(med.imagem || null);
-    setAbrirModal(true);
-  }
-
   function diasRestantes(data) {
     const hoje = new Date();
     const validade = new Date(data);
-
-    const diff = Math.ceil(
-      (validade - hoje) / (1000 * 60 * 60 * 24)
-    );
-
-    return diff < 0 ? 0 : diff;
+    return Math.ceil((validade - hoje) / (1000 * 60 * 60 * 24));
   }
 
-  function calcularStatus(med) {
-    const hoje = new Date();
-    const validade = new Date(med.validade);
+  function formatarData(data) {
+    return new Date(data).toLocaleDateString();
+  }
 
-    const remover = new Date(validade);
-    remover.setDate(remover.getDate() - med.diasRemover);
-
-    if (med.diasPreVencido) {
-      const pre = new Date(validade);
-      pre.setDate(pre.getDate() - med.diasPreVencido);
-
-      if (hoje >= remover) return "remover";
-      if (hoje >= pre) return "pre";
-    }
-
+  function calcularStatus(dias) {
+    if (dias <= 0) return "vencido";
+    if (dias <= 5) return "alerta";
     return "ok";
   }
 
@@ -159,13 +105,12 @@ function Medicamentos() {
     reader.readAsDataURL(file);
   }
 
-  // 📷 SCANNER
   if (mostrarScanner) {
     return (
-      <div className="p-4 dark:bg-gray-900 min-h-screen text-black dark:text-white">
+      <div className="p-4">
         <button
           onClick={() => setMostrarScanner(false)}
-          className="bg-red-500 text-white px-4 py-2 rounded-full shadow-md mb-4"
+          className="bg-red-500 text-white px-4 py-2 rounded-full mb-4"
         >
           ⬅ Voltar
         </button>
@@ -173,7 +118,6 @@ function Medicamentos() {
         <Scanner
           onScan={(codigo) => {
             setMostrarScanner(false);
-            buscarProduto(codigo);
           }}
         />
       </div>
@@ -181,93 +125,143 @@ function Medicamentos() {
   }
 
   return (
-    <div className="dark:bg-gray-900 min-h-screen text-black dark:text-white p-2">
+    <div className="p-3 pb-28">
 
-      {notificacao && (
-        <Notificacao mensagem={notificacao} tipo="alerta" />
-      )}
+      {notificacao && <Notificacao mensagem={notificacao} tipo="alerta" />}
 
       {/* LISTA */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         {medicamentos.map((m) => {
-          const status = calcularStatus(m);
           const dias = diasRestantes(m.validade);
+          const status = calcularStatus(dias);
 
           return (
             <div
               key={m.id}
-              className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-4 flex gap-4 items-center"
+              onClick={() => m.imagem && setPreview(m.imagem)}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-md overflow-hidden"
             >
               {m.imagem && (
                 <img
                   src={m.imagem}
-                  className="w-14 h-14 rounded-xl object-cover"
+                  className="w-full h-40 object-cover"
                 />
               )}
 
-              <div className="flex-1">
-                <p className="font-semibold text-lg">{m.nome}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-300">
-                  Vence em {dias} dias
-                </p>
+              <div className="p-4 space-y-2">
+                <div className="flex justify-between items-center">
+                  <p className="font-semibold text-lg">{m.nome}</p>
 
-                <span
-                  className={`text-xs px-3 py-1 rounded-full font-semibold ${
-                    status === "remover"
-                      ? "bg-red-100 text-red-600"
-                      : status === "pre"
-                      ? "bg-yellow-100 text-yellow-600"
-                      : "bg-green-100 text-green-600"
-                  }`}
-                >
-                  {status === "remover"
-                    ? "Remover"
-                    : status === "pre"
-                    ? "Pré-vencido"
-                    : "Em dia"}
-                </span>
-              </div>
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full ${
+                      status === "vencido"
+                        ? "bg-red-100 text-red-600"
+                        : status === "alerta"
+                        ? "bg-yellow-100 text-yellow-600"
+                        : "bg-green-100 text-green-600"
+                    }`}
+                  >
+                    {status === "vencido"
+                      ? "Vencido"
+                      : status === "alerta"
+                      ? "Atenção"
+                      : "Em dia"}
+                  </span>
+                </div>
 
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => abrirEdicao(m)}
-                  className="bg-blue-500 text-white px-4 py-1 rounded-full shadow-md text-sm"
-                >
-                  Editar
-                </button>
+                <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
+                  <p>📅 Validade: {formatarData(m.validade)}</p>
+                  <p>
+                    ⏳ Vence em {dias} dias
+                  </p>
+                </div>
 
-                <button
-                  onClick={() => setConfirmar(m)}
-                  className="bg-red-500 text-white px-4 py-1 rounded-full shadow-md text-sm"
-                >
-                  X
-                </button>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      abrirEdicao(m);
+                    }}
+                    className="flex-1 bg-blue-500 text-white py-1 rounded-full text-sm"
+                  >
+                    Editar
+                  </button>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmar(m);
+                    }}
+                    className="flex-1 bg-red-500 text-white py-1 rounded-full text-sm"
+                  >
+                    Excluir
+                  </button>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* CONFIRMAR DELETE */}
-      {confirmar && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl text-center space-y-3">
-            <p>Tem certeza que deseja excluir?</p>
+      {/* FAB */}
+      {!abrirModal && (
+        <button
+          onClick={() => {
+            limparFormulario();
+            setAbrirModal(true);
+          }}
+          className="fixed right-6 bottom-24 z-40 w-16 h-16 rounded-full bg-blue-500 text-white text-3xl shadow-lg"
+        >
+          +
+        </button>
+      )}
+
+      {/* MODAL */}
+      {abrirModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
+          <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl w-full max-w-sm space-y-3">
+
+            <h2 className="font-bold text-lg">
+              {editando ? "Editar" : "Adicionar"}
+            </h2>
+
+            {erro && (
+              <div className="bg-red-100 text-red-600 p-2 rounded text-sm text-center">
+                {erro}
+              </div>
+            )}
+
+            <input
+              placeholder="Nome"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              className="p-2 w-full rounded-xl border"
+            />
+
+            <input
+              type="date"
+              value={validade}
+              onChange={(e) => setValidade(e.target.value)}
+              className="p-2 w-full rounded-xl border"
+            />
+
+            <input type="file" onChange={handleImagem} />
+
+            {imagem && (
+              <img src={imagem} className="w-20 h-20 rounded-xl mx-auto" />
+            )}
 
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  remover(confirmar.id);
-                  setConfirmar(null);
-                }}
-                className="bg-red-500 text-white p-2 rounded-full w-full shadow"
+                onClick={salvar}
+                className="bg-blue-500 text-white p-2 rounded-full w-full"
               >
-                Sim
+                Salvar
               </button>
 
               <button
-                onClick={() => setConfirmar(null)}
-                className="bg-gray-300 dark:bg-gray-600 p-2 rounded-full w-full"
+                onClick={() => setAbrirModal(false)}
+                className="bg-gray-300 p-2 rounded-full w-full"
               >
                 Cancelar
               </button>
@@ -276,97 +270,37 @@ function Medicamentos() {
         </div>
       )}
 
-      {/* BOTÃO + */}
-      <button
-  onClick={() => {
-    limparFormulario();
-    setAbrirModal(true);
-  }}
-  className="fixed bottom-6 right-6 w-16 h-16 rounded-full 
-             bg-blue-500 text-white text-3xl 
-             shadow-[0_8px_30px_rgba(0,0,0,0.3)]
-             active:scale-95 transition"
->
-  +
-</button>
+      {/* PREVIEW IMAGEM */}
+      {preview && (
+        <div
+          onClick={() => setPreview(null)}
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+        >
+          <img src={preview} className="max-w-[90%] rounded-2xl" />
+        </div>
+      )}
 
-      {/* MODAL */}
-      {abrirModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end justify-center">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-t-3xl w-full max-w-md animate-modal">
-
-            <h2 className="text-xl font-bold">
-              {editando ? "Editar Medicamento" : "Adicionar Medicamento"}
-            </h2>
-
-            <input
-              placeholder="Nome"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              className="border dark:border-gray-600 bg-white dark:bg-gray-700 p-2 w-full rounded-xl"
-            />
-
-            <input
-              type="date"
-              value={validade}
-              onChange={(e) => setValidade(e.target.value)}
-              className="border dark:border-gray-600 bg-white dark:bg-gray-700 p-2 w-full rounded-xl"
-            />
-
-            <input
-              type="number"
-              value={diasRemover}
-              onChange={(e) => setDiasRemover(e.target.value)}
-              className="border dark:border-gray-600 bg-white dark:bg-gray-700 p-2 w-full rounded-xl"
-            />
-
-            <input
-              type="number"
-              value={diasPre}
-              onChange={(e) => setDiasPre(e.target.value)}
-              className="border dark:border-gray-600 bg-white dark:bg-gray-700 p-2 w-full rounded-xl"
-            />
-
-            <button
-              onClick={() => setMostrarScanner(true)}
-              className="bg-green-500 text-white p-2 rounded-full shadow-md w-full"
-            >
-              📷 Escanear código
-            </button>
-
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleImagem}
-              className="border dark:border-gray-600 p-2 w-full rounded-xl"
-            />
-
-            {imagem && (
-              <img
-                src={imagem}
-                className="w-20 h-20 object-cover rounded-xl mx-auto"
-              />
-            )}
+      {/* CONFIRMAR DELETE */}
+      {confirmar && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl text-center space-y-3">
+            <p>Deseja Excluir o Item "{confirmar.nome}"?</p>
 
             <div className="flex gap-2">
               <button
-                onClick={salvar}
-                className="bg-blue-500 text-white p-2 rounded-full shadow-md w-full"
+                onClick={() => remover(confirmar.id)}
+                className="bg-red-500 text-white p-2 rounded-full w-full"
               >
-                Salvar
+                Sim
               </button>
 
               <button
-                onClick={() => {
-                  limparFormulario();
-                  setAbrirModal(false);
-                }}
-                className="bg-gray-300 dark:bg-gray-600 p-2 rounded-full w-full"
+                onClick={() => setConfirmar(null)}
+                className="bg-gray-300 p-2 rounded-full w-full"
               >
                 Cancelar
               </button>
             </div>
-
           </div>
         </div>
       )}
