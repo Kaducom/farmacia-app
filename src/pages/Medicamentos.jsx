@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import { db } from "../db";
-import Scanner from "../components/Scanner";
-import Notificacao from "../components/Notificacao";
 import ToastStack from "../components/ToastStack";
 
 function Medicamentos() {
@@ -10,58 +8,65 @@ function Medicamentos() {
   const [abrirModal, setAbrirModal] = useState(false);
   const [nome, setNome] = useState("");
   const [validade, setValidade] = useState("");
-  const [editando, setEditando] = useState(null);
-  const [mostrarScanner, setMostrarScanner] = useState(false);
-  const [confirmar, setConfirmar] = useState(null);
-  const [notificacao, setNotificacao] = useState(null);
-  const [erro, setErro] = useState("");
-  const [preview, setPreview] = useState(null);
   const [diasPre, setDiasPre] = useState("");
   const [diasRemover, setDiasRemover] = useState(7);
+  const [editando, setEditando] = useState(null);
+  const [confirmar, setConfirmar] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [busca, setBusca] = useState("");
   const [toasts, setToasts] = useState([]);
+
+  useEffect(() => {
+     carregar();
+  if ("Notification" in window) {
+    Notification.requestPermission();
+  }
+}, []);
 
   async function carregar() {
     const dados = await db.medicamentos.toArray();
+    dados.sort((a, b) => new Date(a.validade) - new Date(b.validade));
     setMedicamentos(dados);
-    verificarVencimentos(dados);
   }
-
-  useEffect(() => {
-    carregar();
-  }, []);
-
-  function addToast(msg, tipo = "alerta") {
-    const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { id, msg, tipo }]);
-
-    // remove automático
-    setTimeout(() => {
-      removerToast(id);
-    }, 4000);
+  function notificarSistema(msg) {
+  if (Notification.permission === "granted") {
+    new Notification("FarmApp 💊", {
+      body: msg,
+    });
   }
+}
+
+function addToast(msg, tipo = "ok") {
+  const id = Date.now();
+
+  if (navigator.vibrate) navigator.vibrate(30);
+
+  setToasts((prev) => [...prev, { id, msg, tipo }]);
+
+  setTimeout(() => removerToast(id), 4000);
+}
 
   function removerToast(id) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }
 
-  async function remover(id) {
-    await db.medicamentos.delete(id);
-    setConfirmar(null);
-    carregar();
-  }
-
   async function salvar() {
     if (!nome || !validade) {
-      setErro("⚠️ Preencha nome e validade");
+      addToast("Preencha os campos obrigatórios ⚠️");
       return;
+      
     }
+    if (navigator.vibrate) {
+  navigator.vibrate(50);
+}
+    
 
     const dados = {
       nome,
       validade,
       imagem,
-      diasPreVencido: diasPre ? Number(diasPre) : null,
       diasRemover: Number(diasRemover),
+      diasPreVencido: diasPre ? Number(diasPre) : null,
     };
 
     if (editando) {
@@ -70,77 +75,24 @@ function Medicamentos() {
       await db.medicamentos.add(dados);
     }
 
-    limparFormulario();
+    limpar();
     setAbrirModal(false);
     carregar();
   }
 
-  function verificarVencimentos(lista) {
-    const hoje = new Date();
-
-    let vencidos = 0;
-    let proximos = 0;
-
-    lista.forEach((med) => {
-      const validade = new Date(med.validade);
-      const diff = Math.ceil(
-        (validade - hoje) / (1000 * 60 * 60 * 24)
-      );
-
-      if (diff < 0) {
-        vencidos++;
-        addToast(`❌ ${med.nome} está vencido`, "erro");
-      } else if (med.diasPreVencido && diff <= med.diasPreVencido) {
-        proximos++;
-        addToast(`⚠️ ${med.nome} perto de vencer`, "alerta");
-      }
-    });
-
-    if (vencidos > 0) {
-      setNotificacao(`❌ ${vencidos} medicamento(s) vencido(s)`);
-    } else if (proximos > 0) {
-      setNotificacao(`⚠️ ${proximos} perto do vencimento`);
-    } else {
-      setNotificacao(null);
-    }
+  async function remover(id) {
+    await db.medicamentos.delete(id);
+    setConfirmar(null);
+    carregar();
   }
 
-  function limparFormulario() {
+  function limpar() {
     setNome("");
     setValidade("");
     setImagem(null);
-    setEditando(null);
-    setErro("");
     setDiasPre("");
     setDiasRemover(7);
-  }
-
-  function abrirEdicao(med) {
-    setEditando(med);
-    setNome(med.nome);
-    setValidade(med.validade);
-    setImagem(med.imagem || null);
-    setDiasPre(med.diasPreVencido || "");
-    setDiasRemover(med.diasRemover || 7);
-    setAbrirModal(true);
-  }
-
-  function diasRestantes(data) {
-    const hoje = new Date();
-    const validade = new Date(data);
-    return Math.ceil((validade - hoje) / (1000 * 60 * 60 * 24));
-  }
-
-  function formatarData(data) {
-    return new Date(data).toLocaleDateString();
-  }
-
-  function calcularStatus(med) {
-    const dias = diasRestantes(med.validade);
-
-    if (dias <= 0) return "vencido";
-    if (med.diasPreVencido && dias <= med.diasPreVencido) return "alerta";
-    return "ok";
+    setEditando(null);
   }
 
   function handleImagem(e) {
@@ -151,65 +103,133 @@ function Medicamentos() {
     reader.onloadend = () => setImagem(reader.result);
     reader.readAsDataURL(file);
   }
+  function gerarPreviewDatas() {
+  if (!validade) return null;
+
+  const validadeDate = new Date(validade);
+
+  const removerDate = new Date(validadeDate);
+  removerDate.setDate(removerDate.getDate() - Number(diasRemover || 0));
+
+  let preDate = null;
+  if (diasPre) {
+    preDate = new Date(removerDate);
+    preDate.setDate(preDate.getDate() - Number(diasPre));
+  }
+
+  return {
+    validade: validadeDate,
+    remover: removerDate,
+    pre: preDate,
+  };
+}
+
+  function calcularDatas(med) {
+    const validade = new Date(med.validade);
+
+    const remover = new Date(validade);
+    remover.setDate(remover.getDate() - (med.diasRemover || 0));
+
+    let pre = null;
+    if (med.diasPreVencido) {
+      pre = new Date(remover);
+      pre.setDate(pre.getDate() - med.diasPreVencido);
+    }
+
+    return { validade, remover, pre };
+  }
+
+  function calcularStatus(med) {
+    const hoje = new Date();
+    const { validade, remover, pre } = calcularDatas(med);
+
+    if (hoje >= validade) return "vencido";
+    if (hoje >= remover) return "remover";
+    if (pre && hoje >= pre) return "pre";
+    return "ok";
+  }
+
+  function formatarData(data) {
+    return new Date(data).toLocaleDateString();
+  }
+
+  const lista = medicamentos.filter((m) =>
+    `${m.nome} ${m.validade}`.toLowerCase().includes(busca.toLowerCase())
+  );
 
   return (
-    <div className="p-3 pb-28">
+    <div className="p-4 pb-28">
 
       <ToastStack notificacoes={toasts} remover={removerToast} />
 
-      {notificacao && (
-        <Notificacao mensagem={notificacao} tipo="alerta" />
-      )}
+      {/* 🔍 BUSCA */}
+      <input
+        placeholder="Buscar medicamento, data ou mg..."
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        className="w-full mb-4 p-3 rounded-xl border bg-white dark:bg-gray-800 shadow"
+      />
 
       {/* LISTA */}
       <div className="space-y-4">
-        {medicamentos.map((m) => {
-          const dias = diasRestantes(m.validade);
+        {lista.map((m) => {
           const status = calcularStatus(m);
+          const { validade, remover, pre } = calcularDatas(m);
 
           return (
-            <div
-              key={m.id}
-              onClick={() => m.imagem && setPreview(m.imagem)}
-              className="bg-white dark:bg-gray-800 rounded-2xl shadow-md overflow-hidden"
-            >
+            <div key={m.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow overflow-hidden">
+
               {m.imagem && (
-                <img src={m.imagem} className="w-full h-40 object-cover" />
+                <img
+                  src={m.imagem}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreview(m.imagem);
+                  }}
+                  className="w-full h-40 object-cover cursor-pointer"
+                />
               )}
 
               <div className="p-4 space-y-2">
-                <div className="flex justify-between items-center">
-                  <p className="font-semibold text-lg">{m.nome}</p>
+                <div className="flex justify-between">
+                  <p className="font-semibold">{m.nome}</p>
 
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full ${
-                      status === "vencido"
-                        ? "bg-red-100 text-red-600"
-                        : status === "alerta"
-                        ? "bg-yellow-100 text-yellow-600"
-                        : "bg-green-100 text-green-600"
-                    }`}
-                  >
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    status === "vencido"
+                      ? "bg-red-100 text-red-600"
+                      : status === "remover"
+                      ? "bg-orange-100 text-orange-600"
+                      : status === "pre"
+                      ? "bg-yellow-100 text-yellow-600"
+                      : "bg-green-100 text-green-600"
+                  }`}>
                     {status === "vencido"
                       ? "Vencido"
-                      : status === "alerta"
-                      ? "Atenção"
+                      : status === "remover"
+                      ? "Remover"
+                      : status === "pre"
+                      ? "Pré"
                       : "Em dia"}
                   </span>
                 </div>
 
-                <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
-                  <p>📅 Validade: {formatarData(m.validade)}</p>
-                  <p>⏳ Vence em {dias} dias</p>
-                </div>
+                <p>📅 Validade: {formatarData(validade)}</p>
+                <p>🗑️ Remover em: {formatarData(remover)}</p>
+                {pre && <p>⚠️ Pré-vencimento: {formatarData(pre)}</p>}
 
                 <div className="flex gap-2 pt-2">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      abrirEdicao(m);
+                      setEditando(m);
+                      setNome(m.nome);
+                      setValidade(m.validade);
+                      setImagem(m.imagem);
+                      setDiasPre(m.diasPreVencido || "");
+                      setDiasRemover(m.diasRemover || 7);
+                      setAbrirModal(true);
                     }}
-                    className="flex-1 bg-blue-500 text-white py-1 rounded-full text-sm"
+                    className="flex-1 bg-blue-500 text-white py-1 rounded-full"
                   >
                     Editar
                   </button>
@@ -219,7 +239,7 @@ function Medicamentos() {
                       e.stopPropagation();
                       setConfirmar(m);
                     }}
-                    className="flex-1 bg-red-500 text-white py-1 rounded-full text-sm"
+                    className="flex-1 bg-red-500 text-white py-1 rounded-full"
                   >
                     Excluir
                   </button>
@@ -234,84 +254,158 @@ function Medicamentos() {
       {!abrirModal && (
         <button
           onClick={() => {
-            limparFormulario();
+            limpar();
             setAbrirModal(true);
           }}
-          className="fixed right-6 bottom-24 z-40 w-16 h-16 rounded-full bg-blue-500 text-white text-3xl shadow-lg"
+          className="fixed right-6 bottom-24 w-16 h-16 rounded-full bg-green-500 text-white text-3xl shadow-lg"
         >
           +
         </button>
       )}
 
-      {/* MODAL */}
+      {/* MODAL PREMIUM */}
       {abrirModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
-          <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl w-full max-w-sm space-y-3">
+  <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center">
 
-            <h2 className="font-bold text-lg">
-              {editando ? "Editar" : "Adicionar"}
-            </h2>
+    <div className="bg-[#0f172a] w-full max-w-md rounded-t-3xl p-6 space-y-5 shadow-2xl animate-slideUp">
 
-            {erro && (
-              <div className="bg-red-100 text-red-600 p-2 rounded text-sm text-center">
-                {erro}
-              </div>
-            )}
+      {/* TÍTULO */}
+      <h2 className="text-xl font-semibold text-white">
+        {editando ? "Editar Medicamento" : "Novo Medicamento"}
+      </h2>
 
-            <input
-              placeholder="Nome"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              className="p-2 w-full rounded-xl border"
-            />
+      {/* FOTO */}
+      <label className="border-2 border-dashed border-white/20 rounded-2xl p-6 text-center cursor-pointer hover:bg-white/5 transition">
+        {imagem ? (
+          <img
+            src={imagem}
+            className="w-24 h-24 mx-auto rounded-xl object-cover"
+          />
+        ) : (
+          <div className="text-gray-400 text-sm">
+            📷 Toque para adicionar foto
+          </div>
+        )}
+        <input type="file" className="hidden" onChange={handleImagem} />
+      </label>
 
-            <input
-              type="date"
-              value={validade}
-              onChange={(e) => setValidade(e.target.value)}
-              className="p-2 w-full rounded-xl border"
-            />
+      {/* NOME */}
+      <div>
+        <label className="text-sm text-gray-300">Nome do medicamento</label>
+        <input
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+          placeholder="Ex: Dipirona 500mg"
+          className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+        />
+      </div>
 
-            <input type="file" onChange={handleImagem} />
+      {/* VALIDADE */}
+      <div>
+        <label className="text-sm text-gray-300">Data de validade</label>
+        <input
+          type="date"
+          value={validade}
+          onChange={(e) => setValidade(e.target.value)}
+          className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white"
+        />
+      </div>
 
-            {imagem && (
-              <img src={imagem} className="w-20 h-20 rounded-xl mx-auto" />
-            )}
+      {/* REMOVER */}
+      <div>
+        <label className="text-sm text-gray-300">
+          Dias para remover antes da validade
+        </label>
+        <input
+          type="number"
+          value={diasRemover}
+          onChange={(e) => setDiasRemover(e.target.value)}
+          placeholder="Ex: 7 dias"
+          className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Produto deve sair da prateleira antes de vencer
+        </p>
+      </div>
 
-            <input
-              type="number"
-              placeholder="Pré-vencimento (dias)"
-              value={diasPre}
-              onChange={(e) => setDiasPre(e.target.value)}
-              className="p-2 w-full rounded-xl border"
-            />
+      {/* PRE VENCIMENTO */}
+      <div>
+        <label className="text-sm text-gray-300">
+          Pré-vencimento (opcional)
+        </label>
+        <input
+          type="number"
+          value={diasPre}
+          onChange={(e) => setDiasPre(e.target.value)}
+          placeholder="Ex: 15 dias antes da remoção"
+          className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Aviso antes da data de remoção
+        </p>
+      </div>
+     {(() => {
+  const preview = gerarPreviewDatas();
+  if (!preview) return null;
 
-            <input
-              type="number"
-              placeholder="Remover antes (dias)"
-              value={diasRemover}
-              onChange={(e) => setDiasRemover(e.target.value)}
-              className="p-2 w-full rounded-xl border"
-            />
+  return (
+    <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-gray-300 space-y-1">
+      <p>📅 Validade: {preview.validade.toLocaleDateString()}</p>
+      <p>🗑️ Remover em: {preview.remover.toLocaleDateString()}</p>
+      {preview.pre && (
+        <p>⚠️ Pré-vencimento: {preview.pre.toLocaleDateString()}</p>
+      )}
+    </div>
+  );
+})()}
 
-            <div className="flex gap-2">
-              <button
-                onClick={salvar}
-                className="bg-blue-500 text-white p-2 rounded-full w-full"
-              >
-                Salvar
+      {/* BOTÕES */}
+      <div className="flex gap-3 pt-2">
+        <button
+          onClick={() => setAbrirModal(false)}
+          className="flex-1 py-3 rounded-xl border border-white/20 text-white"
+        >
+          Cancelar
+        </button>
+
+        <button
+          onClick={salvar}
+          className="flex-1 py-3 rounded-xl bg-green-500 text-white font-medium shadow-lg active:scale-95 transition"
+        >
+          Salvar
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
+
+      {/* PREVIEW */}
+      {preview && (
+        <div onClick={() => setPreview(null)} className="fixed inset-0 bg-black/80 flex items-center justify-center">
+          <img src={preview} className="max-w-[90%] rounded-2xl" />
+        </div>
+      )}
+
+      {/* CONFIRMAR */}
+      {confirmar && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl text-center">
+            <p>Excluir "{confirmar.nome}"?</p>
+
+            <div className="flex gap-2 mt-3">
+              <button onClick={() => remover(confirmar.id)} className="bg-red-500 text-white p-2 rounded-full w-full">
+                Sim
               </button>
 
-              <button
-                onClick={() => setAbrirModal(false)}
-                className="bg-gray-300 p-2 rounded-full w-full"
-              >
+              <button onClick={() => setConfirmar(null)} className="bg-gray-300 p-2 rounded-full w-full">
                 Cancelar
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }
