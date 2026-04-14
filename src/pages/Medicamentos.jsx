@@ -257,7 +257,7 @@ function addToast(msg, tipo = "ok") {
             limpar();
             setAbrirModal(true);
           }}
-          className="fixed right-6 bottom-24 w-16 h-16 rounded-full bg-green-500 text-white text-3xl shadow-lg"
+          className="fixed right-6 bottom-24 w-16 h-16 rounded-full bg-green-500 text-white text-3xl shadow-lg z-40"
         >
           +
         </button>
@@ -265,7 +265,8 @@ function addToast(msg, tipo = "ok") {
 
       {/* MODAL PREMIUM */}
       {abrirModal && (
-  <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center">
+  <div className="fixed inset-0 z-[999] bg-black/40 backdrop-blur-md flex items-center justify-center"
+  >
 
     <div className="bg-[#0f172a] w-full max-w-md rounded-t-3xl p-6 space-y-5 shadow-2xl animate-slideUp">
 
