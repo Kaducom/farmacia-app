@@ -276,7 +276,7 @@ function addToast(msg, tipo = "ok") {
       </h2>
 
       {/* FOTO */}
-      <label className="border-2 border-dashed border-white/20 rounded-2xl p-6 text-center cursor-pointer hover:bg-white/5 transition">
+      <label className="border-3 border-dashed border-white/20 rounded-2xl p-6 text-center cursor-pointer hover:bg-white/5 transition">
         {imagem ? (
           <img
             src={imagem}
