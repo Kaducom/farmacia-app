@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { db } from "../db";
 import ToastStack from "../components/ToastStack";
+import { motion } from "framer-motion";
 
 function Medicamentos() {
   const [medicamentos, setMedicamentos] = useState([]);
@@ -15,36 +16,29 @@ function Medicamentos() {
   const [preview, setPreview] = useState(null);
   const [busca, setBusca] = useState("");
   const [toasts, setToasts] = useState([]);
+  const [fabOpen, setFabOpen] = useState(false);
 
   useEffect(() => {
-     carregar();
-  if ("Notification" in window) {
-    Notification.requestPermission();
-  }
-}, []);
+    carregar();
+    if ("Notification" in window) {
+      Notification.requestPermission();
+    }
+  }, []);
 
   async function carregar() {
     const dados = await db.medicamentos.toArray();
     dados.sort((a, b) => new Date(a.validade) - new Date(b.validade));
     setMedicamentos(dados);
   }
-  function notificarSistema(msg) {
-  if (Notification.permission === "granted") {
-    new Notification("FarmApp 💊", {
-      body: msg,
-    });
+
+  function addToast(msg, tipo = "ok") {
+    const id = Date.now();
+
+    if (navigator.vibrate) navigator.vibrate(30);
+
+    setToasts((prev) => [...prev, { id, msg, tipo }]);
+    setTimeout(() => removerToast(id), 4000);
   }
-}
-
-function addToast(msg, tipo = "ok") {
-  const id = Date.now();
-
-  if (navigator.vibrate) navigator.vibrate(30);
-
-  setToasts((prev) => [...prev, { id, msg, tipo }]);
-
-  setTimeout(() => removerToast(id), 4000);
-}
 
   function removerToast(id) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -54,12 +48,9 @@ function addToast(msg, tipo = "ok") {
     if (!nome || !validade) {
       addToast("Preencha os campos obrigatórios ⚠️");
       return;
-      
     }
-    if (navigator.vibrate) {
-  navigator.vibrate(50);
-}
-    
+
+    if (navigator.vibrate) navigator.vibrate(50);
 
     const dados = {
       nome,
@@ -103,26 +94,27 @@ function addToast(msg, tipo = "ok") {
     reader.onloadend = () => setImagem(reader.result);
     reader.readAsDataURL(file);
   }
+
   function gerarPreviewDatas() {
-  if (!validade) return null;
+    if (!validade) return null;
 
-  const validadeDate = new Date(validade);
+    const validadeDate = new Date(validade);
 
-  const removerDate = new Date(validadeDate);
-  removerDate.setDate(removerDate.getDate() - Number(diasRemover || 0));
+    const removerDate = new Date(validadeDate);
+    removerDate.setDate(removerDate.getDate() - Number(diasRemover || 0));
 
-  let preDate = null;
-  if (diasPre) {
-    preDate = new Date(removerDate);
-    preDate.setDate(preDate.getDate() - Number(diasPre));
+    let preDate = null;
+    if (diasPre) {
+      preDate = new Date(removerDate);
+      preDate.setDate(preDate.getDate() - Number(diasPre));
+    }
+
+    return {
+      validade: validadeDate,
+      remover: removerDate,
+      pre: preDate,
+    };
   }
-
-  return {
-    validade: validadeDate,
-    remover: removerDate,
-    pre: preDate,
-  };
-}
 
   function calcularDatas(med) {
     const validade = new Date(med.validade);
@@ -157,6 +149,21 @@ function addToast(msg, tipo = "ok") {
     `${m.nome} ${m.validade}`.toLowerCase().includes(busca.toLowerCase())
   );
 
+  async function iniciarScanner() {
+  addToast("Abrindo scanner... 📷");
+
+  // por enquanto mock
+  const produtoFake = {
+    nome: "Dipirona 500mg",
+    validade: "",
+  };
+
+  // preenche automático
+  setNome(produtoFake.nome);
+  setValidade(produtoFake.validade || "");
+  setAbrirModal(true);
+}
+
   return (
     <div className="p-4 pb-28">
 
@@ -177,7 +184,17 @@ function addToast(msg, tipo = "ok") {
           const { validade, remover, pre } = calcularDatas(m);
 
           return (
-            <div key={m.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow overflow-hidden">
+            <motion.div
+              key={m.id}
+              drag="x"
+              dragConstraints={{ left: 0, right: 100 }}
+              onDragEnd={(e, info) => {
+                if (info.offset.x > 120) {
+                  setConfirmar(m);
+                }
+              }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow overflow-hidden"
+            >
 
               {m.imagem && (
                 <img
@@ -219,8 +236,7 @@ function addToast(msg, tipo = "ok") {
 
                 <div className="flex gap-2 pt-2">
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
+                    onClick={() => {
                       setEditando(m);
                       setNome(m.nome);
                       setValidade(m.validade);
@@ -235,40 +251,101 @@ function addToast(msg, tipo = "ok") {
                   </button>
 
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConfirmar(m);
-                    }}
+                    onClick={() => setConfirmar(m)}
                     className="flex-1 bg-red-500 text-white py-1 rounded-full"
                   >
                     Excluir
                   </button>
                 </div>
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
 
       {/* FAB */}
-      {!abrirModal && (
-        <button
-          onClick={() => {
-            limpar();
-            setAbrirModal(true);
-          }}
-          className="fixed right-6 bottom-24 w-16 h-16 rounded-full bg-green-500 text-white text-3xl shadow-lg z-40"
-        >
-          +
-        </button>
-      )}
+   <div className="fixed right-6 bottom-24 z-50 flex flex-col items-end gap-3">
 
-      {/* MODAL PREMIUM */}
-      {abrirModal && (
-  <div className="fixed inset-0 z-[999] bg-black/40 backdrop-blur-md flex items-center justify-center"
+  {/* MENU */}
+  <motion.div
+  initial={false}
+  animate={fabOpen ? "open" : "closed"}
+  className="flex flex-col items-end gap-3"
+>
+
+  {/* 💊 NOVO MEDICAMENTO (PRIMEIRO) */}
+  <motion.button
+    variants={{
+      open: { opacity: 1, y: 0, scale: 1 },
+      closed: { opacity: 0, y: 10, scale: 0.9 }
+    }}
+    transition={{ duration: 0.15 }}
+    onClick={() => {
+      limpar();
+      setAbrirModal(true);
+      setFabOpen(false);
+    }}
+    className="bg-green-500 text-white px-4 py-2 rounded-full shadow-lg"
   >
+    💊 Novo
+  </motion.button>
 
-    <div className="bg-[#0f172a] w-full max-w-md rounded-t-3xl p-6 space-y-5 shadow-2xl animate-slideUp">
+  {/* 📷 SCANNER */}
+  <motion.button
+    variants={{
+      open: { opacity: 1, y: 0, scale: 1 },
+      closed: { opacity: 0, y: 10, scale: 0.9 }
+    }}
+    transition={{ duration: 0.15 }}
+    onClick={() => {
+      iniciarScanner();
+      setFabOpen(false);
+    }}
+    className="bg-purple-500 text-white px-4 py-2 rounded-full shadow-lg"
+  >
+    📷 Scanner
+  </motion.button>
+
+</motion.div>
+
+  {/* FAB */}
+  <motion.button
+    onClick={() => {
+      if (navigator.vibrate) navigator.vibrate(15);
+      setFabOpen(!fabOpen);
+    }}
+    animate={{ rotate: fabOpen ? 45 : 0 }}
+    transition={{ duration: 0.2 }}
+    className="w-16 h-16 rounded-full bg-green-500 text-white text-3xl shadow-xl flex items-center justify-center"
+  >
+    +
+  </motion.button>
+
+</div>
+
+{fabOpen && (
+  <div
+    onClick={() => setFabOpen(false)}
+    className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+  />
+)}
+
+      {/* MODAL CORRIGIDO */}
+{abrirModal && (
+  <div className="fixed inset-0 z-[999] bg-black/40 backdrop-blur-md flex items-center justify-center">
+
+    <div className="
+      bg-[#0f172a] 
+      w-full max-w-md 
+      rounded-t-3xl 
+      p-6 
+      space-y-5 
+      shadow-2xl 
+      animate-slideUp
+      max-h-[90vh]
+      overflow-y-auto
+      pb-28
+    ">
 
       {/* TÍTULO */}
       <h2 className="text-xl font-semibold text-white">
@@ -276,7 +353,7 @@ function addToast(msg, tipo = "ok") {
       </h2>
 
       {/* FOTO */}
-      <label className="border-3 border-dashed border-white/20 rounded-2xl p-6 text-center cursor-pointer hover:bg-white/5 transition">
+      <label className="border-2 border-dashed border-white/20 rounded-2xl p-6 text-center cursor-pointer hover:bg-white/5 transition">
         {imagem ? (
           <img
             src={imagem}
@@ -345,23 +422,24 @@ function addToast(msg, tipo = "ok") {
           Aviso antes da data de remoção
         </p>
       </div>
-     {(() => {
-  const preview = gerarPreviewDatas();
-  if (!preview) return null;
 
-  return (
-    <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-gray-300 space-y-1">
-      <p>📅 Validade: {preview.validade.toLocaleDateString()}</p>
-      <p>🗑️ Remover em: {preview.remover.toLocaleDateString()}</p>
-      {preview.pre && (
-        <p>⚠️ Pré-vencimento: {preview.pre.toLocaleDateString()}</p>
-      )}
-    </div>
-  );
-})()}
+      {(() => {
+        const preview = gerarPreviewDatas();
+        if (!preview) return null;
+
+        return (
+          <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-gray-300 space-y-1">
+            <p>📅 Validade: {preview.validade.toLocaleDateString()}</p>
+            <p>🗑️ Remover em: {preview.remover.toLocaleDateString()}</p>
+            {preview.pre && (
+              <p>⚠️ Pré-vencimento: {preview.pre.toLocaleDateString()}</p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* BOTÕES */}
-      <div className="flex gap-3 pt-2">
+      <div className="flex gap-3 pt-2 sticky bottom-0 bg-[#0f172a] pb-2">
         <button
           onClick={() => setAbrirModal(false)}
           className="flex-1 py-3 rounded-xl border border-white/20 text-white"

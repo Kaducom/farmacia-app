@@ -3,6 +3,7 @@ import Medicamentos from "./pages/Medicamentos";
 import Receitas from "./pages/Receitas";
 import Posologia from "./pages/Posologia";
 import Doutor from "./pages/Doutor";
+import Menu from "./pages/Menu";
 
 function App() {
   const [pagina, setPagina] = useState("medicamentos");
@@ -17,6 +18,8 @@ function App() {
         return <Posologia />;
       case "doutor":
         return <Doutor />;
+      case "menu":
+        return <Menu />;
     }
   }
 
@@ -40,6 +43,7 @@ function App() {
         <Tab icon="📄" label="Receitas" ativa={pagina === "receitas"} onClick={() => setPagina("receitas")} />
         <Tab icon="💉" label="Posologia" ativa={pagina === "posologia"} onClick={() => setPagina("posologia")} />
         <Tab icon="👨‍⚕️" label="Doutor" ativa={pagina === "doutor"} onClick={() => setPagina("doutor")} />
+        <Tab icon="≡" label="Menu" ativa={pagina === "menu"} onClick={() => setPagina("menu")} />
 
       </div>
     </div>
