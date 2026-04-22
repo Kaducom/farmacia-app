@@ -181,8 +181,6 @@ if (existente && !editando) {
   return (
     <div ref={topRef} className="p-4 pb-28 max-w-5xl mx-auto">
 
-      <ToastStack notificacoes={toasts} remover={removerToast} />
-
       {/* 🔍 BUSCA */}
       <input
         placeholder="Buscar medicamento, data ou mg..."
@@ -201,7 +199,7 @@ if (existente && !editando) {
         setFabOpen(false);
 
       }}
-      className="bg-green-500 text-white px-6 py-3 rounded-full shadow-lg"
+      className="bg-green-800 text-white px-6 py-3 rounded-full shadow-lg"
     >
       + Adicionar primeiro medicamento
     </button>
@@ -309,7 +307,7 @@ if (existente && !editando) {
   className="flex flex-col items-end gap-3"
 >
 
-  {/* 💊 NOVO MEDICAMENTO (PRIMEIRO) */}
+  {/* 💊 NOVO MEDICAMENTO */}
   <motion.button
     variants={{
       open: { opacity: 1, y: 0, scale: 1 },
@@ -321,9 +319,9 @@ if (existente && !editando) {
       setAbrirModal(true);
       setFabOpen(false);
     }}
-    className="bg-green-500 text-white px-4 py-2 rounded-full shadow-lg"
+    className="bg-green-800 text-white px-4 py-2 rounded-full shadow-lg"
   >
-    💊 Novo
+    💊 Novo Item
   </motion.button>
 
   {/* 📷 SCANNER */}
@@ -352,7 +350,7 @@ if (existente && !editando) {
     }}
     animate={{ rotate: fabOpen ? 45 : 0 }}
     transition={{ duration: 0.2 }}
-    className="w-16 h-16 rounded-full bg-green-500 text-white text-3xl shadow-xl flex items-center justify-center"
+    className="w-16 h-16 rounded-full bg-green-800 text-white text-3xl shadow-xl flex items-center justify-center"
   >
     +
   </motion.button>
@@ -371,25 +369,15 @@ if (existente && !editando) {
   <div className="fixed inset-0 z-[999] bg-black/40 backdrop-blur-md flex items-center justify-center">
 
     <div className="
-    overflow-y-auto overscroll-contain
-      bg-[#0f172a] 
-      w-full max-w-md 
-      rounded-t-3xl 
-      p-6 
-      space-y-5 
-      shadow-2xl 
-      animate-slideUp
-      max-h-[90vh]
-      overflow-y-auto
-      pb-28
-    ">
+      overflow-y-auto overscroll-contain bg-[#0f172a] w-full max-w-md rounded-t-3xl p-6 space-y-5 shadow-2xl animate-slideUpmax-h-[90vh] pb-28">
+        
+    <ToastStack notificacoes={toasts} remover={removerToast} />
 
       {/* TÍTULO */}
       <h2 className="text-xl font-semibold text-white">
         {editando ? "Editar Medicamento" : "Novo Medicamento"}
       </h2>
 
-      {/* FOTO */}
       {/* FOTO */}
 <div>
   <label className="text-sm text-gray-300">Foto do Produto</label>
@@ -399,7 +387,7 @@ if (existente && !editando) {
     {!imagem ? (
       <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-green-400/40 rounded-2xl p-6 cursor-pointer hover:bg-white/5 transition text-center">
 
-        <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 text-xl">
+        <div className="w-12 h-12 rounded-full bg-green-800/20 flex items-center justify-center text-green-400 text-xl">
           📷
         </div>
 
@@ -526,7 +514,7 @@ if (existente && !editando) {
 
         <button
           onClick={salvar}
-          className="flex-1 py-3 rounded-xl bg-green-500 text-white font-medium shadow-lg active:scale-95 transition"
+          className="flex-1 py-3 rounded-xl bg-green-800 text-white font-medium shadow-lg active:scale-95 transition"
         >
           Salvar
         </button>
