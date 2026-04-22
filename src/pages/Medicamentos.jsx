@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { db } from "../db";
 import ToastStack from "../components/ToastStack";
 import { motion } from "framer-motion";
+import { useRef } from "react";
 
 function Medicamentos() {
   const [medicamentos, setMedicamentos] = useState([]);
@@ -17,6 +18,7 @@ function Medicamentos() {
   const [busca, setBusca] = useState("");
   const [toasts, setToasts] = useState([]);
   const [fabOpen, setFabOpen] = useState(false);
+  const topRef = useRef(null);
 
   useEffect(() => {
     carregar();
@@ -45,6 +47,15 @@ function Medicamentos() {
   }
 
   async function salvar() {
+
+    const existente = medicamentos.find(
+  (m) => m.nome.toLowerCase() === nome.toLowerCase()
+);
+
+if (existente && !editando) {
+  addToast("Esse medicamento já existe ⚠️");
+  return;
+}
     if (!nome || !validade) {
       addToast("Preencha os campos obrigatórios ⚠️");
       return;
@@ -68,6 +79,7 @@ function Medicamentos() {
 
     limpar();
     setAbrirModal(false);
+    setFabOpen(false);
     carregar();
   }
 
@@ -150,22 +162,24 @@ function Medicamentos() {
   );
 
   async function iniciarScanner() {
-  addToast("Abrindo scanner... 📷");
+    addToast("Abrindo scanner... 📷");
 
-  // por enquanto mock
-  const produtoFake = {
-    nome: "Dipirona 500mg",
-    validade: "",
-  };
+    const produtoFake = {
+      nome: "Dipirona 500mg",
+      validade: "",
+    };
 
-  // preenche automático
-  setNome(produtoFake.nome);
-  setValidade(produtoFake.validade || "");
-  setAbrirModal(true);
+    setNome(produtoFake.nome);
+    setValidade(produtoFake.validade || "");
+    setAbrirModal(true);
+    setFabOpen(false);
+  }
+  function scrollTopo() {
+  topRef.current?.scrollIntoView({ behavior: "smooth" });
 }
 
   return (
-    <div className="p-4 pb-28">
+    <div ref={topRef} className="p-4 pb-28 max-w-5xl mx-auto">
 
       <ToastStack notificacoes={toasts} remover={removerToast} />
 
@@ -176,9 +190,26 @@ function Medicamentos() {
         onChange={(e) => setBusca(e.target.value)}
         className="w-full mb-4 p-3 rounded-xl border bg-white dark:bg-gray-800 shadow"
       />
+      {lista.length === 0 && (
+  <div className="text-center mt-20 space-y-4">
+    <p className="text-gray-500">Nenhum medicamento cadastrado 💊</p>
+
+    <button
+      onClick={() => {
+        limpar();
+        setAbrirModal(true);
+        setFabOpen(false);
+
+      }}
+      className="bg-green-500 text-white px-6 py-3 rounded-full shadow-lg"
+    >
+      + Adicionar primeiro medicamento
+    </button>
+  </div>
+)}
 
       {/* LISTA */}
-      <div className="space-y-4">
+      <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
         {lista.map((m) => {
           const status = calcularStatus(m);
           const { validade, remover, pre } = calcularDatas(m);
@@ -188,6 +219,8 @@ function Medicamentos() {
               key={m.id}
               drag="x"
               dragConstraints={{ left: 0, right: 100 }}
+              dragElastic={0.2}
+              dragMomentum={false}
               onDragEnd={(e, info) => {
                 if (info.offset.x > 120) {
                   setConfirmar(m);
@@ -209,7 +242,9 @@ function Medicamentos() {
 
               <div className="p-4 space-y-2">
                 <div className="flex justify-between">
-                  <p className="font-semibold">{m.nome}</p>
+                  <p onClick={scrollTopo} className="font-semibold cursor-pointer">
+                  {m.nome}
+                  </p>
 
                   <span className={`text-xs px-2 py-1 rounded-full ${
                     status === "vencido"
@@ -244,6 +279,7 @@ function Medicamentos() {
                       setDiasPre(m.diasPreVencido || "");
                       setDiasRemover(m.diasRemover || 7);
                       setAbrirModal(true);
+                      setFabOpen(false);
                     }}
                     className="flex-1 bg-blue-500 text-white py-1 rounded-full"
                   >
@@ -263,7 +299,7 @@ function Medicamentos() {
         })}
       </div>
 
-      {/* FAB */}
+    {/* FAB */}
    <div className="fixed right-6 bottom-24 z-50 flex flex-col items-end gap-3">
 
   {/* MENU */}
@@ -279,7 +315,7 @@ function Medicamentos() {
       open: { opacity: 1, y: 0, scale: 1 },
       closed: { opacity: 0, y: 10, scale: 0.9 }
     }}
-    transition={{ duration: 0.15 }}
+    transition={{ duration: 0.1 }}
     onClick={() => {
       limpar();
       setAbrirModal(true);
@@ -326,15 +362,16 @@ function Medicamentos() {
 {fabOpen && (
   <div
     onClick={() => setFabOpen(false)}
-    className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+    className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 pointer-events-auto"
   />
 )}
 
-      {/* MODAL CORRIGIDO */}
+      {/* MODAL */}
 {abrirModal && (
   <div className="fixed inset-0 z-[999] bg-black/40 backdrop-blur-md flex items-center justify-center">
 
     <div className="
+    overflow-y-auto overscroll-contain
       bg-[#0f172a] 
       w-full max-w-md 
       rounded-t-3xl 
@@ -353,19 +390,57 @@ function Medicamentos() {
       </h2>
 
       {/* FOTO */}
-      <label className="border-2 border-dashed border-white/20 rounded-2xl p-6 text-center cursor-pointer hover:bg-white/5 transition">
-        {imagem ? (
-          <img
-            src={imagem}
-            className="w-24 h-24 mx-auto rounded-xl object-cover"
-          />
-        ) : (
-          <div className="text-gray-400 text-sm">
-            📷 Toque para adicionar foto
-          </div>
-        )}
+      {/* FOTO */}
+<div>
+  <label className="text-sm text-gray-300">Foto do Produto</label>
+
+  <div className="mt-2 relative">
+
+    {!imagem ? (
+      <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-green-400/40 rounded-2xl p-6 cursor-pointer hover:bg-white/5 transition text-center">
+
+        <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 text-xl">
+          📷
+        </div>
+
+        <div className="text-sm text-gray-300">
+          Toque para adicionar foto
+        </div>
+
+        <div className="text-xs text-gray-500">
+          PNG, JPG até 5MB
+        </div>
+
         <input type="file" className="hidden" onChange={handleImagem} />
       </label>
+    ) : (
+      <div className="relative">
+        <img
+          src={imagem}
+          className="w-full h-40 object-cover rounded-2xl"
+        />
+
+        {/* overlay */}
+        <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-3 rounded-2xl">
+
+          <label className="bg-white text-black px-3 py-1 rounded-lg text-sm cursor-pointer">
+            Trocar
+            <input type="file" className="hidden" onChange={handleImagem} />
+          </label>
+
+          <button
+            onClick={() => setImagem(null)}
+            className="bg-red-500 text-white px-3 py-1 rounded-lg text-sm"
+          >
+            ✕
+          </button>
+
+        </div>
+      </div>
+    )}
+
+  </div>
+</div>
 
       {/* NOME */}
       <div>
@@ -436,10 +511,12 @@ function Medicamentos() {
             )}
           </div>
         );
-      })()}
+      }
+      
+      )()}
 
       {/* BOTÕES */}
-      <div className="flex gap-3 pt-2 sticky bottom-0 bg-[#0f172a] pb-2">
+      <div className="flex gap-3 pt-2 sticky bottom-0 bg-[#0f172a] pb-3 z-10">   
         <button
           onClick={() => setAbrirModal(false)}
           className="flex-1 py-3 rounded-xl border border-white/20 text-white"
