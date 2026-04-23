@@ -19,6 +19,7 @@ function Medicamentos() {
   const [toasts, setToasts] = useState([]);
   const [fabOpen, setFabOpen] = useState(false);
   const topRef = useRef(null);
+  const [quantidade, setQuantidade] = useState(1);
 
   useEffect(() => {
     carregar();
@@ -30,6 +31,9 @@ function Medicamentos() {
   async function carregar() {
     const dados = await db.medicamentos.toArray();
     dados.sort((a, b) => new Date(a.validade) - new Date(b.validade));
+    dados.forEach((m) => {
+  if (!m.quantidade) m.quantidade = 1;
+});
     setMedicamentos(dados);
   }
 
@@ -47,6 +51,11 @@ function Medicamentos() {
   }
 
   async function salvar() {
+  const dataValida = parseDataSegura(validade);
+  if (!dataValida || isNaN(dataValida.getTime())) {
+  addToast("Data inválida ⚠️");
+  return;
+}
 
     const existente = medicamentos.find(
   (m) => m.nome.toLowerCase() === nome.toLowerCase()
@@ -63,24 +72,32 @@ if (existente && !editando) {
 
     if (navigator.vibrate) navigator.vibrate(50);
 
-    const dados = {
-      nome,
-      validade,
-      imagem,
-      diasRemover: Number(diasRemover),
-      diasPreVencido: diasPre ? Number(diasPre) : null,
+   const dados = {
+    nome,
+    validade,
+    imagem,
+    diasRemover: Number(diasRemover),
+    diasPreVencido: diasPre ? Number(diasPre) : null,
+    quantidade: Number(quantidade) || 1,
     };
 
     if (editando) {
-      await db.medicamentos.update(editando.id, dados);
-    } else {
-      await db.medicamentos.add(dados);
-    }
+  await db.medicamentos.update(editando.id, dados);
+  } else if (existente) {
+  await db.medicamentos.update(existente.id, {
+    quantidade: (existente.quantidade || 1) + Number(quantidade || 1),
+  });
+
+  addToast("Quantidade atualizada 📦");
+  } else {
+  await db.medicamentos.add(dados);
+  }
 
     limpar();
     setAbrirModal(false);
     setFabOpen(false);
     carregar();
+    setQuantidade(1);
   }
 
   async function remover(id) {
@@ -110,7 +127,7 @@ if (existente && !editando) {
   function gerarPreviewDatas() {
     if (!validade) return null;
 
-    const validadeDate = new Date(validade);
+    const validadeDate = parseDataSegura(validade);
 
     const removerDate = new Date(validadeDate);
     removerDate.setDate(removerDate.getDate() - Number(diasRemover || 0));
@@ -129,7 +146,7 @@ if (existente && !editando) {
   }
 
   function calcularDatas(med) {
-    const validade = new Date(med.validade);
+   const validade = parseDataSegura(med.validade);
 
     const remover = new Date(validade);
     remover.setDate(remover.getDate() - (med.diasRemover || 0));
@@ -156,24 +173,53 @@ if (existente && !editando) {
   function formatarData(data) {
     return new Date(data).toLocaleDateString();
   }
+  function parseDataSegura(data) {
+  if (!data) return null;
+
+  // formato yyyy-mm-dd (input date)
+ if (data.includes("/")) {
+  const [dia, mes, ano] = data.split("/");
+  return new Date(Number(ano), Number(mes) - 1, Number(dia));
+}
+
+  // fallback
+  return new Date(data);
+}
 
   const lista = medicamentos.filter((m) =>
     `${m.nome} ${m.validade}`.toLowerCase().includes(busca.toLowerCase())
   );
 
-  async function iniciarScanner() {
-    addToast("Abrindo scanner... 📷");
+ async function iniciarScanner() {
+  addToast("Abrindo scanner... 📷");
 
-    const produtoFake = {
-      nome: "Dipirona 500mg",
-      validade: "",
-    };
+  // MOCK (depois você troca por câmera real)
+  const produto = {
+    nome: "Dipirona 500mg Medley",
+    validade: "",
+    lote: "ABC123",
+  };
 
-    setNome(produtoFake.nome);
-    setValidade(produtoFake.validade || "");
-    setAbrirModal(true);
-    setFabOpen(false);
+  const existente = medicamentos.find(
+    (m) => m.nome.toLowerCase().trim() === produto.nome.toLowerCase().trim()
+  );
+
+  if (existente) {
+    await db.medicamentos.update(existente.id, {
+      quantidade: (existente.quantidade || 1) + 1,
+    });
+
+    addToast("Produto já existe, quantidade +1 📦");
+    carregar();
+    return;
   }
+  // não existe → abre modal preenchido
+  setNome(produto.nome);
+  setValidade(produto.validade || "");
+  setQuantidade(1);
+  setAbrirModal(true);
+}
+
   function scrollTopo() {
   topRef.current?.scrollIntoView({ behavior: "smooth" });
 }
@@ -201,7 +247,7 @@ if (existente && !editando) {
       }}
       className="bg-green-800 text-white px-6 py-3 rounded-full shadow-lg"
     >
-      + Adicionar primeiro medicamento
+       Adicionar primeiro medicamento
     </button>
   </div>
 )}
@@ -240,9 +286,14 @@ if (existente && !editando) {
 
               <div className="p-4 space-y-2">
                 <div className="flex justify-between">
-                  <p onClick={scrollTopo} className="font-semibold cursor-pointer">
-                  {m.nome}
-                  </p>
+                <div className="flex items-center gap-2">
+                <p className="font-semibold">{m.nome}</p>
+                {(m.quantidade || 1) > 1 && (
+                <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">
+                x{m.quantidade}
+                </span>
+    )}
+  </div>
 
                   <span className={`text-xs px-2 py-1 rounded-full ${
                     status === "vencido"
@@ -364,160 +415,198 @@ if (existente && !editando) {
   />
 )}
 
-      {/* MODAL */}
+{/* MODAL */}
 {abrirModal && (
   <div className="fixed inset-0 z-[999] bg-black/40 backdrop-blur-md flex items-center justify-center">
 
     <div className="
-      overflow-y-auto overscroll-contain bg-[#0f172a] w-full max-w-md rounded-t-3xl p-6 space-y-5 shadow-2xl animate-slideUpmax-h-[90vh] pb-28">
-        
-    <ToastStack notificacoes={toasts} remover={removerToast} />
+      bg-[#0f172a] 
+      w-full max-w-md 
+      rounded-t-3xl 
+      shadow-2xl 
+      animate-slideUp
+      max-h-[90vh]
+      flex flex-col
+      relative
+    ">
 
-      {/* TÍTULO */}
-      <h2 className="text-xl font-semibold text-white">
-        {editando ? "Editar Medicamento" : "Novo Medicamento"}
-      </h2>
-
-      {/* FOTO */}
-<div>
-  <label className="text-sm text-gray-300">Foto do Produto</label>
-
-  <div className="mt-2 relative">
-
-    {!imagem ? (
-      <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-green-400/40 rounded-2xl p-6 cursor-pointer hover:bg-white/5 transition text-center">
-
-        <div className="w-12 h-12 rounded-full bg-green-800/20 flex items-center justify-center text-green-400 text-xl">
-          📷
-        </div>
-
-        <div className="text-sm text-gray-300">
-          Toque para adicionar foto
-        </div>
-
-        <div className="text-xs text-gray-500">
-          PNG, JPG até 5MB
-        </div>
-
-        <input type="file" className="hidden" onChange={handleImagem} />
-      </label>
-    ) : (
-      <div className="relative">
-        <img
-          src={imagem}
-          className="w-full h-40 object-cover rounded-2xl"
-        />
-
-        {/* overlay */}
-        <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-3 rounded-2xl">
-
-          <label className="bg-white text-black px-3 py-1 rounded-lg text-sm cursor-pointer">
-            Trocar
-            <input type="file" className="hidden" onChange={handleImagem} />
-          </label>
-
-          <button
-            onClick={() => setImagem(null)}
-            className="bg-red-500 text-white px-3 py-1 rounded-lg text-sm"
-          >
-            ✕
-          </button>
-
-        </div>
-      </div>
-    )}
-
-  </div>
-</div>
-
-      {/* NOME */}
-      <div>
-        <label className="text-sm text-gray-300">Nome do medicamento</label>
-        <input
-          value={nome}
-          onChange={(e) => setNome(e.target.value)}
-          placeholder="Ex: Dipirona 500mg"
-          className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
-        />
+      {/* NOTIFICAÇÕES DENTRO DO MODAL */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 w-[90%]">
+        <ToastStack notificacoes={toasts} remover={removerToast} />
       </div>
 
-      {/* VALIDADE */}
-      <div>
+      {/* CONTEÚDO SCROLL */}
+      <div className="p-6 space-y-5 overflow-y-auto">
+
+        {/* TÍTULO */}
+        <h2 className="text-xl font-semibold text-white">
+          {editando ? "Editar Medicamento" : "Novo Medicamento"}
+        </h2>
+
+        {/* FOTO */}
+        <div>
+          <label className="text-sm text-gray-300">Foto do Produto</label>
+
+          <div className="mt-2 relative">
+
+            {!imagem ? (
+              <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-green-400/40 rounded-2xl p-6 cursor-pointer hover:bg-white/5 transition text-center">
+
+                <div className="w-12 h-12 rounded-full bg-green-800/20 flex items-center justify-center text-green-400 text-xl">
+                  📷
+                </div>
+
+                <div className="text-sm text-gray-300">
+                  Toque para adicionar foto
+                </div>
+
+                <div className="text-xs text-gray-500">
+                  PNG, JPG até 5MB
+                </div>
+
+                <input type="file" className="hidden" onChange={handleImagem} />
+              </label>
+            ) : (
+              <div className="relative">
+                <img
+                  src={imagem}
+                  className="w-full h-40 object-cover rounded-2xl"
+                />
+
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-3 rounded-2xl">
+
+                  <label className="bg-white text-black px-3 py-1 rounded-lg text-sm cursor-pointer">
+                    Trocar
+                    <input type="file" className="hidden" onChange={handleImagem} />
+                  </label>
+
+                  <button
+                    onClick={() => setImagem(null)}
+                    className="bg-red-500 text-white px-3 py-1 rounded-lg text-sm"
+                  >
+                    ✕
+                  </button>
+
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+
+        {/* NOME */}
+        <div>
+          <label className="text-sm text-gray-300">Nome do medicamento</label>
+          <input
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            placeholder="Ex: Dipirona 500mg"
+            className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+        </div>
+
+        {/* QUANTIDADE */}
+        <div>
+          <label className="text-sm text-gray-300">Quantidade</label>
+          <input
+          type="number"
+          min="1"
+          value={quantidade}
+          onChange={(e) => setQuantidade(e.target.value)}
+          className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white"
+          />
+        </div>
+
+        {/* VALIDADE */}
+        <div>
         <label className="text-sm text-gray-300">Data de validade</label>
         <input
-          type="date"
-          value={validade}
-          onChange={(e) => setValidade(e.target.value)}
-          className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white"
-        />
+        type="text"
+        placeholder="dd/mm/aaaa"
+        value={validade}
+        onChange={(e) => {
+        let v = e.target.value.replace(/\D/g, "").slice(0, 8);
+
+        if (v.length >= 5)
+        v = v.replace(/(\d{2})(\d{2})(\d{1,4})/, "$1/$2/$3");
+        else if (v.length >= 3)
+        v = v.replace(/(\d{2})(\d{1,2})/, "$1/$2");
+
+    setValidade(v);
+  }}
+  className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white"
+/>
+        </div>
+
+        {/* REMOVER */}
+        <div>
+          <label className="text-sm text-gray-300">
+            Dias para remover antes da validade
+          </label>
+          <input
+            type="number"
+            value={diasRemover}
+            onChange={(e) => setDiasRemover(e.target.value)}
+            placeholder="Ex: 7 dias"
+            className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Produto deve sair da prateleira antes de vencer
+          </p>
+        </div>
+
+        {/* PRE VENCIMENTO */}
+        <div>
+          <label className="text-sm text-gray-300">
+            Pré-vencimento (opcional)
+          </label>
+          <input
+            type="number"
+            value={diasPre}
+            onChange={(e) => setDiasPre(e.target.value)}
+            placeholder="Ex: 15 dias antes da remoção"
+            className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Aviso antes da data de remoção
+          </p>
+        </div>
+
+        {/* PREVIEW */}
+        {(() => {
+          const preview = gerarPreviewDatas();
+          if (!preview) return null;
+
+          return (
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-gray-300 space-y-1">
+              <p>📅 Validade: {preview.validade.toLocaleDateString()}</p>
+              <p>🗑️ Remover em: {preview.remover.toLocaleDateString()}</p>
+              {preview.pre && (
+                <p>⚠️ Pré-vencimento: {preview.pre.toLocaleDateString()}</p>
+              )}
+            </div>
+          );
+        })()}
+
       </div>
 
-      {/* REMOVER */}
-      <div>
-        <label className="text-sm text-gray-300">
-          Dias para remover antes da validade
-        </label>
-        <input
-          type="number"
-          value={diasRemover}
-          onChange={(e) => setDiasRemover(e.target.value)}
-          placeholder="Ex: 7 dias"
-          className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white"
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          Produto deve sair da prateleira antes de vencer
-        </p>
-      </div>
+      {/* BOTÕES FIXOS */}
+      <div className="p-4 border-t border-white/10 bg-[#0f172a]">
+        <div className="flex gap-3">
+          <button
+            onClick={() => setAbrirModal(false)}
+            className="flex-1 py-3 rounded-xl border border-white/20 text-white"
+          >
+            Cancelar
+          </button>
 
-      {/* PRE VENCIMENTO */}
-      <div>
-        <label className="text-sm text-gray-300">
-          Pré-vencimento (opcional)
-        </label>
-        <input
-          type="number"
-          value={diasPre}
-          onChange={(e) => setDiasPre(e.target.value)}
-          placeholder="Ex: 15 dias antes da remoção"
-          className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white"
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          Aviso antes da data de remoção
-        </p>
-      </div>
-
-      {(() => {
-        const preview = gerarPreviewDatas();
-        if (!preview) return null;
-
-        return (
-          <div className="bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-gray-300 space-y-1">
-            <p>📅 Validade: {preview.validade.toLocaleDateString()}</p>
-            <p>🗑️ Remover em: {preview.remover.toLocaleDateString()}</p>
-            {preview.pre && (
-              <p>⚠️ Pré-vencimento: {preview.pre.toLocaleDateString()}</p>
-            )}
-          </div>
-        );
-      }
-      
-      )()}
-
-      {/* BOTÕES */}
-      <div className="flex gap-3 pt-2 sticky bottom-0 bg-[#0f172a] pb-3 z-10">   
-        <button
-          onClick={() => setAbrirModal(false)}
-          className="flex-1 py-3 rounded-xl border border-white/20 text-white"
-        >
-          Cancelar
-        </button>
-
-        <button
-          onClick={salvar}
-          className="flex-1 py-3 rounded-xl bg-green-800 text-white font-medium shadow-lg active:scale-95 transition"
-        >
-          Salvar
-        </button>
+          <button
+            onClick={salvar}
+            className="flex-1 py-3 rounded-xl bg-green-800 text-white font-medium shadow-lg active:scale-95 transition"
+          >
+            Salvar
+          </button>
+        </div>
       </div>
 
     </div>
