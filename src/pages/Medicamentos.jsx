@@ -3,6 +3,7 @@ import { db } from "../db";
 import ToastStack from "../components/ToastStack";
 import { motion } from "framer-motion";
 import { useRef } from "react";
+import Scanner from "../components/Scanner";
 
 function Medicamentos() {
   const [medicamentos, setMedicamentos] = useState([]);
@@ -20,6 +21,9 @@ function Medicamentos() {
   const [fabOpen, setFabOpen] = useState(false);
   const topRef = useRef(null);
   const [quantidade, setQuantidade] = useState(1);
+  const [abrirScanner, setAbrirScanner] = useState(false);
+  const [modoReposicao, setModoReposicao] = useState(false);
+  const [inputValidadeRapida, setInputValidadeRapida] = useState(null);
 
   useEffect(() => {
     carregar();
@@ -27,6 +31,25 @@ function Medicamentos() {
       Notification.requestPermission();
     }
   }, []);
+
+  async function buscarProdutoPorCodigo(codigo) {
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${codigo}.json`);
+    const data = await res.json();
+
+    if (data.status === 1) {
+      return {
+        nome: data.product.product_name || "Produto desconhecido",
+        marca: data.product.brands || "",
+      };
+    }
+
+    return null;
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
 
   async function carregar() {
     const dados = await db.medicamentos.toArray();
@@ -61,10 +84,6 @@ function Medicamentos() {
   (m) => m.nome.toLowerCase() === nome.toLowerCase()
 );
 
-if (existente && !editando) {
-  addToast("Esse medicamento já existe ⚠️");
-  return;
-}
     if (!nome || !validade) {
       addToast("Preencha os campos obrigatórios ⚠️");
       return;
@@ -191,37 +210,79 @@ if (existente && !editando) {
   );
 
  async function iniciarScanner() {
-  addToast("Abrindo scanner... 📷");
+  setAbrirScanner(true);
+}
+async function aoEscanear(codigo) {
+  const produto = await buscarProdutoPorCodigo(codigo);
 
-  // MOCK (depois você troca por câmera real)
-  const produto = {
-    nome: "Dipirona 500mg Medley",
-    validade: "",
-    lote: "ABC123",
-  };
+  if (!produto) {
+    addToast("Não reconhecido 😕");
+    return;
+  }
+
+  const nomeCompleto = `${produto.nome} ${produto.marca}`;
 
   const existente = medicamentos.find(
-    (m) => m.nome.toLowerCase().trim() === produto.nome.toLowerCase().trim()
+    (m) => m.nome.toLowerCase() === nomeCompleto.toLowerCase()
   );
+
+  // 🔥 MODO REPOSIÇÃO ATIVO
+  if (modoReposicao) {
+    if (existente) {
+      await db.medicamentos.update(existente.id, {
+        quantidade: (existente.quantidade || 1) + 1,
+      });
+
+      addToast("📦 +1 somado");
+      carregar();
+      return;
+    }
+
+    // 🆕 novo produto → pede validade rápida
+    setInputValidadeRapida({
+      nome: nomeCompleto,
+      codigo
+    });
+
+    return;
+  }
+
+  // 🧠 MODO NORMAL (seu fluxo antigo)
+  setAbrirScanner(false);
 
   if (existente) {
     await db.medicamentos.update(existente.id, {
       quantidade: (existente.quantidade || 1) + 1,
     });
 
-    addToast("Produto já existe, quantidade +1 📦");
+    addToast("Quantidade aumentada 📦");
     carregar();
     return;
   }
-  // não existe → abre modal preenchido
-  setNome(produto.nome);
-  setValidade(produto.validade || "");
-  setQuantidade(1);
+
+  setNome(nomeCompleto);
   setAbrirModal(true);
 }
 
-  function scrollTopo() {
-  topRef.current?.scrollIntoView({ behavior: "smooth" });
+async function salvarRapido(validade) {
+  const dataValida = parseDataSegura(validade);
+
+  if (!dataValida || isNaN(dataValida.getTime())) {
+    addToast("Data inválida ⚠️");
+    return;
+  }
+
+  await db.medicamentos.add({
+    nome: inputValidadeRapida.nome,
+    validade,
+    quantidade: 1,
+    diasRemover: 7,
+  });
+
+  addToast("✨ Produto adicionado");
+
+  setInputValidadeRapida(null);
+  carregar();
 }
 
   return (
@@ -375,6 +436,23 @@ if (existente && !editando) {
     💊 Novo Item
   </motion.button>
 
+{/* 📷 reposição */}
+  <motion.button
+  variants={{
+    open: { opacity: 1, y: 0, scale: 1 },
+    closed: { opacity: 0, y: 10, scale: 0.9 }
+  }}
+  onClick={() => {
+    setModoReposicao(!modoReposicao);
+    addToast(modoReposicao ? "Modo reposição DESATIVADO ❌" : "Modo reposição ATIVO 📦");
+  }}
+  className={`px-4 py-2 rounded-full shadow-lg ${
+    modoReposicao ? "bg-orange-500" : "bg-gray-600"
+  } text-white`}
+>
+  📦 Reposição
+</motion.button>
+
   {/* 📷 SCANNER */}
   <motion.button
     variants={{
@@ -512,7 +590,7 @@ if (existente && !editando) {
           type="number"
           min="1"
           value={quantidade}
-          onChange={(e) => setQuantidade(e.target.value)}
+          onChange={(e) => setQuantidade(Number(e.target.value))}
           className="w-full mt-1 p-3 rounded-xl bg-white/5 border border-white/10 text-white"
           />
         </div>
@@ -639,8 +717,46 @@ if (existente && !editando) {
         </div>
       )}
 
+  {inputValidadeRapida && (
+  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[9999]">
+    <div className="bg-white p-6 rounded-2xl w-[90%] max-w-sm text-center space-y-4">
+    <h2 className="font-semibold">
+        📅 Validade rápida
+      </h2>
+      <p className="text-sm text-gray-500">
+        {inputValidadeRapida.nome}
+      </p>
+      <input
+        autoFocus
+        placeholder="ddmmaaaa"
+        onChange={(e) => {
+          let v = e.target.value.replace(/\D/g, "").slice(0, 8);
+
+          if (v.length === 8) {
+            const formatada = v.replace(/(\d{2})(\d{2})(\d{4})/, "$1/$2/$3");
+
+            salvarRapido(formatada);
+          }
+        }}
+        className="w-full p-3 border rounded-xl text-center text-lg"
+      />
+      <button
+        onClick={() => setInputValidadeRapida(null)}
+        className="text-sm text-gray-400"
+      >
+        cancelar
+      </button>
+
     </div>
-  );
-}
+  </div>
+)}
+{abrirScanner && (
+  <Scanner
+    onClose={() => setAbrirScanner(false)}
+    onScan={aoEscanear}
+  />)}
+    </div>
+  
+);}
 
 export default Medicamentos;
