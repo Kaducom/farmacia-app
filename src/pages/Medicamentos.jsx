@@ -5,7 +5,12 @@ import { motion } from "framer-motion";
 import { useRef } from "react";
 import Scanner from "../components/Scanner";
 
-function Medicamentos() {
+function Medicamentos({ 
+  modoAuditoria, 
+  setModoAuditoria, 
+  relatorioAuditoria, 
+  setRelatorioAuditoria 
+}) {
   const [medicamentos, setMedicamentos] = useState([]);
   const [imagem, setImagem] = useState(null);
   const [abrirModal, setAbrirModal] = useState(false);
@@ -24,6 +29,7 @@ function Medicamentos() {
   const [abrirScanner, setAbrirScanner] = useState(false);
   const [modoReposicao, setModoReposicao] = useState(false);
   const [inputValidadeRapida, setInputValidadeRapida] = useState(null);
+  const [auditoria, setAuditoria] = useState({});
 
   useEffect(() => {
     carregar();
@@ -31,6 +37,11 @@ function Medicamentos() {
       Notification.requestPermission();
     }
   }, []);
+  useEffect(() => {
+  if (medicamentos.length > 0) {
+    atualizarAuditoriaAutomatica();
+  }
+}, [medicamentos, auditoria]);
 
   async function buscarProdutoPorCodigo(codigo) {
   try {
@@ -214,14 +225,23 @@ function Medicamentos() {
 }
 async function aoEscanear(codigo) {
   const produto = await buscarProdutoPorCodigo(codigo);
-
-  if (!produto) {
+   if (!produto) {
     addToast("Não reconhecido 😕");
     return;
   }
+  if (modoAuditoria) {
+  const nomeCompleto = `${produto.nome} ${produto.marca}`.toLowerCase();
 
+  setAuditoria((prev) => ({
+    ...prev,
+    [nomeCompleto]: (prev[nomeCompleto] || 0) + 1,
+  }));
+
+  addToast("📦 Escaneado");
+
+  return;
+}
   const nomeCompleto = `${produto.nome} ${produto.marca}`;
-
   const existente = medicamentos.find(
     (m) => m.nome.toLowerCase() === nomeCompleto.toLowerCase()
   );
@@ -264,6 +284,46 @@ async function aoEscanear(codigo) {
   setAbrirModal(true);
 }
 
+function gerarRelatorioAuditoria() {
+  const relatorio = [];
+
+  const mapaSistema = {};
+  medicamentos.forEach((m) => {
+    mapaSistema[m.nome.toLowerCase()] = m.quantidade || 1;
+  });
+
+  Object.entries(auditoria).forEach(([nome, qtd]) => {
+    if (!mapaSistema[nome]) {
+      relatorio.push({ nome, tipo: "novo", sistema: 0, real: qtd });
+    } else if (mapaSistema[nome] !== qtd) {
+      relatorio.push({ nome, tipo: "divergente", sistema: mapaSistema[nome], real: qtd });
+    } else {
+      relatorio.push({ nome, tipo: "ok", sistema: qtd, real: qtd });
+    }
+  });
+
+  Object.entries(mapaSistema).forEach(([nome, qtd]) => {
+    if (!auditoria[nome]) {
+      relatorio.push({ nome, tipo: "fantasma", sistema: qtd, real: 0 });
+    }
+  });
+
+  // 🔥 ordenação por prioridade
+  const prioridade = {
+    divergente: 1,
+    novo: 2,
+    fantasma: 3,
+    ok: 4,
+  };
+
+  return relatorio.sort((a, b) => prioridade[a.tipo] - prioridade[b.tipo]);
+}
+
+function atualizarAuditoriaAutomatica() {
+  const rel = gerarRelatorioAuditoria();
+  setRelatorioAuditoria(rel);
+}
+
 async function salvarRapido(validade) {
   const dataValida = parseDataSegura(validade);
 
@@ -282,6 +342,43 @@ async function salvarRapido(validade) {
   addToast("✨ Produto adicionado");
 
   setInputValidadeRapida(null);
+  carregar();
+}
+
+async function corrigirTudo() {
+  const rel = gerarRelatorioAuditoria();
+
+  for (const item of rel) {
+    if (item.tipo === "divergente") {
+      const med = medicamentos.find(m => m.nome.toLowerCase() === item.nome);
+      if (med) {
+        await db.medicamentos.update(med.id, {
+          quantidade: item.real,
+        });
+      }
+    }
+
+    if (item.tipo === "novo") {
+      await db.medicamentos.add({
+        nome: item.nome,
+        quantidade: item.real,
+        validade: "",
+        diasRemover: 7,
+      });
+    }
+
+    if (item.tipo === "fantasma") {
+      const med = medicamentos.find(m => m.nome.toLowerCase() === item.nome);
+      if (med) {
+        await db.medicamentos.update(med.id, {
+          quantidade: 0,
+        });
+      }
+    }
+  }
+
+  addToast("⚡ Estoque corrigido automaticamente");
+  setModoAuditoria(false);
   carregar();
 }
 
@@ -312,7 +409,6 @@ async function salvarRapido(validade) {
     </button>
   </div>
 )}
-
       {/* LISTA */}
       <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
         {lista.map((m) => {
@@ -436,7 +532,23 @@ async function salvarRapido(validade) {
     💊 Novo Item
   </motion.button>
 
-{/* 📷 reposição */}
+  {/* 📷 SCANNER */}
+  <motion.button
+    variants={{
+      open: { opacity: 1, y: 0, scale: 1 },
+      closed: { opacity: 0, y: 10, scale: 0.9 }
+    }}
+    transition={{ duration: 0.15 }}
+    onClick={() => {
+      iniciarScanner();
+      setFabOpen(false);
+    }}
+    className="bg-purple-500 text-white px-4 py-2 rounded-full shadow-lg"
+  >
+    📷 Scanner
+  </motion.button>
+
+  {/* 📷 reposição */}
   <motion.button
   variants={{
     open: { opacity: 1, y: 0, scale: 1 },
@@ -453,21 +565,20 @@ async function salvarRapido(validade) {
   📦 Reposição
 </motion.button>
 
-  {/* 📷 SCANNER */}
-  <motion.button
-    variants={{
-      open: { opacity: 1, y: 0, scale: 1 },
-      closed: { opacity: 0, y: 10, scale: 0.9 }
-    }}
-    transition={{ duration: 0.15 }}
-    onClick={() => {
-      iniciarScanner();
-      setFabOpen(false);
-    }}
-    className="bg-purple-500 text-white px-4 py-2 rounded-full shadow-lg"
-  >
-    📷 Scanner
-  </motion.button>
+<motion.button
+  variants={{
+    open: { opacity: 1, y: 0, scale: 1 },
+    closed: { opacity: 0, y: 10, scale: 0.9 }
+  }}
+  onClick={() => {
+    setModoAuditoria(true);
+    setAuditoria({});
+    addToast("Modo auditoria iniciado 🔍");
+  }}
+  className="bg-yellow-500 text-white px-4 py-2 rounded-full shadow-lg"
+>
+  🔍 Auditoria
+</motion.button>
 
 </motion.div>
 
@@ -745,6 +856,54 @@ async function salvarRapido(validade) {
         className="text-sm text-gray-400"
       >
         cancelar
+      </button>
+
+    </div>
+  </div>
+)}
+{modoAuditoria && (
+  <div className="fixed inset-0 bg-black/90 z-[9999] p-4 overflow-y-auto">
+
+    <div className="bg-[#0f172a] rounded-2xl p-4 space-y-4 max-w-lg mx-auto text-white">
+
+      <h2 className="text-lg font-semibold text-center">
+        📊 Auditoria Automática
+      </h2>
+
+      {relatorioAuditoria.length === 0 && (
+        <p className="text-center text-gray-400 text-sm">
+          Nenhum dado ainda...
+        </p>
+      )}
+
+      {relatorioAuditoria.map((item, i) => (
+        <div
+          key={i}
+          className={`p-3 rounded-xl border ${
+            item.tipo === "ok"
+              ? "bg-green-900/30 border-green-500"
+              : item.tipo === "divergente"
+              ? "bg-yellow-900/30 border-yellow-500"
+              : item.tipo === "novo"
+              ? "bg-blue-900/30 border-blue-500"
+              : "bg-red-900/30 border-red-500"
+          }`}
+        >
+          <p className="text-sm font-semibold capitalize">
+            {item.nome}
+          </p>
+
+          <p className="text-xs text-gray-300">
+            Sistema: {item.sistema} | Real: {item.real}
+          </p>
+        </div>
+      ))}
+
+      <button
+        onClick={() => setModoAuditoria(false)}
+        className="w-full mt-4 bg-white text-black py-2 rounded-xl"
+      >
+        Fechar
       </button>
 
     </div>

@@ -7,11 +7,20 @@ import Menu from "./pages/Menu";
 
 function App() {
   const [pagina, setPagina] = useState("medicamentos");
+  const [modoAuditoria, setModoAuditoria] = useState(false);
+  const [relatorioAuditoria, setRelatorioAuditoria] = useState([]);
 
   function renderPagina() {
     switch (pagina) {
       case "medicamentos":
-        return <Medicamentos />;
+      return (
+      <Medicamentos 
+      modoAuditoria={modoAuditoria}
+      setModoAuditoria={setModoAuditoria}
+      relatorioAuditoria={relatorioAuditoria}
+      setRelatorioAuditoria={setRelatorioAuditoria}
+    />
+  );
       case "receitas":
         return <Receitas />;
       case "posologia":
@@ -19,7 +28,12 @@ function App() {
       case "doutor":
         return <Doutor />;
       case "menu":
-        return <Menu />;
+      return (
+      <Menu 
+      setModoAuditoria={setModoAuditoria}
+      relatorioAuditoria={relatorioAuditoria}
+    />
+  );
     }
   }
 

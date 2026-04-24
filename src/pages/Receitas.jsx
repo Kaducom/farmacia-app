@@ -85,7 +85,7 @@ function Receitas() {
   }
 
   function formatarData(data) {
-    return new Date(data).toLocaleDateString();
+    return new Date(data).toLocaleDateString("pt-BR");
   }
 
   function calcularDataFinal(r) {
@@ -97,104 +97,129 @@ function Receitas() {
   const hojeFormatado = new Date().toISOString().split("T")[0];
 
   return (
-    <div className="max-w-xl mx-auto text-black dark:text-white">
+    <div className="p-4 pb-24 max-w-4xl mx-auto text-black dark:text-white">
 
-      <h1 className="text-2xl font-bold mb-4">Receitas 📄</h1>
+      {/* TÍTULO */}
+      <h1 className="text-2xl font-bold mb-4 text-center md:text-left">
+        📄 Receitas
+      </h1>
 
-      {/* ERRO BONITO */}
+      {/* ERRO */}
       {erro && (
-        <div className="bg-red-100 text-red-600 p-3 rounded-xl text-center mb-3 animate-fadeIn">
+        <div className="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-3 rounded-xl text-center mb-4 shadow">
           ⚠️ {erro}
         </div>
       )}
 
-      <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-md space-y-3">
+      {/* CARD FORM */}
+      <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-lg space-y-4">
 
-        <input
-          type="date"
-          max={hojeFormatado}
-          value={dataReceita}
-          onChange={(e) => {
-            setDataReceita(e.target.value);
-            setErro("");
-          }}
-          className={`border p-2 w-full rounded-xl dark:bg-gray-700 dark:border-gray-600
-            ${!dataReceita && erro ? "border-red-500" : ""}
-          `}
-        />
-
-        <select
-          value={tipo}
-          onChange={(e) => {
-            setTipo(e.target.value);
-            setErro("");
-          }}
-          className="border p-2 w-full rounded-xl dark:bg-gray-700 dark:border-gray-600"
-        >
-          <option value="antibiotico">Antibiótico (10 dias)</option>
-          <option value="controlado">Controlado (30 dias)</option>
-          <option value="popular">Popular (180 dias)</option>
-          <option value="outros">Outros</option>
-        </select>
-
-        {tipo === "outros" && (
+        {/* DATA */}
+        <div>
+          <label className="text-sm text-gray-500 dark:text-gray-400">
+            Data da receita
+          </label>
           <input
-            type="number"
-            placeholder="Dias de validade"
-            value={diasValidade}
+            type="date"
+            max={hojeFormatado}
+            value={dataReceita}
             onChange={(e) => {
-              setDiasValidade(e.target.value);
+              setDataReceita(e.target.value);
               setErro("");
             }}
-            className={`border p-2 w-full rounded-xl dark:bg-gray-700 dark:border-gray-600
-              ${erro && !diasValidade ? "border-red-500" : ""}
+            className={`w-full mt-1 p-3 rounded-xl border dark:bg-gray-700 dark:border-gray-600
+              ${!dataReceita && erro ? "border-red-500" : ""}
             `}
           />
+        </div>
+
+        {/* TIPO */}
+        <div>
+          <label className="text-sm text-gray-500 dark:text-gray-400">
+            Tipo de receita
+          </label>
+          <select
+            value={tipo}
+            onChange={(e) => {
+              setTipo(e.target.value);
+              setErro("");
+            }}
+            className="w-full mt-1 p-3 rounded-xl border dark:bg-gray-700 dark:border-gray-600"
+          >
+            <option value="antibiotico">Antibiótico (10 dias)</option>
+            <option value="controlado">Controlado (30 dias)</option>
+            <option value="popular">Popular (180 dias)</option>
+            <option value="outros">Outros</option>
+          </select>
+        </div>
+
+        {/* OUTROS */}
+        {tipo === "outros" && (
+          <div>
+            <label className="text-sm text-gray-500 dark:text-gray-400">
+              Dias de validade
+            </label>
+            <input
+              type="number"
+              placeholder="Ex: 45"
+              value={diasValidade}
+              onChange={(e) => {
+                setDiasValidade(e.target.value);
+                setErro("");
+              }}
+              className={`w-full mt-1 p-3 rounded-xl border dark:bg-gray-700 dark:border-gray-600
+                ${erro && !diasValidade ? "border-red-500" : ""}
+              `}
+            />
+          </div>
         )}
 
         {/* RESULTADO */}
         {resultado && (
-          <div className="text-center font-semibold text-sm">
+          <div className="text-center font-semibold text-sm p-3 rounded-xl bg-black/5 dark:bg-white/5">
             {resultado.status === "valida" ? (
               <p className="text-green-600 dark:text-green-400">
-                ✅ Receita válida até {formatarData(resultado.dataFinal)}
+                ✅ Válida até {formatarData(resultado.dataFinal)}
               </p>
             ) : (
               <p className="text-red-600 dark:text-red-400">
-                ❌ Receita venceu em {formatarData(resultado.dataFinal)}
+                ❌ Venceu em {formatarData(resultado.dataFinal)}
               </p>
             )}
           </div>
         )}
 
-        <button
-          onClick={verificar}
-          className="bg-blue-500 text-white p-2 rounded-full shadow-md w-full"
-        >
-          Verificar
-        </button>
+        {/* BOTÕES */}
+        <div className="flex flex-col md:flex-row gap-3">
+          <button
+            onClick={verificar}
+            className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl shadow"
+          >
+            Verificar
+          </button>
 
-        <button
-          onClick={salvar}
-          className="bg-green-500 text-white p-2 rounded-full shadow-md w-full"
-        >
-          Salvar Receita
-        </button>
+          <button
+            onClick={salvar}
+            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl shadow"
+          >
+            Salvar
+          </button>
+        </div>
       </div>
 
       {/* LISTA */}
-      <div className="mt-6 space-y-2">
+      <div className="mt-6 space-y-3">
         {lista.map((r) => (
           <div
             key={r.id}
-            className="bg-gray-100 dark:bg-gray-800 p-3 rounded-xl flex justify-between items-center"
+            className="bg-gray-100 dark:bg-gray-800 p-4 rounded-2xl flex justify-between items-center shadow"
           >
             <div>
-              <p className="text-sm">
+              <p className="font-medium">
                 📅 {formatarData(r.dataReceita)}
               </p>
 
-              <p className="text-xs">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 {r.status === "valida"
                   ? `✅ Válida até ${calcularDataFinal(r)}`
                   : `❌ Venceu em ${calcularDataFinal(r)}`}
@@ -203,7 +228,7 @@ function Receitas() {
 
             <button
               onClick={() => remover(r.id)}
-              className="bg-red-500 text-white px-3 py-1 rounded-full"
+              className="bg-red-500 hover:bg-red-600 text-white px-4 py-1 rounded-full"
             >
               X
             </button>
