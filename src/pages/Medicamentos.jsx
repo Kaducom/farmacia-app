@@ -41,7 +41,7 @@ function Medicamentos({
   if (medicamentos.length > 0) {
     atualizarAuditoriaAutomatica();
   }
-}, [medicamentos, auditoria]);
+}, [medicamentos]);
 
   async function buscarProdutoPorCodigo(codigo) {
   try {

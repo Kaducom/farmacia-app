@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 
 function Menu({ setModoAuditoria, relatorioAuditoria = [] }) {
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(() => {
+  const saved = localStorage.getItem("dark");
+  return saved === "true";
+});
 
   // 🔥 total de problemas
   const totalProblemas = relatorioAuditoria.filter(
@@ -10,18 +13,30 @@ function Menu({ setModoAuditoria, relatorioAuditoria = [] }) {
 
   // 🌙 aplicar dark mode
   useEffect(() => {
-    if (dark) {
+  if (dark) {
+    document.documentElement.classList.add("dark");
+  } else {
+    document.documentElement.classList.remove("dark");
+  }
+}, [dark]);
+
+ function toggleDark() {
+  setDark((prev) => {
+    const novo = !prev;
+
+    localStorage.setItem("dark", novo);
+
+    if (novo) {
       document.documentElement.classList.add("dark");
     } else {
       document.documentElement.classList.remove("dark");
     }
-  }, [dark]);
-
-  function toggleDark() {
-    setDark((prev) => !prev);
 
     if (navigator.vibrate) navigator.vibrate(20);
-  }
+
+    return novo;
+  });
+}
 
   return (
     <div className="p-4 pb-24 max-w-4xl mx-auto text-black dark:text-white space-y-4">
@@ -92,29 +107,6 @@ function Menu({ setModoAuditoria, relatorioAuditoria = [] }) {
         <button className="w-full bg-purple-500 hover:bg-purple-600 text-white py-2 rounded-xl">
           Abrir Dashboard
         </button>
-      </div>
-
-      {/* ⚡ AÇÕES RÁPIDAS */}
-      <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-lg space-y-3">
-        <p className="font-semibold">⚡ Ações rápidas</p>
-
-        <div className="grid grid-cols-2 gap-2">
-          <button className="bg-green-600 text-white py-2 rounded-xl">
-            + Medicamento
-          </button>
-
-          <button className="bg-purple-600 text-white py-2 rounded-xl">
-            Scanner
-          </button>
-
-          <button className="bg-blue-600 text-white py-2 rounded-xl">
-            Receitas
-          </button>
-
-          <button className="bg-gray-700 text-white py-2 rounded-xl">
-            Posologia
-          </button>
-        </div>
       </div>
 
       {/* ⚙️ CONFIG */}

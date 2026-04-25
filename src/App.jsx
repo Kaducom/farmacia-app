@@ -4,6 +4,11 @@ import Receitas from "./pages/Receitas";
 import Posologia from "./pages/Posologia";
 import Doutor from "./pages/Doutor";
 import Menu from "./pages/Menu";
+import { ThemeProvider } from "./context/ThemeContext";
+
+<ThemeProvider>
+  <App />
+</ThemeProvider>
 
 function App() {
   const [pagina, setPagina] = useState("medicamentos");
