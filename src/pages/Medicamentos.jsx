@@ -58,27 +58,39 @@ function Medicamentos() {
   // 🔎 SCANNER / API
   // =============================
 
-  async function buscarProdutoPorCodigo(codigo) {
-    try {
-      const res = await fetch(
-        `https://world.openfoodfacts.org/api/v0/product/${codigo}.json`
-      );
+async function buscarProdutoPorCodigo(codigo) {
+  try {
+    const res = await fetch(
+      `https://world.openfoodfacts.org/api/v0/product/${codigo}.json`
+    );
 
-      const data = await res.json();
+    const data = await res.json();
 
-      if (data.status === 1) {
-        return {
-          nome: data.product.product_name || "Produto desconhecido",
-          marca: data.product.brands || "",
-        };
-      }
+    if (data.status === 1) {
+      const p = data.product;
 
-      return null;
-    } catch (err) {
-      console.error("Erro ao buscar produto:", err);
-      return null;
+      return {
+        codigo,
+        nome:
+          p.product_name ||
+          p.product_name_pt ||
+          p.generic_name ||
+          "Produto sem nome",
+        marca: p.brands || "",
+        imagem:
+          p.image_front_url ||
+          p.image_url ||
+          p.selected_images?.front?.display?.pt ||
+          null,
+      };
     }
+
+    return null;
+  } catch (err) {
+    console.error("Erro ao buscar produto:", err);
+    return null;
   }
+}
 
   // =============================
   // 📦 BANCO DE DADOS
@@ -314,60 +326,50 @@ function Medicamentos() {
     setAbrirScanner(true);
   }
 
-  async function aoEscanear(codigo) {
-    const produto = await buscarProdutoPorCodigo(codigo);
+async function aoEscanear(codigo) {
+  setAbrirScanner(false);
+  addToast("Código lido, buscando produto... 🔎", "info");
 
-    if (!produto) {
-      addToast("Produto não reconhecido 😕", "erro");
-      return;
-    }
+  const produto = await buscarProdutoPorCodigo(codigo);
 
-    const nomeCompleto = `${produto.nome} ${produto.marca}`.trim();
-
-    const existente = medicamentos.find(
-      (m) => m.nome.toLowerCase() === nomeCompleto.toLowerCase()
-    );
-
-    if (modoReposicao) {
-      if (existente) {
-        await db.medicamentos.update(existente.id, {
-          quantidade: (existente.quantidade || 1) + 1,
-        });
-
-        addToast("📦 +1 somado");
-        setAbrirScanner(false);
-        await carregar();
-
-        return;
-      }
-
-      setAbrirScanner(false);
-
-      setInputValidadeRapida({
-        nome: nomeCompleto,
-        codigo,
-      });
-
-      return;
-    }
-
-    setAbrirScanner(false);
-
-    if (existente) {
-      await db.medicamentos.update(existente.id, {
-        quantidade: (existente.quantidade || 1) + 1,
-      });
-
-      addToast("Quantidade aumentada 📦");
-      await carregar();
-
-      return;
-    }
+  if (!produto) {
+    addToast("Produto não encontrado. Preencha manualmente.", "aviso");
 
     limpar();
-    setNome(nomeCompleto);
+    setNome(`Código: ${codigo}`);
     setAbrirModal(true);
+    return;
   }
+
+  const nomeCompleto = `${produto.nome} ${produto.marca}`.trim();
+
+  const existente = medicamentos.find(
+    (m) => m.nome.toLowerCase() === nomeCompleto.toLowerCase()
+  );
+
+  if (existente) {
+    await db.medicamentos.update(existente.id, {
+      quantidade: (existente.quantidade || 1) + 1,
+    });
+
+    addToast("Produto já existe. Quantidade aumentada 📦", "ok");
+    await carregar();
+    return;
+  }
+
+  limpar();
+
+  setNome(nomeCompleto);
+  setImagem(produto.imagem);
+  setQuantidade(1);
+  setDiasRemover(7);
+  setDiasPre("");
+  setValidade("");
+
+  setAbrirModal(true);
+
+  addToast("Produto encontrado. Informe a validade 💊", "ok");
+}
 
   async function salvarRapido(validadeRapida) {
     const dataValida = parseDataSegura(validadeRapida);

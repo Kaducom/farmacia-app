@@ -22,23 +22,22 @@ export default function Scanner({ onScan, onClose }) {
   const controlsRef = useRef(null);
   const streamRef = useRef(null);
   const mountedRef = useRef(true);
-  const lastScanRef = useRef("");
+  const lendoRef = useRef(false);
+  const iniciandoRef = useRef(false);
   const timeoutRef = useRef(null);
-  const initializingRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
-  const [lido, setLido] = useState("");
+  const [codigoLido, setCodigoLido] = useState("");
   const [devices, setDevices] = useState([]);
   const [deviceIndex, setDeviceIndex] = useState(0);
-  const [torchOn, setTorchOn] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [codigoManual, setCodigoManual] = useState("");
 
   useEffect(() => {
     mountedRef.current = true;
-
     iniciarScanner(0);
 
     return () => {
@@ -47,8 +46,8 @@ export default function Scanner({ onScan, onClose }) {
     };
   }, []);
 
-  function safeSet(fn) {
-    if (mountedRef.current) fn();
+  function setSeguro(callback) {
+    if (mountedRef.current) callback();
   }
 
   function destruirScanner() {
@@ -73,44 +72,14 @@ export default function Scanner({ onScan, onClose }) {
         videoRef.current.srcObject = null;
       }
 
-      lastScanRef.current = "";
-      initializingRef.current = false;
+      lendoRef.current = false;
+      iniciandoRef.current = false;
     } catch (err) {
-      console.error("Erro ao limpar scanner:", err);
+      console.error("Erro ao destruir scanner:", err);
     }
   }
 
-  function feedback() {
-    if (navigator.vibrate) {
-      navigator.vibrate([50, 25, 50]);
-    }
-  }
-
-  function finalizarLeitura(codigo) {
-    const codigoLimpo = String(codigo || "").trim();
-
-    if (!codigoLimpo) return;
-    if (lastScanRef.current === codigoLimpo) return;
-
-    lastScanRef.current = codigoLimpo;
-
-    safeSet(() => {
-      setLido(codigoLimpo);
-    });
-
-    feedback();
-    onScan(codigoLimpo);
-
-    timeoutRef.current = setTimeout(() => {
-      lastScanRef.current = "";
-
-      safeSet(() => {
-        setLido("");
-      });
-    }, 1800);
-  }
-
-  async function carregarDispositivos() {
+  async function listarCameras() {
     const lista = await BrowserMultiFormatReader.listVideoInputDevices();
 
     const ordenada = [...lista].sort((a, b) => {
@@ -123,111 +92,55 @@ export default function Scanner({ onScan, onClose }) {
       return 0;
     });
 
-    safeSet(() => {
-      setDevices(ordenada);
-    });
+    setSeguro(() => setDevices(ordenada));
 
     return ordenada;
   }
 
-  async function aplicarMelhoriasCamera() {
-    const video = videoRef.current;
-    const stream = video?.srcObject;
+  async function iniciarScanner(index = 0) {
+    if (iniciandoRef.current) return;
 
-    if (!stream) return;
-
-    streamRef.current = stream;
-
-    const [track] = stream.getVideoTracks();
-
-    if (!track) return;
-
-    const capabilities = track.getCapabilities?.() || {};
-    const advanced = [];
-
-    safeSet(() => {
-      setTorchAvailable(Boolean(capabilities.torch));
-    });
-
-    if (capabilities.focusMode?.includes("continuous")) {
-      advanced.push({ focusMode: "continuous" });
-    }
-
-    if (capabilities.exposureMode?.includes("continuous")) {
-      advanced.push({ exposureMode: "continuous" });
-    }
-
-    if (capabilities.whiteBalanceMode?.includes("continuous")) {
-      advanced.push({ whiteBalanceMode: "continuous" });
-    }
-
-    if (capabilities.zoom) {
-      const zoomIdeal = Math.min(
-        capabilities.zoom.max || 1,
-        Math.max(capabilities.zoom.min || 1, 1.4)
-      );
-
-      advanced.push({ zoom: zoomIdeal });
-    }
-
-    if (advanced.length) {
-      try {
-        await track.applyConstraints({ advanced });
-      } catch {
-        // Nem todo navegador aceita foco/zoom automático.
-      }
-    }
+    iniciandoRef.current = true;
 
     try {
-      await video.play();
-    } catch {
-      // Alguns navegadores já iniciam o play sozinhos.
-    }
-  }
-
-  async function iniciarScanner(indexDesejado = deviceIndex) {
-    if (initializingRef.current) return;
-
-    initializingRef.current = true;
-
-    try {
-      safeSet(() => {
+      setSeguro(() => {
         setLoading(true);
         setErro("");
+        setCodigoLido("");
         setTorchOn(false);
         setTorchAvailable(false);
       });
 
       if (!window.isSecureContext && window.location.hostname !== "localhost") {
         throw new Error(
-          "A câmera só funciona em HTTPS ou localhost. No celular, use o PWA publicado em HTTPS."
+          "A câmera só funciona em HTTPS ou localhost. No celular, abra pelo PWA publicado em HTTPS."
         );
       }
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Este navegador não tem suporte à câmera.");
+        throw new Error("Este navegador não suporta câmera.");
       }
 
       let lista = devices;
 
       if (!lista.length) {
-        lista = await carregarDispositivos();
+        lista = await listarCameras();
       }
 
       if (!lista.length) {
-        throw new Error("Nenhuma câmera encontrada neste dispositivo.");
+        throw new Error("Nenhuma câmera encontrada.");
       }
 
-      const device = lista[indexDesejado] || lista[0];
+      const camera = lista[index] || lista[0];
 
       const constraints = {
+        audio: false,
         video: {
-          deviceId: device?.deviceId ? { exact: device.deviceId } : undefined,
+          deviceId: camera?.deviceId ? { exact: camera.deviceId } : undefined,
           facingMode: { ideal: "environment" },
           width: { ideal: 1920 },
           height: { ideal: 1080 },
         },
-        audio: false,
       };
 
       const reader = new BrowserMultiFormatReader();
@@ -237,21 +150,34 @@ export default function Scanner({ onScan, onClose }) {
         videoRef.current,
         (result) => {
           if (!result) return;
-          finalizarLeitura(result.getText());
+
+          const codigo = result.getText();
+
+          if (!codigo || lendoRef.current) return;
+
+          lendoRef.current = true;
+
+          setSeguro(() => setCodigoLido(codigo));
+
+          if (navigator.vibrate) navigator.vibrate([50, 20, 50]);
+
+onScan(codigo);
+fechar();
         }
       );
 
-      await aplicarMelhoriasCamera();
+      const stream = videoRef.current?.srcObject;
+      streamRef.current = stream;
 
-      safeSet(() => {
-        setLoading(false);
-      });
+      await melhorarCamera();
+
+      setSeguro(() => setLoading(false));
     } catch (err) {
       console.error("Erro no scanner:", err);
 
       destruirScanner();
 
-      safeSet(() => {
+      setSeguro(() => {
         setErro(
           err?.message ||
             "Não consegui abrir a câmera. Verifique a permissão do navegador."
@@ -259,29 +185,71 @@ export default function Scanner({ onScan, onClose }) {
         setLoading(false);
       });
     } finally {
-      initializingRef.current = false;
+      iniciandoRef.current = false;
+    }
+  }
+
+  async function melhorarCamera() {
+    const stream = videoRef.current?.srcObject;
+    if (!stream) return;
+
+    const [track] = stream.getVideoTracks();
+    if (!track) return;
+
+    const caps = track.getCapabilities?.() || {};
+    const advanced = [];
+
+    setSeguro(() => setTorchAvailable(Boolean(caps.torch)));
+
+    if (caps.focusMode?.includes("continuous")) {
+      advanced.push({ focusMode: "continuous" });
+    }
+
+    if (caps.exposureMode?.includes("continuous")) {
+      advanced.push({ exposureMode: "continuous" });
+    }
+
+    if (caps.whiteBalanceMode?.includes("continuous")) {
+      advanced.push({ whiteBalanceMode: "continuous" });
+    }
+
+    if (caps.zoom) {
+      advanced.push({
+        zoom: Math.min(caps.zoom.max || 1, Math.max(caps.zoom.min || 1, 1.4)),
+      });
+    }
+
+    if (advanced.length) {
+      try {
+        await track.applyConstraints({ advanced });
+      } catch {
+        // navegador não aceitou, segue o baile
+      }
+    }
+
+    try {
+      await videoRef.current.play();
+    } catch {
+      // autoplay mobile pode ignorar
     }
   }
 
   async function trocarCamera() {
     if (devices.length <= 1) return;
 
-    const nextIndex = deviceIndex + 1 >= devices.length ? 0 : deviceIndex + 1;
+    const next = deviceIndex + 1 >= devices.length ? 0 : deviceIndex + 1;
 
     destruirScanner();
-
-    setDeviceIndex(nextIndex);
+    setDeviceIndex(next);
 
     setTimeout(() => {
-      iniciarScanner(nextIndex);
+      iniciarScanner(next);
     }, 250);
   }
 
   async function alternarLanterna() {
     try {
-      const stream = streamRef.current;
-      const [track] = stream?.getVideoTracks?.() || [];
-
+      const [track] = streamRef.current?.getVideoTracks?.() || [];
       if (!track) return;
 
       await track.applyConstraints({
@@ -294,26 +262,21 @@ export default function Scanner({ onScan, onClose }) {
     }
   }
 
-  function fechar() {
-    mountedRef.current = false;
-    destruirScanner();
-
-    setTimeout(() => {
-      onClose();
-    }, 50);
-  }
-
   function tentarNovamente() {
     destruirScanner();
 
-    safeSet(() => {
+    setSeguro(() => {
       setErro("");
       setLoading(true);
     });
 
-    setTimeout(() => {
-      iniciarScanner(deviceIndex);
-    }, 250);
+    setTimeout(() => iniciarScanner(deviceIndex), 250);
+  }
+
+  function fechar() {
+    mountedRef.current = false;
+    destruirScanner();
+    onClose();
   }
 
   function enviarManual() {
@@ -321,9 +284,13 @@ export default function Scanner({ onScan, onClose }) {
 
     if (!codigo) return;
 
-    finalizarLeitura(codigo);
+    if (navigator.vibrate) navigator.vibrate(30);
+
+    onScan(codigo);
+
     setCodigoManual("");
     setManualOpen(false);
+    fechar();
   }
 
   return (
@@ -347,42 +314,41 @@ export default function Scanner({ onScan, onClose }) {
 
           <div className="absolute left-4 right-4 top-1/2 h-1 rounded-full bg-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.95)] animate-pulse" />
 
-          <div className="absolute -bottom-16 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/50 px-4 py-2 text-xs text-white/80 backdrop-blur-md">
+          <div className="absolute -bottom-16 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/55 px-4 py-2 text-xs text-white/80 backdrop-blur-md">
             <ScanLine size={15} />
             Aproxime e mantenha firme
           </div>
         </div>
       </div>
 
-      <div className="absolute left-0 right-0 top-0 flex items-center justify-between p-4">
-        <div className="rounded-3xl bg-black/35 px-4 py-3 backdrop-blur-md">
+      <div className="absolute left-0 right-0 top-0 z-50 flex items-center justify-between p-4">
+        <div className="rounded-3xl bg-black/40 px-4 py-3 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <Barcode size={20} className="text-emerald-400" />
-            <p className="font-bold">Scanner Inteligente</p>
+            <p className="font-black">Scanner Inteligente</p>
           </div>
 
           <p className="mt-1 text-xs text-white/70">
-            Mire no código de barras do produto
+            Mire no código de barras
           </p>
         </div>
 
         <button
           type="button"
           onClick={fechar}
-          className="relative z-50 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white backdrop-blur-md transition active:scale-95"
-          aria-label="Fechar scanner"
+          className="flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white backdrop-blur-md transition active:scale-95"
         >
           <X size={24} />
         </button>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 p-4">
-        <div className="mx-auto flex max-w-md items-center justify-center gap-3 rounded-3xl border border-white/10 bg-black/45 p-3 backdrop-blur-xl">
+      <div className="absolute bottom-0 left-0 right-0 z-50 p-4">
+        <div className="mx-auto flex max-w-md items-center justify-center gap-3 rounded-3xl border border-white/10 bg-black/50 p-3 backdrop-blur-xl">
           <button
             type="button"
             onClick={trocarCamera}
             disabled={devices.length <= 1}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-white/10 text-sm font-semibold transition active:scale-95 disabled:opacity-40"
+            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-white/10 text-sm font-bold transition active:scale-95 disabled:opacity-40"
           >
             <RefreshCcw size={18} />
             Câmera
@@ -392,7 +358,7 @@ export default function Scanner({ onScan, onClose }) {
             type="button"
             onClick={alternarLanterna}
             disabled={!torchAvailable}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-white/10 text-sm font-semibold transition active:scale-95 disabled:opacity-40"
+            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-white/10 text-sm font-bold transition active:scale-95 disabled:opacity-40"
           >
             {torchOn ? <FlashlightOff size={18} /> : <Flashlight size={18} />}
             Luz
@@ -401,7 +367,7 @@ export default function Scanner({ onScan, onClose }) {
           <button
             type="button"
             onClick={() => setManualOpen(true)}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-sm font-bold text-white shadow-lg shadow-emerald-500/25 transition active:scale-95"
+            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-sm font-black text-white shadow-lg shadow-emerald-500/25 transition active:scale-95"
           >
             <Keyboard size={18} />
             Manual
@@ -409,75 +375,66 @@ export default function Scanner({ onScan, onClose }) {
         </div>
       </div>
 
-      {lido && (
-        <div className="absolute left-1/2 top-28 flex -translate-x-1/2 items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-sm font-bold text-white shadow-xl">
+      {codigoLido && (
+        <div className="absolute left-1/2 top-28 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-sm font-black text-white shadow-xl">
           <CheckCircle2 size={18} />
           Código lido
         </div>
       )}
 
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/75 p-6 backdrop-blur-sm">
-          <div className="text-center">
-            <Loader2
-              className="mx-auto mb-4 animate-spin text-emerald-400"
-              size={54}
-            />
-
-            <p className="font-semibold">Abrindo câmera...</p>
-
-            <p className="mt-2 text-sm text-white/60">
-              Permita o acesso à câmera quando o navegador pedir.
-            </p>
-          </div>
-        </div>
+        <TelaCentro>
+          <Loader2 className="mx-auto mb-4 animate-spin text-emerald-400" size={54} />
+          <p className="font-black">Abrindo câmera...</p>
+          <p className="mt-2 text-sm text-white/60">
+            Permita o acesso quando o navegador pedir.
+          </p>
+        </TelaCentro>
       )}
 
       {erro && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border border-red-500/25 bg-white/10 p-6 text-center shadow-2xl backdrop-blur-xl">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/15 text-red-300">
-              <AlertTriangle size={30} />
-            </div>
-
-            <h2 className="text-lg font-bold">Erro na câmera</h2>
-
-            <p className="mt-2 text-sm text-white/70">{erro}</p>
-
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={tentarNovamente}
-                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-white text-sm font-bold text-black transition active:scale-95"
-              >
-                <RotateCcw size={18} />
-                Tentar
-              </button>
-
-              <button
-                type="button"
-                onClick={fechar}
-                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-red-600 text-sm font-bold text-white transition active:scale-95"
-              >
-                <CameraOff size={18} />
-                Fechar
-              </button>
-            </div>
+        <TelaCentro>
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/15 text-red-300">
+            <AlertTriangle size={30} />
           </div>
-        </div>
+
+          <h2 className="text-lg font-black">Erro na câmera</h2>
+
+          <p className="mt-2 text-sm text-white/70">{erro}</p>
+
+          <div className="mt-6 flex gap-3">
+            <button
+              type="button"
+              onClick={tentarNovamente}
+              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-white text-sm font-black text-black transition active:scale-95"
+            >
+              <RotateCcw size={18} />
+              Tentar
+            </button>
+
+            <button
+              type="button"
+              onClick={fechar}
+              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-red-600 text-sm font-black text-white transition active:scale-95"
+            >
+              <CameraOff size={18} />
+              Fechar
+            </button>
+          </div>
+        </TelaCentro>
       )}
 
       {manualOpen && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm">
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white p-6 text-center text-gray-950 shadow-2xl dark:bg-gray-900 dark:text-white">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
               <Camera size={30} />
             </div>
 
-            <h2 className="text-lg font-bold">Digitar código</h2>
+            <h2 className="text-lg font-black">Digitar código</h2>
 
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              Use isso quando a câmera não conseguir ler.
+              Use quando a câmera não conseguir ler.
             </p>
 
             <input
@@ -488,14 +445,14 @@ export default function Scanner({ onScan, onClose }) {
                 setCodigoManual(e.target.value.replace(/\D/g, "").slice(0, 32))
               }
               placeholder="Código de barras"
-              className="mt-5 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-lg font-semibold outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-gray-800 dark:bg-gray-950"
+              className="mt-5 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-lg font-bold outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-gray-800 dark:bg-gray-950"
             />
 
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
                 onClick={enviarManual}
-                className="h-12 flex-1 rounded-2xl bg-emerald-700 text-sm font-bold text-white transition active:scale-95"
+                className="h-12 flex-1 rounded-2xl bg-emerald-700 text-sm font-black text-white transition active:scale-95"
               >
                 Confirmar
               </button>
@@ -503,7 +460,7 @@ export default function Scanner({ onScan, onClose }) {
               <button
                 type="button"
                 onClick={() => setManualOpen(false)}
-                className="h-12 flex-1 rounded-2xl bg-gray-100 text-sm font-bold text-gray-700 transition active:scale-95 dark:bg-gray-800 dark:text-gray-200"
+                className="h-12 flex-1 rounded-2xl bg-gray-100 text-sm font-black text-gray-700 transition active:scale-95 dark:bg-gray-800 dark:text-gray-200"
               >
                 Cancelar
               </button>
@@ -511,6 +468,16 @@ export default function Scanner({ onScan, onClose }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function TelaCentro({ children }) {
+  return (
+    <div className="absolute inset-0 z-[55] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white/10 p-6 text-center shadow-2xl backdrop-blur-xl">
+        {children}
+      </div>
     </div>
   );
 }
