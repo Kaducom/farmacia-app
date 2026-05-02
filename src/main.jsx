@@ -1,16 +1,25 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.jsx'
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
 
-// 🔥 APLICA TEMA ANTES DE TUDO
-const tema = localStorage.getItem("tema");
-if (tema === "dark") {
+import "./index.css";
+import App from "./App.jsx";
+
+import { ThemeProvider } from "./context/ThemeContext";
+
+// 🔥 aplica tema antes do React renderizar
+const savedTheme =
+  localStorage.getItem("theme");
+
+if (savedTheme === "dark") {
   document.documentElement.classList.add("dark");
+} else {
+  document.documentElement.classList.remove("dark");
 }
 
-createRoot(document.getElementById('root')).render(
+createRoot(document.getElementById("root")).render(
   <StrictMode>
-    <App />
-  </StrictMode>,
-)
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
+  </StrictMode>
+);

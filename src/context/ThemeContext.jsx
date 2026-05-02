@@ -1,24 +1,49 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useState,
+} from "react";
 
 const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
-  const [dark, setDark] = useState(() => {
-    return localStorage.getItem("theme") === "dark";
+
+  // 🔥 pega tema salvo imediatamente
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem("theme") || "dark";
   });
 
-  useEffect(() => {
-    if (dark) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
+  // 🔥 aplica ANTES da tela pintar
+  useLayoutEffect(() => {
+
+    const html = document.documentElement;
+
+    if (theme === "dark") {
+      html.classList.add("dark");
     } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
+      html.classList.remove("dark");
     }
-  }, [dark]);
+
+    localStorage.setItem("theme", theme);
+
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((prev) =>
+      prev === "dark"
+        ? "light"
+        : "dark"
+    );
+  }
 
   return (
-    <ThemeContext.Provider value={{ dark, setDark }}>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        toggleTheme,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

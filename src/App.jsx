@@ -4,26 +4,15 @@ import Receitas from "./pages/Receitas";
 import Posologia from "./pages/Posologia";
 import Doutor from "./pages/Doutor";
 import Menu from "./pages/Menu";
-import { ThemeProvider } from "./context/ThemeContext";
-
-<ThemeProvider>
-  <App />
-</ThemeProvider>
 
 function App() {
   const [pagina, setPagina] = useState("medicamentos");
-  const [modoAuditoria, setModoAuditoria] = useState(false);
-  const [relatorioAuditoria, setRelatorioAuditoria] = useState([]);
 
   function renderPagina() {
     switch (pagina) {
       case "medicamentos":
       return (
       <Medicamentos 
-      modoAuditoria={modoAuditoria}
-      setModoAuditoria={setModoAuditoria}
-      relatorioAuditoria={relatorioAuditoria}
-      setRelatorioAuditoria={setRelatorioAuditoria}
     />
   );
       case "receitas":
@@ -35,18 +24,26 @@ function App() {
       case "menu":
       return (
       <Menu 
-      setModoAuditoria={setModoAuditoria}
-      relatorioAuditoria={relatorioAuditoria}
     />
   );
     }
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100 dark:bg-gray-900 text-black dark:text-white">
+    <div className="
+  min-h-screen
+  flex
+  flex-col
+  bg-gray-100
+  dark:bg-[#0f172a]
+  text-black
+  dark:text-white
+  transition-colors
+  duration-300
+">
 
       {/* 🔝 TOPO iOS */}
-      <div className="pt-safe px-4 py-3 text-center font-semibold text-lg backdrop-blur-md bg-white/70 dark:bg-gray-800/70">
+      <div className="pt-safe px-4 py-3 text-center font-semibold text-lg backdrop-blur-md bg-white/80 dark:bg-[#111827]/80">
         {pagina}
       </div>
 
@@ -56,7 +53,7 @@ function App() {
       </div>
 
       {/* 📍 BOTTOM NAV */}
-      <div className="pb-safe fixed bottom-0 left-0 w-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border-t border-gray-200 dark:border-gray-700 flex justify-around py-2">
+      <div className="pb-safe fixed bottom-0 left-0 w-full bg-white/80 dark:bg-[#111827]/80 backdrop-blur-md border-t border-gray-200 dark:border-gray-700 flex justify-around py-2">
 
         <Tab icon="💊" label="Medicamentos" ativa={pagina === "medicamentos"} onClick={() => setPagina("medicamentos")} />
         <Tab icon="📄" label="Receitas" ativa={pagina === "receitas"} onClick={() => setPagina("receitas")} />
