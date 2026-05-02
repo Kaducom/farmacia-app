@@ -1,4 +1,11 @@
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  Plus,
+  Pill,
+  ScanBarcode,
+  PackagePlus,
+  X,
+} from "lucide-react";
 
 function FabMedicamentos({
   fabOpen,
@@ -6,175 +13,149 @@ function FabMedicamentos({
   limpar,
   setAbrirModal,
   iniciarScanner,
+  modoReposicao,
+  setModoReposicao,
 }) {
+  function vibrar(ms = 15) {
+    if (navigator.vibrate) navigator.vibrate(ms);
+  }
+
+  function abrirNovo() {
+    vibrar();
+    limpar();
+    setAbrirModal(true);
+    setFabOpen(false);
+  }
+
+  function abrirScannerNormal() {
+    vibrar();
+    if (setModoReposicao) setModoReposicao(false);
+    iniciarScanner();
+    setFabOpen(false);
+  }
+
+  function abrirScannerReposicao() {
+    vibrar();
+    if (setModoReposicao) setModoReposicao(true);
+    iniciarScanner();
+    setFabOpen(false);
+  }
 
   return (
     <>
+      <AnimatePresence>
+        {fabOpen && (
+          <motion.div
+            onClick={() => setFabOpen(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-black/35 backdrop-blur-sm"
+          />
+        )}
+      </AnimatePresence>
 
-      {/* FAB AREA */}
-      <div className="
-        fixed
-        right-6
-        bottom-24
-        z-50
-        flex
-        flex-col
-        items-end
-        gap-3
-      ">
+      <div className="fixed bottom-24 right-5 z-50 flex flex-col items-end gap-3">
+        <AnimatePresence>
+          {fabOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 18, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 18, scale: 0.96 }}
+              transition={{ duration: 0.18 }}
+              className="
+                flex flex-col items-end gap-3 rounded-3xl border border-white/20
+                bg-white/85 p-3 shadow-2xl backdrop-blur-xl
+                dark:border-gray-800 dark:bg-gray-950/85
+              "
+            >
+              <AcaoFab
+                icon={Pill}
+                label="Novo medicamento"
+                descricao="Cadastrar manualmente"
+                onClick={abrirNovo}
+                className="bg-emerald-700 hover:bg-emerald-800"
+              />
 
-        {/* MENU */}
-        <motion.div
-          initial={false}
-          animate={fabOpen ? "open" : "closed"}
-          className="
-            flex
-            flex-col
-            items-end
-            gap-3
-          "
-        >
+              <AcaoFab
+                icon={ScanBarcode}
+                label="Scanner"
+                descricao="Ler código de barras"
+                onClick={abrirScannerNormal}
+                className="bg-violet-600 hover:bg-violet-700"
+              />
 
-          {/* NOVO */}
-          <motion.button
-            variants={{
-              open: {
-                opacity: 1,
-                y: 0,
-                scale: 1,
-              },
+              {setModoReposicao && (
+                <AcaoFab
+                  icon={PackagePlus}
+                  label="Reposição rápida"
+                  descricao="Somar +1 no estoque"
+                  onClick={abrirScannerReposicao}
+                  className={
+                    modoReposicao
+                      ? "bg-blue-700 hover:bg-blue-800"
+                      : "bg-blue-600 hover:bg-blue-700"
+                  }
+                />
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-              closed: {
-                opacity: 0,
-                y: 10,
-                scale: 0.9,
-              },
-            }}
-
-            transition={{
-              duration: 0.15,
-            }}
-
-            onClick={() => {
-              limpar();
-              setAbrirModal(true);
-              setFabOpen(false);
-            }}
-
-            className="
-              bg-green-700
-              hover:bg-green-800
-              text-white
-              px-5
-              py-3
-              rounded-2xl
-              shadow-2xl
-              font-medium
-              transition
-              active:scale-[0.96]
-            "
-          >
-            💊 Novo Item
-          </motion.button>
-
-          {/* SCANNER */}
-          <motion.button
-            variants={{
-              open: {
-                opacity: 1,
-                y: 0,
-                scale: 1,
-              },
-
-              closed: {
-                opacity: 0,
-                y: 10,
-                scale: 0.9,
-              },
-            }}
-
-            transition={{
-              duration: 0.2,
-            }}
-
-            onClick={() => {
-              iniciarScanner();
-              setFabOpen(false);
-            }}
-
-            className="
-              bg-purple-600
-              hover:bg-purple-700
-              text-white
-              px-5
-              py-3
-              rounded-2xl
-              shadow-2xl
-              font-medium
-              transition
-              active:scale-[0.96]
-            "
-          >
-            📷 Scanner
-          </motion.button>
-
-        </motion.div>
-
-        {/* BOTÃO + */}
         <motion.button
+          type="button"
           onClick={() => {
-            if (navigator.vibrate) {
-              navigator.vibrate(15);
-            }
-
+            vibrar();
             setFabOpen(!fabOpen);
           }}
-
           animate={{
-            rotate: fabOpen ? 45 : 0,
+            rotate: fabOpen ? 90 : 0,
+            scale: fabOpen ? 0.96 : 1,
           }}
-
+          whileTap={{ scale: 0.92 }}
           transition={{
-            duration: 0.2,
+            type: "spring",
+            stiffness: 380,
+            damping: 24,
           }}
-
           className="
-            w-16
-            h-16
-            rounded-3xl
-            bg-green-700
-            hover:bg-green-800
-            text-white
-            text-3xl
-            shadow-2xl
-            flex
-            items-center
-            justify-center
-            transition
+            flex h-16 w-16 items-center justify-center rounded-3xl
+            bg-emerald-700 text-white shadow-2xl shadow-emerald-700/30
+            transition hover:bg-emerald-800
           "
+          aria-label={fabOpen ? "Fechar menu de ações" : "Abrir menu de ações"}
         >
-          +
+          {fabOpen ? <X size={30} /> : <Plus size={34} />}
         </motion.button>
+      </div>
+    </>
+  );
+}
 
+function AcaoFab({ icon: Icon, label, descricao, onClick, className = "" }) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      initial={{ opacity: 0, x: 16 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 16 }}
+      whileTap={{ scale: 0.96 }}
+      className={`
+        flex min-w-[230px] items-center gap-3 rounded-2xl px-4 py-3
+        text-left text-white shadow-xl transition
+        ${className}
+      `}
+    >
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+        <Icon size={22} />
       </div>
 
-      {/* OVERLAY */}
-      {fabOpen && (
-
-        <div
-          onClick={() => setFabOpen(false)}
-          className="
-            fixed
-            inset-0
-            bg-black/30
-            backdrop-blur-sm
-            z-40
-          "
-        />
-
-      )}
-
-    </>
+      <div>
+        <p className="text-sm font-bold">{label}</p>
+        <p className="text-xs text-white/75">{descricao}</p>
+      </div>
+    </motion.button>
   );
 }
 

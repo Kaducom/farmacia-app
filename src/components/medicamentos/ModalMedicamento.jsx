@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import ToastStack from "../ToastStack";
 
 import {
@@ -9,6 +11,10 @@ import {
   Save,
   X,
   Trash2,
+  Sparkles,
+  Clock3,
+  ShieldCheck,
+  Info,
 } from "lucide-react";
 
 function ModalMedicamento({
@@ -41,18 +47,23 @@ function ModalMedicamento({
   toasts,
   removerToast,
 }) {
+  const [erros, setErros] = useState({});
 
   if (!abrirModal) return null;
 
-  /* VALIDA DATA */
+  function limparErro(campo) {
+    setErros((prev) => {
+      const novo = { ...prev };
+      delete novo[campo];
+      delete novo.geral;
+      return novo;
+    });
+  }
+
   function validarData(data) {
+    if (!data || data.length !== 10) return false;
 
-    if (!data || data.length !== 10) {
-      return false;
-    }
-
-    const [dia, mes, ano] =
-      data.split("/").map(Number);
+    const [dia, mes, ano] = data.split("/").map(Number);
 
     if (
       dia < 1 ||
@@ -65,8 +76,7 @@ function ModalMedicamento({
       return false;
     }
 
-    const dataObj =
-      new Date(ano, mes - 1, dia);
+    const dataObj = new Date(ano, mes - 1, dia);
 
     return (
       dataObj.getDate() === dia &&
@@ -75,266 +85,157 @@ function ModalMedicamento({
     );
   }
 
-  const preview =
-    validarData(validade)
-      ? gerarPreviewDatas()
-      : null;
+  function formatarValidade(valorDigitado) {
+    let valor = valorDigitado.replace(/\D/g, "").slice(0, 8);
 
-  /* SALVAR */
+    if (valor.length >= 5) {
+      valor = valor.replace(/(\d{2})(\d{2})(\d{1,4})/, "$1/$2/$3");
+    } else if (valor.length >= 3) {
+      valor = valor.replace(/(\d{2})(\d{1,2})/, "$1/$2");
+    }
+
+    return valor;
+  }
+
+  const preview = validarData(validade) ? gerarPreviewDatas() : null;
+
   function handleSalvar() {
+    const novosErros = {};
 
     if (!nome.trim()) {
-      alert("Digite o nome do medicamento.");
-      return;
+      novosErros.nome = "Informe o nome do medicamento.";
+    }
+
+    if (!quantidade || Number(quantidade) < 1) {
+      novosErros.quantidade = "Informe uma quantidade válida.";
     }
 
     if (!validarData(validade)) {
-      alert("Digite uma data válida.");
+      novosErros.validade = "Informe uma data válida.";
+    }
+
+    if (diasRemover === "" || Number(diasRemover) < 0) {
+      novosErros.diasRemover = "Informe os dias para remoção.";
+    }
+
+    if (diasPre !== "" && Number(diasPre) < 0) {
+      novosErros.diasPre = "Informe um valor válido.";
+    }
+
+    if (Object.keys(novosErros).length > 0) {
+      novosErros.geral = "Revise os campos destacados antes de salvar.";
+      setErros(novosErros);
       return;
     }
 
+    setErros({});
     salvar();
   }
 
+  function fecharModal() {
+    setErros({});
+    setAbrirModal(false);
+  }
+
   return (
+    <AnimatePresence>
+      {abrirModal && (
+        <motion.div
+          className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onMouseDown={fecharModal}
+        >
+          <motion.div
+            onMouseDown={(e) => e.stopPropagation()}
+            initial={{ opacity: 0, y: 24, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 24, scale: 0.96 }}
+            transition={{ duration: 0.22 }}
+            className="
+              relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-[2rem]
+              border border-gray-200 bg-white text-gray-950 shadow-2xl
+              dark:border-gray-800 dark:bg-gray-950 dark:text-white
+            "
+          >
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-emerald-500/10 to-transparent" />
 
-    <div className="
-      fixed
-      inset-0
-      z-[999]
-      bg-black/50
-      backdrop-blur-md
-      flex
-      items-center
-      justify-center
-      p-4
-    ">
-
-      <div className="
-        relative
-        w-full
-        max-w-md
-        max-h-[90vh]
-        overflow-hidden
-        flex
-        flex-col
-        rounded-3xl
-        bg-white
-        dark:bg-[#111827]
-        shadow-2xl
-      ">
-
-        {/* TOAST */}
-        <div className="
-          absolute
-          top-3
-          left-1/2
-          -translate-x-1/2
-          z-50
-          w-[90%]
-        ">
-
-          <ToastStack
-            notificacoes={toasts}
-            remover={removerToast}
-          />
-
-        </div>
-
-        {/* HEADER */}
-        <div className="
-          p-5
-          border-b
-          border-gray-200
-          dark:border-gray-700
-        ">
-
-          <div className="
-            flex
-            items-center
-            gap-3
-          ">
-
-            <div className="
-              w-12
-              h-12
-              rounded-2xl
-              bg-green-700
-              text-white
-              flex
-              items-center
-              justify-center
-              shadow-lg
-            ">
-
-              <Pill size={24} />
-
+            <div className="absolute left-1/2 top-3 z-50 w-[92%] -translate-x-1/2">
+              <ToastStack notificacoes={toasts} remover={removerToast} />
             </div>
 
-            <div>
+            {/* HEADER */}
+            <div className="relative border-b border-gray-200 p-5 dark:border-gray-800">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-13 w-13 h-[52px] w-[52px] items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20">
+                    <Pill size={25} />
+                  </div>
 
-              <h2 className="
-                text-xl
-                font-bold
-                text-black
-                dark:text-white
-              ">
+                  <div>
+                    <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                      <Sparkles size={13} />
+                      {editando ? "Modo edição" : "Novo cadastro"}
+                    </div>
 
-                {editando
-                  ? "Editar Medicamento"
-                  : "Novo Medicamento"}
+                    <h2 className="text-xl font-black tracking-tight">
+                      {editando ? "Editar medicamento" : "Novo medicamento"}
+                    </h2>
 
-              </h2>
-
-              <p className="
-                text-sm
-                text-gray-500
-              ">
-                Cadastro do estoque
-              </p>
-
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* BODY */}
-        <div className="
-          flex-1
-          overflow-y-auto
-          p-5
-          space-y-5
-        ">
-
-          {/* FOTO */}
-          <div>
-
-            <div className="
-              flex
-              items-center
-              gap-2
-              mb-2
-            ">
-
-              <ImagePlus
-                size={16}
-                className="text-green-600"
-              />
-
-              <label className="
-                text-sm
-                font-medium
-                text-gray-700
-                dark:text-gray-300
-              ">
-                Foto do Produto
-              </label>
-
-            </div>
-
-            {!imagem ? (
-
-              <label className="
-                flex
-                flex-col
-                items-center
-                justify-center
-                gap-3
-                border-2
-                border-dashed
-                border-green-500/40
-                rounded-3xl
-                p-8
-                cursor-pointer
-                bg-gray-50
-                dark:bg-gray-800/50
-                hover:bg-gray-100
-                dark:hover:bg-gray-800
-                transition
-              ">
-
-                <div className="
-                  w-14
-                  h-14
-                  rounded-2xl
-                  bg-green-700
-                  text-white
-                  flex
-                  items-center
-                  justify-center
-                ">
-
-                  <ImagePlus size={28} />
-
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                      Controle de estoque, validade e alertas.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="text-center">
-
-                  <p className="
-                    font-medium
-                    text-black
-                    dark:text-white
-                  ">
-                    Adicionar imagem
-                  </p>
-
-                  <p className="
-                    text-sm
-                    text-gray-500
-                  ">
-                    PNG ou JPG
-                  </p>
-
-                </div>
-
-                <input
-                  type="file"
-                  accept="image/png, image/jpeg"
-                  className="hidden"
-                  onChange={handleImagem}
-                />
-
-              </label>
-
-            ) : (
-
-              <div className="relative">
-
-                <img
-                  src={imagem}
-                  alt="preview"
+                <button
+                  type="button"
+                  onClick={fecharModal}
                   className="
-                    w-full
-                    h-52
-                    object-cover
-                    rounded-3xl
+                    flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
+                    bg-gray-100 text-gray-600 transition active:scale-95 hover:bg-gray-200
+                    dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800
                   "
+                >
+                  <X size={22} />
+                </button>
+              </div>
+            </div>
+
+            {/* BODY */}
+            <div className="relative flex-1 space-y-5 overflow-y-auto p-5">
+              {erros.geral && (
+                <AvisoErro texto={erros.geral} />
+              )}
+
+              {/* IMAGEM */}
+              <section className="space-y-2">
+                <LabelArea
+                  icon={ImagePlus}
+                  label="Foto do produto"
+                  optional
                 />
 
-                <div className="
-                  absolute
-                  inset-0
-                  bg-black/40
-                  rounded-3xl
-                  flex
-                  items-center
-                  justify-center
-                  gap-3
-                ">
+                {!imagem ? (
+                  <label
+                    className="
+                      group flex cursor-pointer flex-col items-center justify-center gap-3 rounded-3xl
+                      border-2 border-dashed border-emerald-500/35 bg-gray-50 p-8 text-center
+                      transition hover:border-emerald-500 hover:bg-emerald-50
+                      dark:bg-gray-900/60 dark:hover:bg-emerald-500/10
+                    "
+                  >
+                    <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20 transition group-active:scale-95">
+                      <ImagePlus size={30} />
+                    </div>
 
-                  <label className="
-                    bg-white
-                    text-black
-                    px-4
-                    py-2
-                    rounded-2xl
-                    text-sm
-                    cursor-pointer
-                    font-medium
-                  ">
-
-                    Trocar
+                    <div>
+                      <p className="font-bold">Adicionar imagem</p>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        PNG ou JPG, opcional
+                      </p>
+                    </div>
 
                     <input
                       type="file"
@@ -342,385 +243,292 @@ function ModalMedicamento({
                       className="hidden"
                       onChange={handleImagem}
                     />
-
                   </label>
+                ) : (
+                  <div className="relative overflow-hidden rounded-3xl border border-gray-200 shadow-xl dark:border-gray-800">
+                    <img
+                      src={imagem}
+                      alt="Preview do medicamento"
+                      className="h-56 w-full object-cover"
+                    />
 
-                  <button
-                    onClick={() =>
-                      setImagem(null)
-                    }
+                    <div className="absolute inset-0 flex items-end justify-center gap-3 bg-gradient-to-t from-black/70 via-black/15 to-transparent p-4">
+                      <label className="flex cursor-pointer items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-bold text-gray-900 shadow-lg transition active:scale-95">
+                        <ImagePlus size={16} />
+                        Trocar
+                        <input
+                          type="file"
+                          accept="image/png, image/jpeg"
+                          className="hidden"
+                          onChange={handleImagem}
+                        />
+                      </label>
 
-                    className="
-                      bg-red-500
-                      text-white
-                      px-4
-                      py-2
-                      rounded-2xl
-                      text-sm
-                      flex
-                      items-center
-                      gap-2
-                    "
-                  >
+                      <button
+                        type="button"
+                        onClick={() => setImagem(null)}
+                        className="flex items-center gap-2 rounded-2xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg transition active:scale-95"
+                      >
+                        <Trash2 size={16} />
+                        Remover
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
 
-                    <Trash2 size={16} />
+              {/* NOME */}
+              <section>
+                <LabelArea icon={Pill} label="Nome do medicamento" />
 
-                    Remover
+                <InputBase
+                  value={nome}
+                  onChange={(e) => {
+                    limparErro("nome");
+                    setNome(e.target.value);
+                  }}
+                  placeholder="Ex: Dipirona 500mg"
+                  maxLength={80}
+                  erro={erros.nome}
+                />
 
-                  </button>
+                <Dica texto={`${nome.length}/80 caracteres`} />
 
-                </div>
+                {erros.nome && <MensagemErro texto={erros.nome} />}
+              </section>
 
-              </div>
-
-            )}
-
-          </div>
-
-          {/* NOME */}
-          <div>
-
-            <div className="
-              flex
-              items-center
-              gap-2
-              mb-2
-            ">
-
-              <Pill
-                size={16}
-                className="text-green-600"
+              <Campo
+                icon={Package}
+                label="Quantidade"
+                type="number"
+                value={quantidade}
+                onChange={(valor) => {
+                  limparErro("quantidade");
+                  setQuantidade(valor);
+                }}
+                min={1}
+                max={9999}
+                descricao="Quantidade disponível no estoque."
+                erro={erros.quantidade}
               />
 
-              <label className="
-                text-sm
-                font-medium
-                text-gray-700
-                dark:text-gray-300
-              ">
-                Nome do medicamento
-              </label>
+              {/* VALIDADE */}
+              <section>
+                <LabelArea icon={CalendarDays} label="Data de validade" />
 
-            </div>
+                <InputBase
+                  value={validade}
+                  onChange={(e) => {
+                    limparErro("validade");
+                    setValidade(formatarValidade(e.target.value));
+                  }}
+                  placeholder="dd/mm/aaaa"
+                  inputMode="numeric"
+                  maxLength={10}
+                  erro={erros.validade || (validade && !validarData(validade))}
+                />
 
-            <input
-              type="text"
-              value={nome}
+                <Dica texto="Exemplo: 25/12/2026" />
 
-              onChange={(e) =>
-                setNome(e.target.value)
-              }
-
-              placeholder="Dipirona 500mg"
-
-              maxLength={80}
-
-              className="
-                w-full
-                p-4
-                rounded-2xl
-                bg-gray-100
-                dark:bg-gray-800
-                border
-                border-transparent
-                focus:border-green-500
-                outline-none
-                transition
-                text-black
-                dark:text-white
-              "
-            />
-
-            <p className="
-              mt-2
-              text-xs
-              text-gray-500
-              dark:text-gray-400
-            ">
-              Nome exibido no estoque
-            </p>
-
-          </div>
-
-          {/* QUANTIDADE */}
-          <Campo
-            icon={Package}
-            label="Quantidade"
-            type="number"
-            value={quantidade}
-            onChange={setQuantidade}
-            min={1}
-            max={9999}
-            descricao="Quantidade disponível"
-          />
-
-          {/* VALIDADE */}
-          <div>
-
-            <div className="
-              flex
-              items-center
-              gap-2
-              mb-2
-            ">
-
-              <CalendarDays
-                size={16}
-                className="text-green-600"
-              />
-
-              <label className="
-                text-sm
-                font-medium
-                text-gray-700
-                dark:text-gray-300
-              ">
-                Data de validade
-              </label>
-
-            </div>
-
-            <input
-              value={validade}
-
-              onChange={(e) => {
-
-                let valor =
-                  e.target.value
-                    .replace(/\D/g, "")
-                    .slice(0, 8);
-
-                if (valor.length >= 5) {
-
-                  valor = valor.replace(
-                    /(\d{2})(\d{2})(\d{1,4})/,
-                    "$1/$2/$3"
-                  );
-
-                }
-
-                else if (valor.length >= 3) {
-
-                  valor = valor.replace(
-                    /(\d{2})(\d{1,2})/,
-                    "$1/$2"
-                  );
-
-                }
-
-                setValidade(valor);
-              }}
-
-              placeholder="dd/mm/aaaa"
-
-              className={`
-                w-full
-                p-4
-                rounded-2xl
-                outline-none
-                transition
-                bg-gray-100
-                dark:bg-gray-800
-                text-black
-                dark:text-white
-
-                ${
-                  validade &&
-                  !validarData(validade)
-
-                    ? "border-2 border-red-500"
-
-                    : `
-                      border
-                      border-transparent
-                      focus:border-green-500
-                    `
-                }
-              `}
-            />
-
-            <div className="
-              mt-2
-              text-xs
-              space-y-1
-            ">
-
-              <p className="
-                text-gray-500
-                dark:text-gray-400
-              ">
-                Exemplo: 25/12/2026
-              </p>
-
-              {validade &&
-                !validarData(validade) && (
-
-                <p className="
-                  text-red-500
-                  flex
-                  items-center
-                  gap-1
-                ">
-
-                  <TriangleAlert size={14} />
-
-                  Data inválida
-
-                </p>
-
-              )}
-
-            </div>
-
-          </div>
-
-          {/* REMOVER */}
-          <Campo
-            icon={Trash2}
-            label="Dias antes para remover"
-            type="number"
-            value={diasRemover}
-            onChange={setDiasRemover}
-            min={0}
-            max={365}
-            descricao="Produto sai antes da validade"
-          />
-
-          {/* PRE */}
-          <Campo
-            icon={TriangleAlert}
-            label="Pré-vencimento"
-            type="number"
-            value={diasPre}
-            onChange={setDiasPre}
-            min={0}
-            max={365}
-            optional
-            descricao="Aviso antecipado"
-          />
-
-          {/* PREVIEW */}
-          {preview && (
-
-            <div className="
-              bg-gray-100
-              dark:bg-gray-800
-              rounded-3xl
-              p-4
-              text-sm
-              space-y-3
-            ">
-
-              <h3 className="
-                font-semibold
-                text-black
-                dark:text-white
-              ">
-                📅 Preview automático
-              </h3>
-
-              <div className="space-y-2">
-
-                <p>
-                  📦 Validade:
-                  {" "}
-                  {preview.validade.toLocaleDateString()}
-                </p>
-
-                <p>
-                  🗑️ Remover:
-                  {" "}
-                  {preview.remover.toLocaleDateString()}
-                </p>
-
-                {preview.pre && (
-
-                  <p>
-                    ⚠️ Pré-vencimento:
-                    {" "}
-                    {preview.pre.toLocaleDateString()}
-                  </p>
-
+                {validade && !validarData(validade) && !erros.validade && (
+                  <MensagemErro texto="Data inválida." />
                 )}
 
-              </div>
+                {erros.validade && <MensagemErro texto={erros.validade} />}
+              </section>
 
+              <Campo
+                icon={Trash2}
+                label="Dias antes para remover"
+                type="number"
+                value={diasRemover}
+                onChange={(valor) => {
+                  limparErro("diasRemover");
+                  setDiasRemover(valor);
+                }}
+                min={0}
+                max={365}
+                descricao="Define quantos dias antes da validade o produto deve sair da lista."
+                erro={erros.diasRemover}
+              />
+
+              <Campo
+                icon={TriangleAlert}
+                label="Pré-vencimento"
+                type="number"
+                value={diasPre}
+                onChange={(valor) => {
+                  limparErro("diasPre");
+                  setDiasPre(valor);
+                }}
+                min={0}
+                max={365}
+                optional
+                descricao="Cria um aviso antecipado antes da data de remoção."
+                erro={erros.diasPre}
+              />
+
+              {/* PREVIEW */}
+              {preview && (
+                <motion.section
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="
+                    rounded-3xl border border-emerald-200 bg-emerald-50 p-4
+                    dark:border-emerald-500/20 dark:bg-emerald-500/10
+                  "
+                >
+                  <div className="mb-3 flex items-center gap-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-700 text-white">
+                      <ShieldCheck size={18} />
+                    </div>
+
+                    <div>
+                      <h3 className="font-bold">Preview automático</h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Linha do tempo calculada pelo app.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <PreviewLinha
+                      icon={CalendarDays}
+                      label="Validade"
+                      valor={preview.validade.toLocaleDateString("pt-BR")}
+                    />
+
+                    <PreviewLinha
+                      icon={Trash2}
+                      label="Remover em"
+                      valor={preview.remover.toLocaleDateString("pt-BR")}
+                    />
+
+                    {preview.pre && (
+                      <PreviewLinha
+                        icon={Clock3}
+                        label="Pré-vencimento"
+                        valor={preview.pre.toLocaleDateString("pt-BR")}
+                      />
+                    )}
+                  </div>
+                </motion.section>
+              )}
             </div>
 
-          )}
+            {/* FOOTER */}
+            <div className="border-t border-gray-200 bg-white/90 p-5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-950/90">
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={fecharModal}
+                  className="
+                    flex h-13 h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl
+                    border border-gray-300 bg-white font-bold text-gray-700 transition active:scale-95
+                    hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800
+                  "
+                >
+                  <X size={18} />
+                  Cancelar
+                </button>
 
-        </div>
+                <button
+                  type="button"
+                  onClick={handleSalvar}
+                  className="
+                    flex h-13 h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl
+                    bg-emerald-700 font-bold text-white shadow-lg shadow-emerald-700/20
+                    transition active:scale-95 hover:bg-emerald-800
+                  "
+                >
+                  <Save size={18} />
+                  {editando ? "Atualizar" : "Salvar"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
-        {/* FOOTER */}
-        <div className="
-          p-5
-          border-t
-          border-gray-200
-          dark:border-gray-700
-          flex
-          gap-3
-        ">
-
-          <button
-            onClick={() =>
-              setAbrirModal(false)
-            }
-
-            className="
-              flex-1
-              py-3
-              rounded-2xl
-              border
-              border-gray-300
-              dark:border-gray-600
-              font-medium
-              flex
-              items-center
-              justify-center
-              gap-2
-            "
-          >
-
-            <X size={18} />
-
-            Cancelar
-
-          </button>
-
-          <button
-            onClick={handleSalvar}
-
-            className="
-              flex-1
-              py-3
-              rounded-2xl
-              bg-green-700
-              hover:bg-green-800
-              text-white
-              font-semibold
-              transition
-              flex
-              items-center
-              justify-center
-              gap-2
-            "
-          >
-
-            <Save size={18} />
-
-            Salvar
-
-          </button>
-
-        </div>
-
-      </div>
-
+function AvisoErro({ texto }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+      <TriangleAlert size={20} />
+      {texto}
     </div>
   );
 }
 
-/* INPUT PADRÃO */
+function LabelArea({ icon: Icon, label, optional = false }) {
+  return (
+    <div className="mb-2 flex items-center gap-2">
+      <Icon size={16} className="text-emerald-600 dark:text-emerald-400" />
+
+      <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
+        {label}
+      </label>
+
+      {optional && (
+        <span className="rounded-full bg-gray-200 px-2 py-1 text-[10px] font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+          opcional
+        </span>
+      )}
+    </div>
+  );
+}
+
+function InputBase({
+  value,
+  onChange,
+  placeholder,
+  erro,
+  type = "text",
+  inputMode,
+  maxLength,
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      inputMode={inputMode}
+      maxLength={maxLength}
+      className={`
+        w-full rounded-2xl border bg-gray-100 p-4 text-gray-950 outline-none transition
+        placeholder:text-gray-400 focus:ring-4 focus:ring-emerald-500/15
+        dark:bg-gray-900 dark:text-white
+        ${
+          erro
+            ? "border-red-500 focus:border-red-500 focus:ring-red-500/10"
+            : "border-transparent focus:border-emerald-500"
+        }
+      `}
+    />
+  );
+}
+
+function Dica({ texto }) {
+  return (
+    <p className="mt-2 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+      <Info size={13} />
+      {texto}
+    </p>
+  );
+}
+
+function MensagemErro({ texto }) {
+  return (
+    <p className="mt-2 flex items-center gap-1 text-xs font-medium text-red-500">
+      <TriangleAlert size={14} />
+      {texto}
+    </p>
+  );
+}
+
 function Campo({
   icon: Icon,
   label,
@@ -732,126 +540,57 @@ function Campo({
   max,
   optional = false,
   descricao,
+  erro,
 }) {
+  function handleChange(e) {
+    let valor = e.target.value;
+
+    if (type === "number") {
+      valor = valor.replace(/\D/g, "");
+
+      if (valor === "") {
+        onChange("");
+        return;
+      }
+
+      valor = Number(valor);
+
+      if (min !== undefined && valor < min) valor = min;
+      if (max !== undefined && valor > max) valor = max;
+    }
+
+    onChange(valor);
+  }
 
   return (
+    <section>
+      <LabelArea icon={Icon} label={label} optional={optional} />
 
-    <div>
-
-      <div className="
-        flex
-        items-center
-        gap-2
-        mb-2
-      ">
-
-        {Icon && (
-
-          <Icon
-            size={16}
-            className="text-green-600"
-          />
-
-        )}
-
-        <label className="
-          text-sm
-          font-medium
-          text-gray-700
-          dark:text-gray-300
-        ">
-          {label}
-        </label>
-
-        {optional && (
-
-          <span className="
-            text-[10px]
-            px-2
-            py-1
-            rounded-full
-            bg-gray-200
-            dark:bg-gray-700
-            text-gray-600
-            dark:text-gray-300
-          ">
-            opcional
-          </span>
-
-        )}
-
-      </div>
-
-      <input
+      <InputBase
         type={type}
         value={value}
+        onChange={handleChange}
         placeholder={placeholder}
-        min={min}
-        max={max}
-
-        onChange={(e) => {
-
-          let valor = e.target.value;
-
-          if (type === "number") {
-
-            valor =
-              valor.replace(/\D/g, "");
-
-            if (valor === "") {
-              onChange("");
-              return;
-            }
-
-            valor = Number(valor);
-
-            if (
-              min !== undefined &&
-              valor < min
-            ) {
-              valor = min;
-            }
-
-            if (
-              max !== undefined &&
-              valor > max
-            ) {
-              valor = max;
-            }
-          }
-
-          onChange(valor);
-        }}
-
-        className="
-          w-full
-          p-4
-          rounded-2xl
-          bg-gray-100
-          dark:bg-gray-800
-          border
-          border-transparent
-          focus:border-green-500
-          outline-none
-          transition
-          text-black
-          dark:text-white
-        "
+        erro={erro}
+        inputMode={type === "number" ? "numeric" : undefined}
       />
 
-      {descricao && (
+      {descricao && <Dica texto={descricao} />}
 
-        <p className="
-          mt-2
-          text-xs
-          text-gray-500
-          dark:text-gray-400
-        ">
-          {descricao}
-        </p>
+      {erro && <MensagemErro texto={erro} />}
+    </section>
+  );
+}
 
-      )}
+function PreviewLinha({ icon: Icon, label, valor }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/80 px-4 py-3 text-sm dark:bg-gray-950/50">
+      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+        <Icon size={16} />
+        {label}
+      </div>
 
+      <strong className="text-gray-950 dark:text-white">{valor}</strong>
     </div>
   );
 }
