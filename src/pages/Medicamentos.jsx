@@ -39,6 +39,7 @@ function Medicamentos() {
   const [abrirScanner, setAbrirScanner] = useState(false);
   const [modoReposicao, setModoReposicao] = useState(false);
   const [inputValidadeRapida, setInputValidadeRapida] = useState(null);
+  const [codigoScanner, setCodigoScanner] = useState("");
 
   const topRef = useRef(null);
 
@@ -161,14 +162,33 @@ async function buscarProdutoPorCodigo(codigo) {
         (!editando || m.id !== editando.id)
     );
 
-    const dados = {
+const dados = {
+  nome: nomeLimpo,
+  validade,
+  imagem,
+  codigo: codigoScanner || null,
+  diasRemover: Number(diasRemover) || 7,
+  diasPreVencido: diasPre ? Number(diasPre) : null,
+  quantidade: qtd,
+};
+
+if (codigoScanner) {
+  const jaExisteNaBase = await db.produtosCodigo
+    .where("codigo")
+    .equals(codigoScanner)
+    .first();
+
+  if (!jaExisteNaBase) {
+    await db.produtosCodigo.add({
+      codigo: codigoScanner,
       nome: nomeLimpo,
-      validade,
       imagem,
       diasRemover: Number(diasRemover) || 7,
       diasPreVencido: diasPre ? Number(diasPre) : null,
-      quantidade: qtd,
-    };
+      criadoEm: new Date().toISOString(),
+    });
+  }
+}
 
     try {
       if (editando) {
@@ -188,6 +208,7 @@ async function buscarProdutoPorCodigo(codigo) {
       limpar();
       setAbrirModal(false);
       setFabOpen(false);
+      setCodigoScanner("");
       await carregar();
     } catch (err) {
       console.error("Erro ao salvar medicamento:", err);
@@ -328,47 +349,49 @@ async function buscarProdutoPorCodigo(codigo) {
 
 async function aoEscanear(codigo) {
   setAbrirScanner(false);
-  addToast("Código lido, buscando produto... 🔎", "info");
+  addToast("Código lido 🔎", "info");
 
-  const produto = await buscarProdutoPorCodigo(codigo);
+  // 1. Primeiro procura no estoque atual
+  const existenteEstoque = medicamentos.find((m) => m.codigo === codigo);
 
-  if (!produto) {
-    addToast("Produto não encontrado. Preencha manualmente.", "aviso");
-
-    limpar();
-    setNome(`Código: ${codigo}`);
-    setAbrirModal(true);
-    return;
-  }
-
-  const nomeCompleto = `${produto.nome} ${produto.marca}`.trim();
-
-  const existente = medicamentos.find(
-    (m) => m.nome.toLowerCase() === nomeCompleto.toLowerCase()
-  );
-
-  if (existente) {
-    await db.medicamentos.update(existente.id, {
-      quantidade: (existente.quantidade || 1) + 1,
+  if (existenteEstoque) {
+    await db.medicamentos.update(existenteEstoque.id, {
+      quantidade: (existenteEstoque.quantidade || 1) + 1,
     });
 
-    addToast("Produto já existe. Quantidade aumentada 📦", "ok");
+    addToast("Produto já cadastrado. +1 unidade 📦", "ok");
     await carregar();
     return;
   }
 
-  limpar();
+  // 2. Depois procura na sua base local aprendida
+  const produtoLocal = await db.produtosCodigo
+    .where("codigo")
+    .equals(codigo)
+    .first();
 
-  setNome(nomeCompleto);
-  setImagem(produto.imagem);
+  limpar();
+  setCodigoScanner(codigo);
   setQuantidade(1);
-  setDiasRemover(7);
-  setDiasPre("");
   setValidade("");
 
-  setAbrirModal(true);
+  if (produtoLocal) {
+    setNome(produtoLocal.nome || "");
+    setImagem(produtoLocal.imagem || null);
+    setDiasRemover(produtoLocal.diasRemover || 7);
+    setDiasPre(produtoLocal.diasPreVencido || "");
 
-  addToast("Produto encontrado. Informe a validade 💊", "ok");
+    addToast("Produto encontrado na sua base 🧠", "ok");
+  } else {
+    setNome("");
+    setImagem(null);
+    setDiasRemover(7);
+    setDiasPre(2);
+
+    addToast("Novo código. Cadastre uma vez e eu aprendo ✍️", "aviso");
+  }
+
+  setAbrirModal(true);
 }
 
   async function salvarRapido(validadeRapida) {

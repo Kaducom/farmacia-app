@@ -12,9 +12,10 @@ import {
   ChevronRight,
   LogOut,
   Pill,
+  Brain
 } from "lucide-react";
 
-function Menu() {
+function Menu({ setPagina }) {
 
   const { theme, toggleTheme } = useTheme();
 
@@ -24,38 +25,38 @@ const dark = theme === "dark";
 
   
 
-  function CardOpcao({
-    icon: Icon,
-    titulo,
-    descricao,
-    danger = false,
-  }) {
+function CardOpcao({
+  icon: Icon,
+  titulo,
+  descricao,
+  danger = false,
+  onClick, // 👈 NOVO
+}) {
+  return (
+    <button
+      onClick={onClick} // 👈 NOVO
+      className={`
+        w-full
+        flex items-center justify-between
+        p-4
+        rounded-2xl
+        transition-all
+        active:scale-[0.98]
 
-    return (
-
-      <button
-        className={`
-          w-full
-          flex items-center justify-between
-          p-4
-          rounded-2xl
-          transition-all
-          active:scale-[0.98]
-
-          ${
-            danger
-              ? `
-                bg-red-500/10
-                hover:bg-red-500/20
-                border border-red-500/20
-              `
-              : `
-                bg-gray-100 dark:bg-gray-700/60
-                hover:bg-gray-200 dark:hover:bg-gray-700
-              `
-          }
-        `}
-      >
+        ${
+          danger
+            ? `
+              bg-red-500/10
+              hover:bg-red-500/20
+              border border-red-500/20
+            `
+            : `
+              bg-gray-100 dark:bg-gray-700/60
+              hover:bg-gray-200 dark:hover:bg-gray-700
+            `
+        }
+      `}
+    >
 
         <div className="flex items-center gap-4">
 
@@ -357,6 +358,12 @@ const dark = theme === "dark";
           icon={Database}
           titulo="Backup"
           descricao="Salvar e restaurar dados"
+        />
+        <CardOpcao
+          icon={Brain}
+          titulo="Base de Produtos"
+          descricao="Produtos aprendidos pelo scanner"
+          onClick={() => setPagina("baseProdutos")}
         />
 
       </div>
