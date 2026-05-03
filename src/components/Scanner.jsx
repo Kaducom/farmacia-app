@@ -67,6 +67,7 @@ function Scanner({
 
   const codigoBloqueadoRef = useRef("");
   const ultimoCodigoRef = useRef({ codigo: "", tempo: 0 });
+  const iniciouComCameraEscolhidaRef = useRef(false);
 
   const [status, setStatus] = useState("iniciando");
   const [erro, setErro] = useState("");
@@ -137,6 +138,88 @@ function Scanner({
       setStatus("bloqueado");
     });
   }
+  function ehCameraUltraWide(camera) {
+  const label = String(camera?.label || "").toLowerCase();
+
+  return (
+    label.includes("ultra") ||
+    label.includes("wide") ||
+    label.includes("0.5") ||
+    label.includes("0,5") ||
+    label.includes("macro") ||
+    label.includes("grande angular")
+  );
+}
+
+function ehCameraTraseira(camera) {
+  const label = String(camera?.label || "").toLowerCase();
+
+  return (
+    label.includes("back") ||
+    label.includes("rear") ||
+    label.includes("environment") ||
+    label.includes("traseira") ||
+    label.includes("ambiente")
+  );
+}
+
+function escolherCameraPrincipal(lista = []) {
+  if (!lista.length) return null;
+
+  const traseiras = lista.filter(ehCameraTraseira);
+  const candidatas = traseiras.length ? traseiras : lista;
+
+  const principal =
+    candidatas.find((cam) => !ehCameraUltraWide(cam)) ||
+    candidatas[0] ||
+    lista[0];
+
+  return principal || null;
+}
+
+async function listarCamerasDisponiveis() {
+  try {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+
+    const dispositivos = await navigator.mediaDevices.enumerateDevices();
+
+    const lista = dispositivos.filter(
+      (device) => device.kind === "videoinput"
+    );
+
+    setCameras(lista);
+
+    return lista;
+  } catch (err) {
+    console.warn("Não consegui listar câmeras:", err);
+    return [];
+  }
+}
+
+async function aplicarZoomPrincipal() {
+  const stream = videoRef.current?.srcObject;
+  const track = stream?.getVideoTracks?.()[0];
+
+  if (!track?.getCapabilities) return;
+
+  const capacidades = track.getCapabilities();
+
+  if (!("zoom" in capacidades)) return;
+
+  const min = Number(capacidades.zoom?.min || 1);
+  const max = Number(capacidades.zoom?.max || 1);
+  const zoomIdeal = Math.min(max, Math.max(min, 1));
+
+  try {
+    await track.applyConstraints({
+      advanced: [{ zoom: zoomIdeal }],
+    });
+
+    setZoom(zoomIdeal);
+  } catch (err) {
+    console.warn("Não consegui aplicar zoom 1x:", err);
+  }
+}
 
   async function iniciar(deviceId = "") {
     try {
@@ -220,28 +303,40 @@ function Scanner({
         }
       };
 
-      let controls;
+let controls;
+let deviceIdFinal = deviceId;
 
-      if (deviceId) {
-        controls = await reader.decodeFromVideoDevice(
-          deviceId,
-          video,
-          callback
-        );
-      } else {
-        controls = await reader.decodeFromConstraints(
-          {
-            audio: false,
-            video: {
-              facingMode: { ideal: "environment" },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-          },
-          video,
-          callback
-        );
-      }
+if (!deviceIdFinal && !iniciouComCameraEscolhidaRef.current) {
+  const lista = await listarCamerasDisponiveis();
+  const principal = escolherCameraPrincipal(lista);
+
+  if (principal?.deviceId) {
+    deviceIdFinal = principal.deviceId;
+    setCameraAtual(principal.deviceId);
+    iniciouComCameraEscolhidaRef.current = true;
+  }
+}
+
+if (deviceIdFinal) {
+  controls = await reader.decodeFromVideoDevice(
+    deviceIdFinal,
+    video,
+    callback
+  );
+} else {
+  controls = await reader.decodeFromConstraints(
+    {
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    },
+    video,
+    callback
+  );
+}
 
       controlsRef.current = controls;
 
@@ -249,12 +344,13 @@ function Scanner({
         setStatus("lendo");
       });
 
-      setTimeout(() => {
-        if (!fechandoRef.current) {
-          listarCameras();
-          prepararRecursosCamera();
-        }
-      }, 500);
+setTimeout(() => {
+  if (!fechandoRef.current) {
+    listarCameras();
+    prepararRecursosCamera();
+    aplicarZoomPrincipal();
+  }
+}, 500);
     } catch (err) {
       console.error("Erro ao iniciar scanner:", err);
 
@@ -283,30 +379,17 @@ function Scanner({
     }
   }
 
-  async function listarCameras() {
-    try {
-      if (!navigator.mediaDevices?.enumerateDevices) return;
+async function listarCameras() {
+  const lista = await listarCamerasDisponiveis();
 
-      const dispositivos = await navigator.mediaDevices.enumerateDevices();
+  if (!cameraAtual && lista.length > 0) {
+    const principal = escolherCameraPrincipal(lista);
 
-      const lista = dispositivos.filter(
-        (device) => device.kind === "videoinput"
-      );
-
-      setCameras(lista);
-
-      if (!cameraAtual && lista.length > 0) {
-        const traseira =
-          lista.find((cam) =>
-            /back|rear|environment|traseira|ambiente/i.test(cam.label || "")
-          ) || lista[0];
-
-        setCameraAtual(traseira.deviceId);
-      }
-    } catch (err) {
-      console.warn("Não consegui listar câmeras:", err);
+    if (principal?.deviceId) {
+      setCameraAtual(principal.deviceId);
     }
   }
+}
 
   function prepararRecursosCamera() {
     const stream = videoRef.current?.srcObject;
@@ -496,6 +579,7 @@ function Scanner({
 
     processingRef.current = false;
     codigoBloqueadoRef.current = "";
+    iniciouComCameraEscolhidaRef.current = false;
 
     await iniciar(cameraAtual);
   }
@@ -721,30 +805,40 @@ function Scanner({
 
       {/* CONTROLES */}
       <div className="relative z-10 space-y-3 p-4 pb-5">
-        {zoomDisponivel && (
-          <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm font-bold">
-                <Crosshair size={17} />
-                Zoom
-              </div>
+{codigoBloqueado ? (
+  <button
+    type="button"
+    onClick={limparBloqueio}
+    className="
+      flex w-full items-center justify-center gap-2 rounded-3xl
+      border border-emerald-400/20 bg-emerald-500/15 px-4 py-4
+      text-sm font-black text-emerald-100 shadow-2xl backdrop-blur-md
+      transition active:scale-[0.98]
+    "
+  >
+    <ShieldCheck size={20} />
+    Liberar mesmo código
+  </button>
+) : (
+  <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
+    <div className="flex items-center gap-3">
+      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
+        <Crosshair size={20} />
+      </div>
 
-              <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-black">
-                {zoom.toFixed(1)}x
-              </span>
-            </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-black">Câmera principal</p>
+        <p className="text-xs text-white/60">
+          Tentando usar 1x e evitar ultra-wide 0,5x.
+        </p>
+      </div>
 
-            <input
-              type="range"
-              min={zoomMin}
-              max={zoomMax}
-              step={zoomStep}
-              value={zoom}
-              onChange={(e) => aplicarZoom(e.target.value)}
-              className="w-full accent-emerald-400"
-            />
-          </div>
-        )}
+      <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-black">
+        1x
+      </span>
+    </div>
+  </div>
+)}
 
         <MiniPreviewScanner
           itens={itensPreview}
@@ -778,22 +872,6 @@ function Scanner({
             disabled
           />
         </div>
-
-        {codigoBloqueado && (
-          <button
-            type="button"
-            onClick={limparBloqueio}
-            className="
-              flex w-full items-center justify-center gap-2 rounded-2xl
-              border border-emerald-400/20 bg-emerald-500/15 px-4 py-3
-              text-sm font-black text-emerald-100 backdrop-blur-md
-              transition active:scale-[0.98]
-            "
-          >
-            <ShieldCheck size={18} />
-            Liberar mesmo código
-          </button>
-        )}
 
         {/* MANUAL */}
         <form
