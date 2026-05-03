@@ -348,63 +348,94 @@ if (codigoScanner) {
   }
 
 async function aoEscanear(codigo, opcoes = {}) {
-  const modoContinuo = opcoes.modoContinuo === true;
-
-  if (!modoContinuo) {
-    setAbrirScanner(false);
-  }
-
-  addToast("Código lido 🔎", "info");
-
   const codigoLimpo = String(codigo || "").trim();
 
   if (!codigoLimpo) {
     addToast("Código inválido 😕", "erro");
-    return;
+    return { manterAberto: true };
   }
 
-  const existenteEstoque = medicamentos.find(
-    (m) => String(m.codigo || "") === codigoLimpo
-  );
+  addToast("Código lido 🔎", "info");
 
-  if (existenteEstoque) {
-    await db.medicamentos.update(existenteEstoque.id, {
-      quantidade: Number(existenteEstoque.quantidade || 1) + 1,
-    });
+  try {
+    let existenteEstoque = await db.medicamentos
+      .where("codigo")
+      .equals(codigoLimpo)
+      .first();
 
-    addToast("Produto já contado. +1 unidade 📦", "ok");
-    await carregar();
-    return;
+    if (!existenteEstoque) {
+      existenteEstoque = await db.medicamentos
+        .filter((m) => String(m.codigo || "") === codigoLimpo)
+        .first();
+    }
+
+    if (existenteEstoque) {
+      await db.medicamentos.update(existenteEstoque.id, {
+        quantidade: Number(existenteEstoque.quantidade || 1) + 1,
+      });
+
+      addToast("Produto já contado. +1 unidade 📦", "ok");
+
+      await carregar();
+
+      return {
+        manterAberto: true,
+        continuarScanner: true,
+      };
+    }
+
+    let produtoLocal = await db.produtosCodigo
+      .where("codigo")
+      .equals(codigoLimpo)
+      .first();
+
+    if (!produtoLocal) {
+      produtoLocal = await db.produtosCodigo
+        .filter((p) => String(p.codigo || "") === codigoLimpo)
+        .first();
+    }
+
+    limpar();
+
+    setCodigoScanner(codigoLimpo);
+    setQuantidade(1);
+    setValidade("");
+    setFabOpen(false);
+
+    if (produtoLocal) {
+      setNome(produtoLocal.nome || "");
+      setImagem(produtoLocal.imagem || null);
+      setDiasRemover(produtoLocal.diasRemover || 7);
+      setDiasPre(produtoLocal.diasPreVencido || "");
+
+      addToast("Produto reconhecido. Só informe a validade ⚡", "ok");
+    } else {
+      setNome("");
+      setImagem(null);
+      setDiasRemover(7);
+      setDiasPre(2);
+
+      addToast("Novo produto. Cadastre uma vez e eu aprendo 🧠", "aviso");
+    }
+
+    setAbrirScanner(false);
+
+    setTimeout(() => {
+      setAbrirModal(true);
+    }, 120);
+
+    return {
+      fecharScanner: true,
+      abrirModal: true,
+    };
+  } catch (err) {
+    console.error("Erro ao processar código:", err);
+    addToast("Erro ao processar código 😕", "erro");
+
+    return {
+      manterAberto: true,
+    };
   }
-
-  const produtoLocal = await db.produtosCodigo
-    .where("codigo")
-    .equals(codigoLimpo)
-    .first();
-
-  limpar();
-
-  setCodigoScanner(codigoLimpo);
-  setQuantidade(1);
-  setValidade("");
-
-  if (produtoLocal) {
-    setNome(produtoLocal.nome || "");
-    setImagem(produtoLocal.imagem || null);
-    setDiasRemover(produtoLocal.diasRemover || 7);
-    setDiasPre(produtoLocal.diasPreVencido || "");
-
-    addToast("Produto reconhecido. Só informe a validade ⚡", "ok");
-  } else {
-    setNome("");
-    setImagem(null);
-    setDiasRemover(7);
-    setDiasPre(2);
-
-    addToast("Novo produto. Cadastre uma vez e eu aprendo 🧠", "aviso");
-  }
-
-  setAbrirModal(true);
 }
 
   async function salvarRapido(validadeRapida) {
@@ -771,12 +802,12 @@ async function aoEscanear(codigo, opcoes = {}) {
       {/* SCANNER */}
       <AnimatePresence>
         {abrirScanner && (
-        <Scanner
-          onClose={() => setAbrirScanner(false)}
-          onScan={aoEscanear}
-          modoContinuo={true}
-        />  
-)}
+          <Scanner
+            onClose={() => setAbrirScanner(false)}
+            onScan={aoEscanear}
+            modoContinuo={true}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
