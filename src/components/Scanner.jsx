@@ -51,16 +51,22 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
   const videoRef = useRef(null);
   const readerRef = useRef(null);
   const controlsRef = useRef(null);
+
   const processingRef = useRef(false);
   const mountedRef = useRef(true);
+  const fechandoRef = useRef(false);
+
+  const codigoBloqueadoRef = useRef("");
   const ultimoCodigoRef = useRef({ codigo: "", tempo: 0 });
 
   const [status, setStatus] = useState("iniciando");
   const [erro, setErro] = useState("");
   const [cameras, setCameras] = useState([]);
   const [cameraAtual, setCameraAtual] = useState("");
+
   const [codigoManual, setCodigoManual] = useState("");
   const [codigoLido, setCodigoLido] = useState("");
+  const [codigoBloqueado, setCodigoBloqueado] = useState("");
 
   const [torchDisponivel, setTorchDisponivel] = useState(false);
   const [torchAtiva, setTorchAtiva] = useState(false);
@@ -73,6 +79,8 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
 
   useEffect(() => {
     mountedRef.current = true;
+    fechandoRef.current = false;
+
     iniciar();
 
     return () => {
@@ -81,6 +89,12 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function setSeguro(fn) {
+    if (mountedRef.current && !fechandoRef.current) {
+      fn();
+    }
+  }
 
   function erroIgnoravel(err) {
     return (
@@ -93,16 +107,37 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
     );
   }
 
-  function setSeguro(fn) {
-    if (mountedRef.current) fn();
+  function limparBloqueio() {
+    codigoBloqueadoRef.current = "";
+    processingRef.current = false;
+
+    setSeguro(() => {
+      setCodigoBloqueado("");
+      setCodigoLido("");
+      setErro("");
+      setStatus("lendo");
+    });
+  }
+
+  function bloquearCodigo(codigo) {
+    codigoBloqueadoRef.current = codigo;
+
+    setSeguro(() => {
+      setCodigoBloqueado(codigo);
+      setCodigoLido("");
+      setStatus("bloqueado");
+    });
   }
 
   async function iniciar(deviceId = "") {
     try {
       setErro("");
       setCodigoLido("");
+      setCodigoBloqueado("");
       setStatus("iniciando");
+
       processingRef.current = false;
+      codigoBloqueadoRef.current = "";
 
       if (!navigator.mediaDevices?.getUserMedia) {
         setErro("Este navegador não liberou acesso à câmera.");
@@ -128,16 +163,50 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
       readerRef.current = reader;
 
       const callback = async (result, err, controls) => {
+        if (fechandoRef.current) return;
+
         if (controls && !controlsRef.current) {
           controlsRef.current = controls;
         }
 
         if (result) {
-          await processarCodigo(result.getText());
+          const texto = String(result.getText() || "")
+            .replace(/\s/g, "")
+            .trim();
+
+          if (!texto) return;
+
+          const bloqueado = codigoBloqueadoRef.current;
+
+          if (bloqueado && texto === bloqueado) {
+            if (!processingRef.current) {
+              setSeguro(() => {
+                setStatus("bloqueado");
+                setCodigoBloqueado(texto);
+              });
+            }
+
+            return;
+          }
+
+          if (bloqueado && texto !== bloqueado) {
+            codigoBloqueadoRef.current = "";
+
+            setSeguro(() => {
+              setCodigoBloqueado("");
+              setStatus("lendo");
+            });
+          }
+
+          await processarCodigo(texto);
           return;
         }
 
-        if (err && !erroIgnoravel(err)) {
+        if (err && erroIgnoravel(err)) {
+          return;
+        }
+
+        if (err) {
           console.warn("Erro do leitor:", err);
         }
       };
@@ -156,8 +225,8 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
             audio: false,
             video: {
               facingMode: { ideal: "environment" },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
             },
           },
           video,
@@ -172,9 +241,11 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
       });
 
       setTimeout(() => {
-        listarCameras();
-        prepararRecursosCamera();
-      }, 450);
+        if (!fechandoRef.current) {
+          listarCameras();
+          prepararRecursosCamera();
+        }
+      }, 500);
     } catch (err) {
       console.error("Erro ao iniciar scanner:", err);
 
@@ -205,6 +276,8 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
 
   async function listarCameras() {
     try {
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+
       const dispositivos = await navigator.mediaDevices.enumerateDevices();
 
       const lista = dispositivos.filter(
@@ -258,14 +331,14 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
   async function processarCodigo(codigo) {
     const codigoLimpo = String(codigo || "").replace(/\s/g, "").trim();
 
-    if (!codigoLimpo) return;
+    if (!codigoLimpo || fechandoRef.current) return;
 
     if (processingRef.current) return;
 
     const agora = Date.now();
     const ultimo = ultimoCodigoRef.current;
 
-    if (ultimo.codigo === codigoLimpo && agora - ultimo.tempo < 1400) {
+    if (ultimo.codigo === codigoLimpo && agora - ultimo.tempo < 450) {
       return;
     }
 
@@ -276,8 +349,10 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
       tempo: agora,
     };
 
-    setCodigoLido(codigoLimpo);
-    setStatus("lido");
+    setSeguro(() => {
+      setCodigoLido(codigoLimpo);
+      setStatus("lido");
+    });
 
     tocarBip();
 
@@ -308,17 +383,19 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
       }
 
       setTimeout(() => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || fechandoRef.current) return;
 
-        setCodigoLido("");
-        setStatus("lendo");
         processingRef.current = false;
-      }, 650);
+        bloquearCodigo(codigoLimpo);
+      }, 750);
     } catch (err) {
       console.error("Erro no onScan:", err);
 
-      setErro("Código lido, mas ocorreu erro ao processar.");
-      setStatus("erro");
+      setSeguro(() => {
+        setErro("Código lido, mas ocorreu erro ao processar.");
+        setStatus("erro");
+      });
+
       processingRef.current = false;
     }
   }
@@ -376,7 +453,10 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
     }
 
     if (video) {
+      video.pause?.();
       video.srcObject = null;
+      video.removeAttribute("src");
+      video.load?.();
     }
 
     setTorchDisponivel(false);
@@ -386,10 +466,16 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
 
   function pararScanner() {
     pararCamera();
+
     processingRef.current = false;
+    codigoBloqueadoRef.current = "";
   }
 
   function fecharScanner() {
+    if (fechandoRef.current) return;
+
+    fechandoRef.current = true;
+
     pararScanner();
     onClose?.();
   }
@@ -397,7 +483,11 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
   async function reiniciarScanner() {
     setErro("");
     setCodigoLido("");
+    setCodigoBloqueado("");
+
     processingRef.current = false;
+    codigoBloqueadoRef.current = "";
+
     await iniciar(cameraAtual);
   }
 
@@ -419,7 +509,10 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
     setCameraAtual(proxima.deviceId);
     setErro("");
     setCodigoLido("");
+    setCodigoBloqueado("");
+
     processingRef.current = false;
+    codigoBloqueadoRef.current = "";
 
     await iniciar(proxima.deviceId);
   }
@@ -477,10 +570,14 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
   }
 
   const cameraLigada =
-    status === "lendo" || status === "lido" || status === "erro";
+    status === "lendo" ||
+    status === "lido" ||
+    status === "erro" ||
+    status === "bloqueado";
 
   const lendo = status === "lendo";
   const lido = status === "lido";
+  const bloqueado = status === "bloqueado";
   const iniciando = status === "iniciando";
   const emErro = status === "erro";
 
@@ -529,7 +626,15 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
 
         <button
           type="button"
-          onClick={fecharScanner}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fecharScanner();
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           className="
             flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
             bg-white text-slate-950 shadow-xl transition active:scale-95
@@ -545,8 +650,10 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
           iniciando={iniciando}
           lendo={lendo}
           lido={lido}
+          bloqueado={bloqueado}
           emErro={emErro}
           codigoLido={codigoLido}
+          codigoBloqueado={codigoBloqueado}
           erro={erro}
         />
       </div>
@@ -560,6 +667,8 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
               ${
                 lido
                   ? "border-emerald-400 shadow-[0_0_42px_rgba(52,211,153,0.35)]"
+                  : bloqueado
+                  ? "border-emerald-300/70 shadow-[0_0_42px_rgba(52,211,153,0.2)]"
                   : emErro
                   ? "border-red-400 shadow-[0_0_42px_rgba(248,113,113,0.25)]"
                   : "border-white/70 shadow-[0_0_42px_rgba(255,255,255,0.12)]"
@@ -591,7 +700,11 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
 
           <div className="pointer-events-none absolute inset-x-6 top-1/2 flex -translate-y-1/2 items-center justify-center">
             <div className="rounded-full border border-white/15 bg-black/40 px-4 py-2 text-xs font-bold text-white/85 backdrop-blur-md">
-              {lido ? "Código capturado ✨" : "Centralize o código aqui"}
+              {lido
+                ? "Código capturado ✨"
+                : bloqueado
+                ? "Código já somado"
+                : "Centralize o código aqui"}
             </div>
           </div>
         </div>
@@ -652,6 +765,22 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
           />
         </div>
 
+        {codigoBloqueado && (
+          <button
+            type="button"
+            onClick={limparBloqueio}
+            className="
+              flex w-full items-center justify-center gap-2 rounded-2xl
+              border border-emerald-400/20 bg-emerald-500/15 px-4 py-3
+              text-sm font-black text-emerald-100 backdrop-blur-md
+              transition active:scale-[0.98]
+            "
+          >
+            <ShieldCheck size={18} />
+            Liberar mesmo código
+          </button>
+        )}
+
         {/* MANUAL */}
         <form
           onSubmit={enviarManual}
@@ -694,7 +823,16 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
   );
 }
 
-function StatusScanner({ iniciando, lendo, lido, emErro, codigoLido, erro }) {
+function StatusScanner({
+  iniciando,
+  lendo,
+  lido,
+  bloqueado,
+  emErro,
+  codigoLido,
+  codigoBloqueado,
+  erro,
+}) {
   if (iniciando) {
     return (
       <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
@@ -723,6 +861,21 @@ function StatusScanner({ iniciando, lendo, lido, emErro, codigoLido, erro }) {
     );
   }
 
+  if (bloqueado) {
+    return (
+      <div className="flex items-center gap-3 rounded-3xl border border-emerald-400/30 bg-emerald-500/15 p-4 text-emerald-100 backdrop-blur-md">
+        <ShieldCheck size={23} />
+
+        <div className="min-w-0">
+          <p className="text-sm font-black">Já adicionado</p>
+          <p className="truncate text-xs text-emerald-100/80">
+            Para somar de novo, toque em liberar: {codigoBloqueado}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (emErro) {
     return (
       <div className="flex items-start gap-3 rounded-3xl border border-red-400/30 bg-red-500/15 p-4 text-red-100 backdrop-blur-md">
@@ -744,7 +897,7 @@ function StatusScanner({ iniciando, lendo, lido, emErro, codigoLido, erro }) {
         <div>
           <p className="text-sm font-black">Scanner ativo</p>
           <p className="text-xs text-white/65">
-            Leu, processou, libera. Modo esteira de farmácia.
+            Leia um produto. Código repetido fica protegido.
           </p>
         </div>
       </div>

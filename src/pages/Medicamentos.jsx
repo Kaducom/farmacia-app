@@ -1,940 +1,903 @@
 import { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { BrowserMultiFormatReader } from "@zxing/browser";
-import {
-  BarcodeFormat,
-  ChecksumException,
-  DecodeHintType,
-  FormatException,
-  NotFoundException,
-} from "@zxing/library";
+import { db } from "../db";
+import ToastStack from "../components/ToastStack";
+import Scanner from "../components/Scanner";
+import { motion, AnimatePresence } from "framer-motion";
 
 import {
-  AlertTriangle,
-  Barcode,
-  Camera,
-  CameraOff,
-  CheckCircle2,
-  Crosshair,
-  Keyboard,
-  Lightbulb,
-  LightbulbOff,
-  Loader2,
-  RefreshCcw,
-  RotateCw,
-  ScanLine,
-  ShieldCheck,
+  CalendarDays,
+  ImageIcon,
+  PackagePlus,
+  Plus,
+  Trash2,
   X,
-  Zap,
 } from "lucide-react";
 
-const FORMATOS = [
-  BarcodeFormat.EAN_13,
-  BarcodeFormat.EAN_8,
-  BarcodeFormat.UPC_A,
-  BarcodeFormat.UPC_E,
-  BarcodeFormat.CODE_128,
-  BarcodeFormat.CODE_39,
-  BarcodeFormat.ITF,
-];
+import CardMedicamento from "../components/medicamentos/CardMedicamento";
+import BuscaMedicamentos from "../components/medicamentos/BuscaMedicamentos";
+import FabMedicamentos from "../components/medicamentos/FabMedicamentos";
+import ModalMedicamento from "../components/medicamentos/ModalMedicamento";
 
-function criarHints() {
-  const hints = new Map();
+// =============================
+// 💊 COMPONENTE PRINCIPAL
+// =============================
 
-  hints.set(DecodeHintType.POSSIBLE_FORMATS, FORMATOS);
-  hints.set(DecodeHintType.TRY_HARDER, true);
+function Medicamentos() {
+  const [medicamentos, setMedicamentos] = useState([]);
 
-  return hints;
-}
+  const [imagem, setImagem] = useState(null);
+  const [abrirModal, setAbrirModal] = useState(false);
 
-function Scanner({ onClose, onScan, modoContinuo = false }) {
-  const videoRef = useRef(null);
-  const readerRef = useRef(null);
-  const controlsRef = useRef(null);
+  const [nome, setNome] = useState("");
+  const [validade, setValidade] = useState("");
+  const [diasPre, setDiasPre] = useState("");
+  const [diasRemover, setDiasRemover] = useState(7);
+  const [quantidade, setQuantidade] = useState(1);
 
-  const processingRef = useRef(false);
-  const mountedRef = useRef(true);
-  const fechandoRef = useRef(false);
+  const [editando, setEditando] = useState(null);
+  const [confirmar, setConfirmar] = useState(null);
+  const [preview, setPreview] = useState(null);
 
-  const codigoBloqueadoRef = useRef("");
-  const ultimoCodigoRef = useRef({ codigo: "", tempo: 0 });
+  const [busca, setBusca] = useState("");
+  const [toasts, setToasts] = useState([]);
 
-  const [status, setStatus] = useState("iniciando");
-  const [erro, setErro] = useState("");
-  const [cameras, setCameras] = useState([]);
-  const [cameraAtual, setCameraAtual] = useState("");
+  const [fabOpen, setFabOpen] = useState(false);
 
-  const [codigoManual, setCodigoManual] = useState("");
-  const [codigoLido, setCodigoLido] = useState("");
-  const [codigoBloqueado, setCodigoBloqueado] = useState("");
+  const [abrirScanner, setAbrirScanner] = useState(false);
+  const [scannerKey, setScannerKey] = useState(0);
+  const [modoReposicao, setModoReposicao] = useState(false);
 
-  const [torchDisponivel, setTorchDisponivel] = useState(false);
-  const [torchAtiva, setTorchAtiva] = useState(false);
+  const [inputValidadeRapida, setInputValidadeRapida] = useState(null);
+  const [codigoScanner, setCodigoScanner] = useState("");
 
-  const [zoomDisponivel, setZoomDisponivel] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [zoomMin, setZoomMin] = useState(1);
-  const [zoomMax, setZoomMax] = useState(1);
-  const [zoomStep, setZoomStep] = useState(0.1);
+  const topRef = useRef(null);
+
+  // =============================
+  // 🚀 INICIALIZAÇÃO
+  // =============================
 
   useEffect(() => {
-    mountedRef.current = true;
-    fechandoRef.current = false;
+    setAbrirScanner(false);
+    setFabOpen(false);
 
-    iniciar();
+    carregar();
 
-    return () => {
-      mountedRef.current = false;
-      pararScanner();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
   }, []);
 
-  function setSeguro(fn) {
-    if (mountedRef.current && !fechandoRef.current) {
-      fn();
-    }
-  }
+  // =============================
+  // 📦 BANCO DE DADOS
+  // =============================
 
-  function erroIgnoravel(err) {
-    return (
-      err instanceof NotFoundException ||
-      err instanceof ChecksumException ||
-      err instanceof FormatException ||
-      err?.name === "NotFoundException" ||
-      err?.name === "ChecksumException" ||
-      err?.name === "FormatException"
-    );
-  }
-
-  function limparBloqueio() {
-    codigoBloqueadoRef.current = "";
-    processingRef.current = false;
-
-    setSeguro(() => {
-      setCodigoBloqueado("");
-      setCodigoLido("");
-      setErro("");
-      setStatus("lendo");
-    });
-  }
-
-  function bloquearCodigo(codigo) {
-    codigoBloqueadoRef.current = codigo;
-
-    setSeguro(() => {
-      setCodigoBloqueado(codigo);
-      setCodigoLido("");
-      setStatus("bloqueado");
-    });
-  }
-
-  async function iniciar(deviceId = "") {
+  async function carregar() {
     try {
-      setErro("");
-      setCodigoLido("");
-      setCodigoBloqueado("");
-      setStatus("iniciando");
+      const dados = await db.medicamentos.toArray();
 
-      processingRef.current = false;
-      codigoBloqueadoRef.current = "";
+      const normalizados = dados.map((m) => ({
+        ...m,
+        quantidade: Number(m.quantidade || 1),
+      }));
 
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setErro("Este navegador não liberou acesso à câmera.");
-        setStatus("erro");
-        return;
-      }
+      normalizados.sort((a, b) => {
+        const dataA = parseDataSegura(a.validade);
+        const dataB = parseDataSegura(b.validade);
 
-      pararCamera();
+        if (!dataA && !dataB) return 0;
+        if (!dataA) return 1;
+        if (!dataB) return -1;
 
-      const video = videoRef.current;
-
-      if (!video) {
-        setErro("Elemento de vídeo não encontrado.");
-        setStatus("erro");
-        return;
-      }
-
-      video.setAttribute("playsinline", "true");
-      video.setAttribute("webkit-playsinline", "true");
-      video.muted = true;
-
-      const reader = new BrowserMultiFormatReader(criarHints());
-      readerRef.current = reader;
-
-      const callback = async (result, err, controls) => {
-        if (fechandoRef.current) return;
-
-        if (controls && !controlsRef.current) {
-          controlsRef.current = controls;
-        }
-
-        if (result) {
-          const texto = String(result.getText() || "")
-            .replace(/\s/g, "")
-            .trim();
-
-          if (!texto) return;
-
-          const bloqueado = codigoBloqueadoRef.current;
-
-          if (bloqueado && texto === bloqueado) {
-            if (!processingRef.current) {
-              setSeguro(() => {
-                setStatus("bloqueado");
-                setCodigoBloqueado(texto);
-              });
-            }
-
-            return;
-          }
-
-          if (bloqueado && texto !== bloqueado) {
-            codigoBloqueadoRef.current = "";
-
-            setSeguro(() => {
-              setCodigoBloqueado("");
-              setStatus("lendo");
-            });
-          }
-
-          await processarCodigo(texto);
-          return;
-        }
-
-        if (err && erroIgnoravel(err)) {
-          return;
-        }
-
-        if (err) {
-          console.warn("Erro do leitor:", err);
-        }
-      };
-
-      let controls;
-
-      if (deviceId) {
-        controls = await reader.decodeFromVideoDevice(
-          deviceId,
-          video,
-          callback
-        );
-      } else {
-        controls = await reader.decodeFromConstraints(
-          {
-            audio: false,
-            video: {
-              facingMode: { ideal: "environment" },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-          },
-          video,
-          callback
-        );
-      }
-
-      controlsRef.current = controls;
-
-      setSeguro(() => {
-        setStatus("lendo");
+        return dataA - dataB;
       });
 
-      setTimeout(() => {
-        if (!fechandoRef.current) {
-          listarCameras();
-          prepararRecursosCamera();
-        }
-      }, 500);
+      setMedicamentos(normalizados);
     } catch (err) {
-      console.error("Erro ao iniciar scanner:", err);
-
-      let msg = "Não consegui abrir a câmera. Use a entrada manual.";
-
-      if (err?.name === "NotAllowedError") {
-        msg = "Permissão da câmera bloqueada. Libere a câmera no navegador.";
-      }
-
-      if (err?.name === "NotFoundError") {
-        msg = "Nenhuma câmera foi encontrada neste dispositivo.";
-      }
-
-      if (err?.name === "NotReadableError") {
-        msg = "A câmera está ocupada por outro app ou aba.";
-      }
-
-      if (err?.name === "OverconstrainedError") {
-        msg = "Essa câmera não aceitou as configurações. Tente trocar a câmera.";
-      }
-
-      setSeguro(() => {
-        setErro(msg);
-        setStatus("erro");
-      });
+      console.error("Erro ao carregar medicamentos:", err);
+      addToast("Erro ao carregar medicamentos 😕", "erro");
     }
   }
 
-  async function listarCameras() {
-    try {
-      if (!navigator.mediaDevices?.enumerateDevices) return;
+  // =============================
+  // 🔔 TOASTS
+  // =============================
 
-      const dispositivos = await navigator.mediaDevices.enumerateDevices();
-
-      const lista = dispositivos.filter(
-        (device) => device.kind === "videoinput"
-      );
-
-      setCameras(lista);
-
-      if (!cameraAtual && lista.length > 0) {
-        const traseira =
-          lista.find((cam) =>
-            /back|rear|environment|traseira|ambiente/i.test(cam.label || "")
-          ) || lista[0];
-
-        setCameraAtual(traseira.deviceId);
-      }
-    } catch (err) {
-      console.warn("Não consegui listar câmeras:", err);
-    }
-  }
-
-  function prepararRecursosCamera() {
-    const stream = videoRef.current?.srcObject;
-    const track = stream?.getVideoTracks?.()[0];
-
-    setTorchDisponivel(false);
-    setTorchAtiva(false);
-    setZoomDisponivel(false);
-
-    if (!track?.getCapabilities) return;
-
-    const capacidades = track.getCapabilities();
-
-    if (capacidades.torch) {
-      setTorchDisponivel(true);
-    }
-
-    if ("zoom" in capacidades) {
-      const min = Number(capacidades.zoom?.min || 1);
-      const max = Number(capacidades.zoom?.max || 1);
-      const step = Number(capacidades.zoom?.step || 0.1);
-
-      setZoomMin(min);
-      setZoomMax(max);
-      setZoomStep(step);
-      setZoom(min);
-      setZoomDisponivel(max > min);
-    }
-  }
-
-  async function processarCodigo(codigo) {
-    const codigoLimpo = String(codigo || "").replace(/\s/g, "").trim();
-
-    if (!codigoLimpo || fechandoRef.current) return;
-
-    if (processingRef.current) return;
-
-    const agora = Date.now();
-    const ultimo = ultimoCodigoRef.current;
-
-    if (ultimo.codigo === codigoLimpo && agora - ultimo.tempo < 450) {
-      return;
-    }
-
-    processingRef.current = true;
-
-    ultimoCodigoRef.current = {
-      codigo: codigoLimpo,
-      tempo: agora,
-    };
-
-    setSeguro(() => {
-      setCodigoLido(codigoLimpo);
-      setStatus("lido");
-    });
-
-    tocarBip();
+  function addToast(msg, tipo = "ok") {
+    const id = `${Date.now()}-${Math.random()}`;
 
     if (navigator.vibrate) {
-      navigator.vibrate([35, 25, 35]);
+      navigator.vibrate(30);
     }
 
+    setToasts((prev) => [...prev, { id, msg, tipo }]);
+
+    setTimeout(() => {
+      removerToast(id);
+    }, 4000);
+  }
+
+  function removerToast(id) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  // =============================
+  // 🧹 LIMPAR / IMAGEM
+  // =============================
+
+  function limpar() {
+    setNome("");
+    setValidade("");
+    setImagem(null);
+    setDiasPre("");
+    setDiasRemover(7);
+    setQuantidade(1);
+    setEditando(null);
+    setCodigoScanner("");
+  }
+
+  function handleImagem(e) {
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onloadend = () => {
+      setImagem(reader.result);
+    };
+
+    reader.readAsDataURL(file);
+  }
+
+  // =============================
+  // 💾 SALVAR / EDITAR
+  // =============================
+
+  async function salvar() {
+    const nomeLimpo = nome.trim();
+
+    if (!nomeLimpo || !validade) {
+      addToast("Preencha os campos obrigatórios ⚠️", "erro");
+      return;
+    }
+
+    const dataValida = parseDataSegura(validade);
+
+    if (!dataValida || Number.isNaN(dataValida.getTime())) {
+      addToast("Data inválida ⚠️", "erro");
+      return;
+    }
+
+    const qtd = Number(quantidade) || 1;
+
+    if (qtd <= 0) {
+      addToast("Quantidade inválida ⚠️", "erro");
+      return;
+    }
+
+    const codigoFinal = codigoScanner || editando?.codigo || null;
+
+    const existente = medicamentos.find(
+      (m) =>
+        String(m.nome || "").toLowerCase() === nomeLimpo.toLowerCase() &&
+        (!editando || m.id !== editando.id)
+    );
+
+    const dados = {
+      nome: nomeLimpo,
+      validade,
+      imagem,
+      codigo: codigoFinal,
+      diasRemover: Number(diasRemover) || 7,
+      diasPreVencido: diasPre ? Number(diasPre) : null,
+      quantidade: qtd,
+    };
+
     try {
-      const resposta = await Promise.resolve(
-        onScan?.(codigoLimpo, {
-          modoContinuo,
-          origem: "scanner",
-        })
-      );
+      if (codigoFinal) {
+        const jaExisteNaBase = await db.produtosCodigo
+          .where("codigo")
+          .equals(String(codigoFinal))
+          .first();
 
-      const deveFechar =
-        resposta === "fechar" ||
-        resposta?.fecharScanner === true ||
-        resposta?.abrirModal === true ||
-        modoContinuo === false;
-
-      if (deveFechar) {
-        setTimeout(() => {
-          fecharScanner();
-        }, 180);
-
-        return;
+        if (!jaExisteNaBase) {
+          await db.produtosCodigo.add({
+            codigo: String(codigoFinal),
+            nome: nomeLimpo,
+            imagem,
+            diasRemover: Number(diasRemover) || 7,
+            diasPreVencido: diasPre ? Number(diasPre) : null,
+            criadoEm: new Date().toISOString(),
+          });
+        }
       }
 
-      setTimeout(() => {
-        if (!mountedRef.current || fechandoRef.current) return;
+      if (editando) {
+        await db.medicamentos.update(editando.id, dados);
+        addToast("Medicamento atualizado ✨");
+      } else if (existente) {
+        await db.medicamentos.update(existente.id, {
+          quantidade: Number(existente.quantidade || 1) + qtd,
+        });
 
-        processingRef.current = false;
-        bloquearCodigo(codigoLimpo);
-      }, 750);
+        addToast("Quantidade atualizada 📦");
+      } else {
+        await db.medicamentos.add(dados);
+        addToast("Medicamento salvo 💊");
+      }
+
+      limpar();
+      setAbrirModal(false);
+      setFabOpen(false);
+
+      await carregar();
     } catch (err) {
-      console.error("Erro no onScan:", err);
-
-      setSeguro(() => {
-        setErro("Código lido, mas ocorreu erro ao processar.");
-        setStatus("erro");
-      });
-
-      processingRef.current = false;
+      console.error("Erro ao salvar medicamento:", err);
+      addToast("Erro ao salvar medicamento 😕", "erro");
     }
   }
 
-  function tocarBip() {
+  async function remover(id) {
     try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      await db.medicamentos.delete(id);
 
-      if (!AudioContext) return;
+      setConfirmar(null);
+      addToast("Medicamento excluído 🗑️");
 
-      const contexto = new AudioContext();
-      const oscillator = contexto.createOscillator();
-      const gain = contexto.createGain();
+      await carregar();
+    } catch (err) {
+      console.error("Erro ao remover medicamento:", err);
+      addToast("Erro ao excluir medicamento 😕", "erro");
+    }
+  }
 
-      oscillator.type = "sine";
-      oscillator.frequency.value = 920;
-      gain.gain.value = 0.045;
+  // =============================
+  // 📅 DATAS
+  // =============================
 
-      oscillator.connect(gain);
-      gain.connect(contexto.destination);
+  function parseDataSegura(data) {
+    if (!data) return null;
 
-      oscillator.start();
+    if (data instanceof Date && !Number.isNaN(data.getTime())) {
+      return data;
+    }
+
+    if (typeof data === "string" && data.includes("/")) {
+      const [dia, mes, ano] = data.split("/").map(Number);
+
+      if (!dia || !mes || !ano) return null;
+
+      return new Date(ano, mes - 1, dia);
+    }
+
+    if (typeof data === "string" && data.includes("-")) {
+      const [ano, mes, dia] = data.split("-").map(Number);
+
+      if (!dia || !mes || !ano) return null;
+
+      return new Date(ano, mes - 1, dia);
+    }
+
+    const dataConvertida = new Date(data);
+
+    if (Number.isNaN(dataConvertida.getTime())) {
+      return null;
+    }
+
+    return dataConvertida;
+  }
+
+  function gerarPreviewDatas() {
+    if (!validade) return null;
+
+    const validadeDate = parseDataSegura(validade);
+
+    if (!validadeDate || Number.isNaN(validadeDate.getTime())) {
+      return null;
+    }
+
+    const removerDate = new Date(validadeDate);
+    removerDate.setDate(removerDate.getDate() - Number(diasRemover || 0));
+
+    let preDate = null;
+
+    if (diasPre) {
+      preDate = new Date(removerDate);
+      preDate.setDate(preDate.getDate() - Number(diasPre));
+    }
+
+    return {
+      validade: validadeDate,
+      remover: removerDate,
+      pre: preDate,
+    };
+  }
+
+  function calcularDatas(med) {
+    const validadeDate = parseDataSegura(med.validade);
+
+    if (!validadeDate || Number.isNaN(validadeDate.getTime())) {
+      return {
+        validade: null,
+        remover: null,
+        pre: null,
+      };
+    }
+
+    const removerDate = new Date(validadeDate);
+    removerDate.setDate(removerDate.getDate() - Number(med.diasRemover || 0));
+
+    let preDate = null;
+
+    if (med.diasPreVencido) {
+      preDate = new Date(removerDate);
+      preDate.setDate(preDate.getDate() - Number(med.diasPreVencido));
+    }
+
+    return {
+      validade: validadeDate,
+      remover: removerDate,
+      pre: preDate,
+    };
+  }
+
+  function calcularStatus(med) {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const { validade, remover, pre } = calcularDatas(med);
+
+    if (!validade || Number.isNaN(validade.getTime())) {
+      return "ok";
+    }
+
+    const validadeLimpa = new Date(validade);
+    validadeLimpa.setHours(0, 0, 0, 0);
+
+    const removerLimpa = remover ? new Date(remover) : null;
+    if (removerLimpa) removerLimpa.setHours(0, 0, 0, 0);
+
+    const preLimpa = pre ? new Date(pre) : null;
+    if (preLimpa) preLimpa.setHours(0, 0, 0, 0);
+
+    if (hoje >= validadeLimpa) return "vencido";
+    if (removerLimpa && hoje >= removerLimpa) return "remover";
+    if (preLimpa && hoje >= preLimpa) return "pre";
+
+    return "ok";
+  }
+
+  function formatarData(data) {
+    const dataFormatada = parseDataSegura(data);
+
+    if (!dataFormatada || Number.isNaN(dataFormatada.getTime())) {
+      return "Data inválida";
+    }
+
+    return dataFormatada.toLocaleDateString("pt-BR");
+  }
+
+  // =============================
+  // 🔍 LISTA / FILTRO
+  // =============================
+
+  const lista = medicamentos.filter((m) =>
+    `${m.nome || ""} ${m.validade || ""}`
+      .toLowerCase()
+      .includes(busca.toLowerCase())
+  );
+
+  // =============================
+  // 📷 FLUXO DO SCANNER
+  // =============================
+
+  function fecharScannerSeguro() {
+    setAbrirScanner(false);
+    setFabOpen(false);
+
+    setTimeout(() => {
+      setScannerKey((prev) => prev + 1);
+    }, 0);
+  }
+
+  async function iniciarScanner() {
+    setFabOpen(false);
+    setAbrirModal(false);
+    setConfirmar(null);
+    setPreview(null);
+
+    setScannerKey((prev) => prev + 1);
+    setAbrirScanner(true);
+  }
+
+  async function aoEscanear(codigo) {
+    const codigoLimpo = String(codigo || "").trim();
+
+    if (!codigoLimpo) {
+      addToast("Código inválido 😕", "erro");
+
+      return {
+        manterAberto: true,
+        continuarScanner: true,
+      };
+    }
+
+    addToast("Código lido 🔎", "info");
+
+    try {
+      let existenteEstoque = await db.medicamentos
+        .where("codigo")
+        .equals(codigoLimpo)
+        .first();
+
+      if (!existenteEstoque) {
+        existenteEstoque = await db.medicamentos
+          .filter((m) => String(m.codigo || "") === codigoLimpo)
+          .first();
+      }
+
+      if (existenteEstoque) {
+        await db.medicamentos.update(existenteEstoque.id, {
+          quantidade: Number(existenteEstoque.quantidade || 1) + 1,
+        });
+
+        addToast("Produto já contado. +1 unidade 📦", "ok");
+
+        await carregar();
+
+        return {
+          manterAberto: true,
+          continuarScanner: true,
+        };
+      }
+
+      let produtoLocal = await db.produtosCodigo
+        .where("codigo")
+        .equals(codigoLimpo)
+        .first();
+
+      if (!produtoLocal) {
+        produtoLocal = await db.produtosCodigo
+          .filter((p) => String(p.codigo || "") === codigoLimpo)
+          .first();
+      }
+
+      limpar();
+
+      setCodigoScanner(codigoLimpo);
+      setQuantidade(1);
+      setValidade("");
+      setFabOpen(false);
+
+      if (produtoLocal) {
+        setNome(produtoLocal.nome || "");
+        setImagem(produtoLocal.imagem || null);
+        setDiasRemover(produtoLocal.diasRemover || 7);
+        setDiasPre(produtoLocal.diasPreVencido || "");
+
+        addToast("Produto reconhecido. Só informe a validade ⚡", "ok");
+      } else {
+        setNome("");
+        setImagem(null);
+        setDiasRemover(7);
+        setDiasPre(2);
+
+        addToast("Novo produto. Cadastre uma vez e eu aprendo 🧠", "aviso");
+      }
+
+      fecharScannerSeguro();
 
       setTimeout(() => {
-        oscillator.stop();
-        contexto.close();
-      }, 80);
-    } catch {
-      // Alguns navegadores bloqueiam áudio sem gesto do usuário.
-    }
-  }
+        setAbrirModal(true);
+      }, 180);
 
-  function pararCamera() {
-    try {
-      controlsRef.current?.stop?.();
+      return {
+        fecharScanner: true,
+        abrirModal: true,
+      };
     } catch (err) {
-      console.warn("Erro ao parar controls:", err);
+      console.error("Erro ao processar código:", err);
+      addToast("Erro ao processar código 😕", "erro");
+
+      return {
+        manterAberto: true,
+        continuarScanner: true,
+      };
     }
-
-    controlsRef.current = null;
-
-    try {
-      readerRef.current?.reset?.();
-    } catch {
-      // Algumas versões não expõem reset. Sem problema.
-    }
-
-    readerRef.current = null;
-
-    const video = videoRef.current;
-    const stream = video?.srcObject;
-
-    if (stream?.getTracks) {
-      stream.getTracks().forEach((track) => track.stop());
-    }
-
-    if (video) {
-      video.pause?.();
-      video.srcObject = null;
-      video.removeAttribute("src");
-      video.load?.();
-    }
-
-    setTorchDisponivel(false);
-    setTorchAtiva(false);
-    setZoomDisponivel(false);
   }
 
-  function pararScanner() {
-    pararCamera();
+  // =============================
+  // ⚡ VALIDADE RÁPIDA
+  // =============================
 
-    processingRef.current = false;
-    codigoBloqueadoRef.current = "";
-  }
+  async function salvarRapido(validadeRapida) {
+    const dataValida = parseDataSegura(validadeRapida);
 
-  function fecharScanner() {
-    if (fechandoRef.current) return;
-
-    fechandoRef.current = true;
-
-    pararScanner();
-    onClose?.();
-  }
-
-  async function reiniciarScanner() {
-    setErro("");
-    setCodigoLido("");
-    setCodigoBloqueado("");
-
-    processingRef.current = false;
-    codigoBloqueadoRef.current = "";
-
-    await iniciar(cameraAtual);
-  }
-
-  async function trocarCamera() {
-    if (cameras.length <= 1) {
-      setErro("Só encontrei uma câmera neste dispositivo.");
-      setStatus("erro");
+    if (!dataValida || Number.isNaN(dataValida.getTime())) {
+      addToast("Data inválida ⚠️", "erro");
       return;
     }
 
-    const indiceAtual = cameras.findIndex(
-      (camera) => camera.deviceId === cameraAtual
-    );
-
-    const proxima = cameras[(indiceAtual + 1) % cameras.length];
-
-    if (!proxima?.deviceId) return;
-
-    setCameraAtual(proxima.deviceId);
-    setErro("");
-    setCodigoLido("");
-    setCodigoBloqueado("");
-
-    processingRef.current = false;
-    codigoBloqueadoRef.current = "";
-
-    await iniciar(proxima.deviceId);
-  }
-
-  async function alternarLanterna() {
-    const stream = videoRef.current?.srcObject;
-    const track = stream?.getVideoTracks?.()[0];
-
-    if (!track) return;
-
-    try {
-      await track.applyConstraints({
-        advanced: [{ torch: !torchAtiva }],
-      });
-
-      setTorchAtiva((prev) => !prev);
-    } catch (err) {
-      console.warn("Lanterna indisponível:", err);
-      setErro("Lanterna não disponível nesta câmera.");
-      setStatus("erro");
-    }
-  }
-
-  async function aplicarZoom(valor) {
-    const novoZoom = Number(valor);
-    setZoom(novoZoom);
-
-    const stream = videoRef.current?.srcObject;
-    const track = stream?.getVideoTracks?.()[0];
-
-    if (!track) return;
-
-    try {
-      await track.applyConstraints({
-        advanced: [{ zoom: novoZoom }],
-      });
-    } catch (err) {
-      console.warn("Zoom indisponível:", err);
-    }
-  }
-
-  async function enviarManual(e) {
-    e.preventDefault();
-
-    const codigo = codigoManual.replace(/\D/g, "").trim();
-
-    if (!codigo) {
-      setErro("Digite um código válido.");
-      setStatus("erro");
+    if (!inputValidadeRapida?.nome) {
+      addToast("Produto inválido 😕", "erro");
       return;
     }
 
-    setCodigoManual("");
-    await processarCodigo(codigo);
+    try {
+      await db.medicamentos.add({
+        nome: inputValidadeRapida.nome,
+        validade: validadeRapida,
+        quantidade: 1,
+        diasRemover: 7,
+      });
+
+      addToast("Produto adicionado ✨");
+
+      setInputValidadeRapida(null);
+      await carregar();
+    } catch (err) {
+      console.error("Erro ao salvar produto rápido:", err);
+      addToast("Erro ao adicionar produto 😕", "erro");
+    }
   }
 
-  const cameraLigada =
-    status === "lendo" ||
-    status === "lido" ||
-    status === "erro" ||
-    status === "bloqueado";
-
-  const lendo = status === "lendo";
-  const lido = status === "lido";
-  const bloqueado = status === "bloqueado";
-  const iniciando = status === "iniciando";
-  const emErro = status === "erro";
+  // =============================
+  // 🎨 RENDER
+  // =============================
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+    <div
+      ref={topRef}
       className="
-        fixed inset-0 z-[99999]
-        flex flex-col overflow-hidden
-        bg-slate-950 text-white
+        mx-auto min-h-screen max-w-5xl px-4 pb-28 pt-4
+        text-gray-900 dark:text-white
       "
     >
-      {/* VIDEO */}
-      <div className="absolute inset-0">
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          playsInline
-          className={`
-            h-full w-full object-cover transition
-            ${cameraLigada ? "opacity-100" : "opacity-20"}
-          `}
-        />
+      {/* 🔍 BUSCA */}
+      <BuscaMedicamentos
+        busca={busca}
+        setBusca={setBusca}
+        quantidadeFiltrada={lista.length}
+      />
 
-        <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/10 to-black/85" />
-      </div>
-
-      {/* HEADER */}
-      <div className="relative z-10 flex items-center justify-between gap-3 p-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/15 shadow-xl backdrop-blur-md">
-            <ScanLine size={25} />
-          </div>
-
-          <div className="min-w-0">
-            <h2 className="truncate text-lg font-black">Scanner Blindado</h2>
-
-            <p className="truncate text-xs text-white/70">
-              Mire no código de barras
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            fecharScanner();
-          }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          className="
-            flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
-            bg-white text-slate-950 shadow-xl transition active:scale-95
-          "
-        >
-          <X size={23} />
-        </button>
-      </div>
-
-      {/* STATUS */}
-      <div className="relative z-10 px-4">
-        <StatusScanner
-          iniciando={iniciando}
-          lendo={lendo}
-          lido={lido}
-          bloqueado={bloqueado}
-          emErro={emErro}
-          codigoLido={codigoLido}
-          codigoBloqueado={codigoBloqueado}
-          erro={erro}
-        />
-      </div>
-
-      {/* MIRA */}
-      <div className="relative z-10 flex flex-1 items-center justify-center p-6">
-        <div className="relative h-[230px] w-full max-w-sm">
-          <div
-            className={`
-              absolute inset-0 rounded-[2rem] border-2
-              ${
-                lido
-                  ? "border-emerald-400 shadow-[0_0_42px_rgba(52,211,153,0.35)]"
-                  : bloqueado
-                  ? "border-emerald-300/70 shadow-[0_0_42px_rgba(52,211,153,0.2)]"
-                  : emErro
-                  ? "border-red-400 shadow-[0_0_42px_rgba(248,113,113,0.25)]"
-                  : "border-white/70 shadow-[0_0_42px_rgba(255,255,255,0.12)]"
-              }
-            `}
-          />
-
-          <div className="absolute -left-1 -top-1 h-12 w-12 rounded-tl-[2rem] border-l-4 border-t-4 border-emerald-400" />
-          <div className="absolute -right-1 -top-1 h-12 w-12 rounded-tr-[2rem] border-r-4 border-t-4 border-emerald-400" />
-          <div className="absolute -bottom-1 -left-1 h-12 w-12 rounded-bl-[2rem] border-b-4 border-l-4 border-emerald-400" />
-          <div className="absolute -bottom-1 -right-1 h-12 w-12 rounded-br-[2rem] border-b-4 border-r-4 border-emerald-400" />
-
-          {lendo && (
-            <motion.div
-              initial={{ y: 10, opacity: 0.7 }}
-              animate={{ y: 190, opacity: 1 }}
-              transition={{
-                duration: 1.25,
-                repeat: Infinity,
-                repeatType: "reverse",
-                ease: "easeInOut",
-              }}
-              className="
-                absolute left-5 right-5 top-3 h-1 rounded-full
-                bg-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.95)]
-              "
-            />
-          )}
-
-          <div className="pointer-events-none absolute inset-x-6 top-1/2 flex -translate-y-1/2 items-center justify-center">
-            <div className="rounded-full border border-white/15 bg-black/40 px-4 py-2 text-xs font-bold text-white/85 backdrop-blur-md">
-              {lido
-                ? "Código capturado ✨"
-                : bloqueado
-                ? "Código já somado"
-                : "Centralize o código aqui"}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* CONTROLES */}
-      <div className="relative z-10 space-y-3 p-4 pb-5">
-        {zoomDisponivel && (
-          <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm font-bold">
-                <Crosshair size={17} />
-                Zoom
-              </div>
-
-              <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-black">
-                {zoom.toFixed(1)}x
-              </span>
-            </div>
-
-            <input
-              type="range"
-              min={zoomMin}
-              max={zoomMax}
-              step={zoomStep}
-              value={zoom}
-              onChange={(e) => aplicarZoom(e.target.value)}
-              className="w-full accent-emerald-400"
-            />
-          </div>
-        )}
-
-        <div className="grid grid-cols-4 gap-2">
-          <BotaoControle
-            icon={RefreshCcw}
-            label="Reiniciar"
-            onClick={reiniciarScanner}
-          />
-
-          <BotaoControle
-            icon={RotateCw}
-            label="Câmera"
-            onClick={trocarCamera}
-            disabled={cameras.length <= 1}
-          />
-
-          <BotaoControle
-            icon={torchAtiva ? LightbulbOff : Lightbulb}
-            label={torchAtiva ? "Apagar" : "Luz"}
-            onClick={alternarLanterna}
-            disabled={!torchDisponivel}
-          />
-
-          <BotaoControle
-            icon={modoContinuo ? Zap : ShieldCheck}
-            label={modoContinuo ? "Contínuo" : "Único"}
-            disabled
-          />
-        </div>
-
-        {codigoBloqueado && (
-          <button
-            type="button"
-            onClick={limparBloqueio}
+      {/* EMPTY STATE */}
+      <AnimatePresence>
+        {lista.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 14 }}
+            transition={{ duration: 0.25 }}
             className="
-              flex w-full items-center justify-center gap-2 rounded-2xl
-              border border-emerald-400/20 bg-emerald-500/15 px-4 py-3
-              text-sm font-black text-emerald-100 backdrop-blur-md
-              transition active:scale-[0.98]
+              mt-20 rounded-3xl border border-gray-200 bg-white/80 p-8 text-center shadow-xl
+              dark:border-gray-800 dark:bg-gray-900/80
             "
           >
-            <ShieldCheck size={18} />
-            Liberar mesmo código
-          </button>
-        )}
-
-        {/* MANUAL */}
-        <form
-          onSubmit={enviarManual}
-          className="rounded-3xl border border-white/10 bg-white/10 p-3 backdrop-blur-md"
-        >
-          <div className="mb-2 flex items-center gap-2 text-xs font-bold text-white/75">
-            <Keyboard size={16} />
-            Entrada manual, para PC ou câmera teimosa
-          </div>
-
-          <div className="flex gap-2">
-            <input
-              value={codigoManual}
-              onChange={(e) =>
-                setCodigoManual(e.target.value.replace(/\D/g, ""))
-              }
-              inputMode="numeric"
-              placeholder="Digite o código de barras"
+            <div
               className="
-                min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/30 px-4 py-3
-                text-sm font-bold text-white outline-none placeholder:text-white/35
-                focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/15
-              "
-            />
-
-            <button
-              type="submit"
-              className="
-                flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
-                bg-emerald-600 text-white shadow-lg shadow-emerald-600/25
-                transition active:scale-95
+                mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl
+                bg-emerald-100 text-emerald-700
+                dark:bg-emerald-500/15 dark:text-emerald-400
               "
             >
-              <Barcode size={22} />
+              <PackagePlus size={32} />
+            </div>
+
+            <h2 className="text-xl font-bold">Nenhum medicamento encontrado</h2>
+
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Cadastre seu primeiro medicamento e deixe sua farmácia digital em
+              ordem.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                limpar();
+                setAbrirModal(true);
+                setFabOpen(false);
+              }}
+              className="
+                mt-6 inline-flex items-center justify-center gap-2 rounded-2xl
+                bg-emerald-700 px-6 py-3 text-sm font-semibold text-white
+                shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-800
+                active:scale-95
+              "
+            >
+              <Plus size={18} />
+              Adicionar medicamento
             </button>
-          </div>
-        </form>
-      </div>
-    </motion.div>
-  );
-}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-function StatusScanner({
-  iniciando,
-  lendo,
-  lido,
-  bloqueado,
-  emErro,
-  codigoLido,
-  codigoBloqueado,
-  erro,
-}) {
-  if (iniciando) {
-    return (
-      <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-        <Loader2 size={22} className="animate-spin text-emerald-300" />
+      {/* LISTA */}
+      {lista.length > 0 && (
+        <motion.div
+          layout
+          className="mt-4 space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0"
+        >
+          {lista.map((m) => (
+            <CardMedicamento
+              key={m.id}
+              m={m}
+              calcularStatus={calcularStatus}
+              calcularDatas={calcularDatas}
+              formatarData={formatarData}
+              setPreview={setPreview}
+              setConfirmar={setConfirmar}
+              setEditando={setEditando}
+              setNome={setNome}
+              setValidade={setValidade}
+              setImagem={setImagem}
+              setDiasPre={setDiasPre}
+              setDiasRemover={setDiasRemover}
+              setQuantidade={setQuantidade}
+              setAbrirModal={setAbrirModal}
+              setFabOpen={setFabOpen}
+            />
+          ))}
+        </motion.div>
+      )}
 
-        <div>
-          <p className="text-sm font-black">Abrindo câmera...</p>
-          <p className="text-xs text-white/65">
-            Preparando o radar farmacêutico
-          </p>
-        </div>
-      </div>
-    );
-  }
+      {/* FAB */}
+      <FabMedicamentos
+        fabOpen={fabOpen}
+        setFabOpen={setFabOpen}
+        limpar={limpar}
+        setAbrirModal={setAbrirModal}
+        iniciarScanner={iniciarScanner}
+        modoReposicao={modoReposicao}
+        setModoReposicao={setModoReposicao}
+      />
 
-  if (lido) {
-    return (
-      <div className="flex items-center gap-3 rounded-3xl border border-emerald-400/30 bg-emerald-500/15 p-4 text-emerald-100 backdrop-blur-md">
-        <CheckCircle2 size={23} />
+      {/* MODAL MEDICAMENTO */}
+      <ModalMedicamento
+        abrirModal={abrirModal}
+        setAbrirModal={setAbrirModal}
+        editando={editando}
+        imagem={imagem}
+        setImagem={setImagem}
+        nome={nome}
+        setNome={setNome}
+        quantidade={quantidade}
+        setQuantidade={setQuantidade}
+        validade={validade}
+        setValidade={setValidade}
+        diasRemover={diasRemover}
+        setDiasRemover={setDiasRemover}
+        diasPre={diasPre}
+        setDiasPre={setDiasPre}
+        gerarPreviewDatas={gerarPreviewDatas}
+        salvar={salvar}
+        handleImagem={handleImagem}
+        toasts={toasts}
+        removerToast={removerToast}
+        ToastStack={ToastStack}
+      />
 
-        <div className="min-w-0">
-          <p className="text-sm font-black">Código lido</p>
-          <p className="truncate text-xs text-emerald-100/80">{codigoLido}</p>
-        </div>
-      </div>
-    );
-  }
+      {/* PREVIEW IMAGEM */}
+      <AnimatePresence>
+        {preview && (
+          <motion.div
+            onClick={() => setPreview(null)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="
+              fixed inset-0 z-[9997] flex items-center justify-center
+              bg-black/85 p-4 backdrop-blur-sm
+            "
+          >
+            <motion.div
+              initial={{ scale: 0.94, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.94, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setPreview(null)}
+                className="
+                  absolute -right-3 -top-3 flex h-10 w-10 items-center justify-center rounded-full
+                  bg-white text-gray-900 shadow-xl transition active:scale-95
+                  dark:bg-gray-900 dark:text-white
+                "
+              >
+                <X size={20} />
+              </button>
 
-  if (bloqueado) {
-    return (
-      <div className="flex items-center gap-3 rounded-3xl border border-emerald-400/30 bg-emerald-500/15 p-4 text-emerald-100 backdrop-blur-md">
-        <ShieldCheck size={23} />
+              <div
+                className="
+                  overflow-hidden rounded-3xl border border-white/10
+                  bg-white/10 p-2 shadow-2xl
+                "
+              >
+                {preview ? (
+                  <img
+                    src={preview}
+                    alt="Preview do medicamento"
+                    className="max-h-[80vh] max-w-[90vw] rounded-2xl object-contain"
+                  />
+                ) : (
+                  <div className="flex h-64 w-64 items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800">
+                    <ImageIcon size={36} />
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        <div className="min-w-0">
-          <p className="text-sm font-black">Já adicionado</p>
-          <p className="truncate text-xs text-emerald-100/80">
-            Para somar de novo, toque em liberar: {codigoBloqueado}
-          </p>
-        </div>
-      </div>
-    );
-  }
+      {/* CONFIRMAR EXCLUSÃO */}
+      <AnimatePresence>
+        {confirmar && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="
+              fixed inset-0 z-[9998] flex items-center justify-center
+              bg-black/60 p-4 backdrop-blur-sm
+            "
+          >
+            <motion.div
+              initial={{ scale: 0.94, y: 12, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.94, y: 12, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="
+                w-full max-w-sm rounded-3xl border border-gray-200 bg-white p-6 text-center
+                text-gray-900 shadow-2xl dark:border-gray-800 dark:bg-gray-900 dark:text-white
+              "
+            >
+              <div
+                className="
+                  mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl
+                  bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400
+                "
+              >
+                <Trash2 size={28} />
+              </div>
 
-  if (emErro) {
-    return (
-      <div className="flex items-start gap-3 rounded-3xl border border-red-400/30 bg-red-500/15 p-4 text-red-100 backdrop-blur-md">
-        <AlertTriangle size={23} className="mt-0.5 shrink-0" />
+              <h2 className="text-lg font-bold">Excluir medicamento?</h2>
 
-        <div>
-          <p className="text-sm font-black">Scanner em modo segurança</p>
-          <p className="text-xs text-red-100/80">{erro}</p>
-        </div>
-      </div>
-    );
-  }
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                Essa ação removerá{" "}
+                <strong className="text-gray-800 dark:text-gray-100">
+                  {confirmar.nome}
+                </strong>{" "}
+                da sua lista.
+              </p>
 
-  if (lendo) {
-    return (
-      <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-        <Camera size={22} className="text-emerald-300" />
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => remover(confirmar.id)}
+                  className="
+                    flex-1 rounded-2xl bg-red-600 px-4 py-3 text-sm font-semibold text-white
+                    shadow-lg shadow-red-600/20 transition hover:bg-red-700 active:scale-95
+                  "
+                >
+                  Excluir
+                </button>
 
-        <div>
-          <p className="text-sm font-black">Scanner ativo</p>
-          <p className="text-xs text-white/65">
-            Leia um produto. Código repetido fica protegido.
-          </p>
-        </div>
-      </div>
-    );
-  }
+                <button
+                  type="button"
+                  onClick={() => setConfirmar(null)}
+                  className="
+                    flex-1 rounded-2xl bg-gray-100 px-4 py-3 text-sm font-semibold text-gray-700
+                    transition hover:bg-gray-200 active:scale-95
+                    dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700
+                  "
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-  return (
-    <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-      <CameraOff size={22} />
+      {/* VALIDADE RÁPIDA */}
+      <AnimatePresence>
+        {inputValidadeRapida && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="
+              fixed inset-0 z-[9999] flex items-center justify-center
+              bg-black/70 p-4 backdrop-blur-sm
+            "
+          >
+            <motion.div
+              initial={{ scale: 0.94, y: 12, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.94, y: 12, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="
+                w-full max-w-sm space-y-4 rounded-3xl border border-gray-200 bg-white p-6 text-center
+                text-gray-900 shadow-2xl dark:border-gray-800 dark:bg-gray-900 dark:text-white
+              "
+            >
+              <div
+                className="
+                  mx-auto flex h-14 w-14 items-center justify-center rounded-2xl
+                  bg-emerald-100 text-emerald-700
+                  dark:bg-emerald-500/15 dark:text-emerald-400
+                "
+              >
+                <CalendarDays size={28} />
+              </div>
 
-      <div>
-        <p className="text-sm font-black">Câmera pausada</p>
-        <p className="text-xs text-white/65">
-          Use reiniciar ou digite manualmente.
-        </p>
-      </div>
+              <div>
+                <h2 className="text-lg font-bold">Validade rápida</h2>
+
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {inputValidadeRapida.nome}
+                </p>
+              </div>
+
+              <input
+                autoFocus
+                placeholder="ddmmaaaa"
+                inputMode="numeric"
+                maxLength={8}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/\D/g, "").slice(0, 8);
+                  e.target.value = v;
+
+                  if (v.length === 8) {
+                    const formatada = v.replace(
+                      /(\d{2})(\d{2})(\d{4})/,
+                      "$1/$2/$3"
+                    );
+
+                    salvarRapido(formatada);
+                  }
+                }}
+                className="
+                  w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-center
+                  text-lg font-semibold text-gray-900 outline-none transition
+                  focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20
+                  dark:border-gray-800 dark:bg-gray-950 dark:text-white
+                "
+              />
+
+              <button
+                type="button"
+                onClick={() => setInputValidadeRapida(null)}
+                className="
+                  inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium
+                  text-gray-500 transition hover:bg-gray-100 active:scale-95
+                  dark:text-gray-400 dark:hover:bg-gray-800
+                "
+              >
+                <X size={16} />
+                Cancelar
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* SCANNER */}
+      <AnimatePresence>
+        {abrirScanner && !abrirModal && (
+          <Scanner
+            key={scannerKey}
+            onClose={fecharScannerSeguro}
+            onScan={aoEscanear}
+            modoContinuo={true}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function BotaoControle({ icon: Icon, label, onClick, disabled = false }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="
-        flex min-h-[68px] flex-col items-center justify-center gap-1 rounded-2xl
-        border border-white/10 bg-white/10 px-2 py-3 text-xs font-bold
-        text-white backdrop-blur-md transition active:scale-95
-        disabled:cursor-not-allowed disabled:opacity-40
-      "
-    >
-      <Icon size={20} />
-      {label}
-    </button>
-  );
-}
-
-export default Scanner;
+export default Medicamentos;
