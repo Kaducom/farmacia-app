@@ -709,7 +709,7 @@ async function listarCameras() {
           </div>
 
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-black">Scanner Blindado</h2>
+            <h2 className="truncate text-lg font-black">Scanner</h2>
 
             <p className="truncate text-xs text-white/70">
               Mire no código de barras
