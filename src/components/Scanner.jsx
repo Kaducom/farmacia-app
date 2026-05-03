@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BrowserMultiFormatReader } from "@zxing/browser";
+import { motion } from "framer-motion";
 
 import {
   AlertTriangle,
@@ -7,477 +7,760 @@ import {
   Camera,
   CameraOff,
   CheckCircle2,
-  Flashlight,
-  FlashlightOff,
+  Crosshair,
   Keyboard,
+  Lightbulb,
+  LightbulbOff,
   Loader2,
   RefreshCcw,
-  RotateCcw,
+  RotateCw,
   ScanLine,
+  ShieldCheck,
   X,
+  Zap,
 } from "lucide-react";
 
-export default function Scanner({ onScan, onClose }) {
-  const videoRef = useRef(null);
-  const controlsRef = useRef(null);
-  const streamRef = useRef(null);
-  const mountedRef = useRef(true);
-  const lendoRef = useRef(false);
-  const iniciandoRef = useRef(false);
-  const timeoutRef = useRef(null);
+const FORMATOS_CODIGO = [
+  "ean_13",
+  "ean_8",
+  "upc_a",
+  "upc_e",
+  "code_128",
+  "code_39",
+  "itf",
+];
 
-  const [loading, setLoading] = useState(true);
+function Scanner({ onClose, onScan, modoContinuo = false }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const detectorRef = useRef(null);
+  const scanningRef = useRef(false);
+  const rafRef = useRef(null);
+  const ultimaTentativaRef = useRef(0);
+  const ultimoCodigoRef = useRef({ codigo: "", tempo: 0 });
+
+  const [status, setStatus] = useState("iniciando");
   const [erro, setErro] = useState("");
-  const [codigoLido, setCodigoLido] = useState("");
-  const [devices, setDevices] = useState([]);
-  const [deviceIndex, setDeviceIndex] = useState(0);
-  const [torchAvailable, setTorchAvailable] = useState(false);
-  const [torchOn, setTorchOn] = useState(false);
-  const [manualOpen, setManualOpen] = useState(false);
+  const [cameras, setCameras] = useState([]);
+  const [cameraAtual, setCameraAtual] = useState("");
   const [codigoManual, setCodigoManual] = useState("");
+  const [codigoLido, setCodigoLido] = useState("");
+  const [leitorDisponivel, setLeitorDisponivel] = useState(true);
+
+  const [torchDisponivel, setTorchDisponivel] = useState(false);
+  const [torchAtiva, setTorchAtiva] = useState(false);
+
+  const [zoomDisponivel, setZoomDisponivel] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [zoomMin, setZoomMin] = useState(1);
+  const [zoomMax, setZoomMax] = useState(1);
+  const [zoomStep, setZoomStep] = useState(0.1);
 
   useEffect(() => {
-    mountedRef.current = true;
-    iniciarScanner(0);
+    iniciar();
 
     return () => {
-      mountedRef.current = false;
-      destruirScanner();
+      pararScanner();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function setSeguro(callback) {
-    if (mountedRef.current) callback();
+  async function iniciar(cameraId = "") {
+    setErro("");
+    setStatus("iniciando");
+
+    if (!window.isSecureContext) {
+      setErro(
+        "A câmera precisa de HTTPS ou localhost. No PC, rode pelo localhost do Vite."
+      );
+      setStatus("erro");
+      setLeitorDisponivel(false);
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setErro("Este navegador não liberou acesso à câmera.");
+      setStatus("erro");
+      setLeitorDisponivel(false);
+      return;
+    }
+
+    const temBarcodeDetector = "BarcodeDetector" in window;
+    setLeitorDisponivel(temBarcodeDetector);
+
+    if (!temBarcodeDetector) {
+      setErro(
+        "Seu navegador não suporta leitura automática nativa. Use a digitação manual por enquanto."
+      );
+    }
+
+    try {
+      await abrirCamera(cameraId);
+      await listarCameras();
+
+      if (temBarcodeDetector) {
+        criarDetector();
+        iniciarLoopLeitura();
+      } else {
+        setStatus("manual");
+      }
+    } catch (err) {
+      console.error("Erro ao iniciar scanner:", err);
+
+      if (err?.name === "NotAllowedError") {
+        setErro("Permissão da câmera bloqueada. Libere a câmera no navegador.");
+      } else if (err?.name === "NotFoundError") {
+        setErro("Nenhuma câmera foi encontrada neste dispositivo.");
+      } else if (err?.name === "NotReadableError") {
+        setErro("A câmera está ocupada por outro app ou aba.");
+      } else {
+        setErro("Não consegui abrir a câmera. Use a entrada manual.");
+      }
+
+      setStatus("erro");
+    }
   }
 
-  function destruirScanner() {
-    try {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
+  async function abrirCamera(cameraId = "") {
+    pararCamera();
 
-      if (controlsRef.current) {
-        controlsRef.current.stop();
-        controlsRef.current = null;
-      }
+    const constraints = {
+      audio: false,
+      video: cameraId
+        ? {
+            deviceId: { exact: cameraId },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          }
+        : {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+    };
 
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    streamRef.current = stream;
 
-      if (videoRef.current) {
-        videoRef.current.pause();
-        videoRef.current.srcObject = null;
-      }
+    const video = videoRef.current;
 
-      lendoRef.current = false;
-      iniciandoRef.current = false;
-    } catch (err) {
-      console.error("Erro ao destruir scanner:", err);
-    }
+    if (!video) return;
+
+    video.srcObject = stream;
+    video.setAttribute("playsinline", "true");
+    video.muted = true;
+
+    await video.play();
+
+    prepararRecursosCamera(stream);
+
+    setStatus(leitorDisponivel ? "lendo" : "manual");
   }
 
   async function listarCameras() {
-    const lista = await BrowserMultiFormatReader.listVideoInputDevices();
-
-    const ordenada = [...lista].sort((a, b) => {
-      const aBack = /back|rear|traseira|environment/i.test(a.label);
-      const bBack = /back|rear|traseira|environment/i.test(b.label);
-
-      if (aBack && !bBack) return -1;
-      if (!aBack && bBack) return 1;
-
-      return 0;
-    });
-
-    setSeguro(() => setDevices(ordenada));
-
-    return ordenada;
-  }
-
-  async function iniciarScanner(index = 0) {
-    if (iniciandoRef.current) return;
-
-    iniciandoRef.current = true;
-
     try {
-      setSeguro(() => {
-        setLoading(true);
-        setErro("");
-        setCodigoLido("");
-        setTorchOn(false);
-        setTorchAvailable(false);
-      });
+      const dispositivos = await navigator.mediaDevices.enumerateDevices();
 
-      if (!window.isSecureContext && window.location.hostname !== "localhost") {
-        throw new Error(
-          "A câmera só funciona em HTTPS ou localhost. No celular, abra pelo PWA publicado em HTTPS."
-        );
-      }
-
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Este navegador não suporta câmera.");
-      }
-
-      let lista = devices;
-
-      if (!lista.length) {
-        lista = await listarCameras();
-      }
-
-      if (!lista.length) {
-        throw new Error("Nenhuma câmera encontrada.");
-      }
-
-      const camera = lista[index] || lista[0];
-
-      const constraints = {
-        audio: false,
-        video: {
-          deviceId: camera?.deviceId ? { exact: camera.deviceId } : undefined,
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-      };
-
-      const reader = new BrowserMultiFormatReader();
-
-      controlsRef.current = await reader.decodeFromConstraints(
-        constraints,
-        videoRef.current,
-        (result) => {
-          if (!result) return;
-
-          const codigo = result.getText();
-
-          if (!codigo || lendoRef.current) return;
-
-          lendoRef.current = true;
-
-          setSeguro(() => setCodigoLido(codigo));
-
-          if (navigator.vibrate) navigator.vibrate([50, 20, 50]);
-
-onScan(codigo);
-fechar();
-        }
+      const listaCameras = dispositivos.filter(
+        (device) => device.kind === "videoinput"
       );
 
-      const stream = videoRef.current?.srcObject;
-      streamRef.current = stream;
+      setCameras(listaCameras);
 
-      await melhorarCamera();
-
-      setSeguro(() => setLoading(false));
+      if (!cameraAtual && listaCameras[0]?.deviceId) {
+        setCameraAtual(listaCameras[0].deviceId);
+      }
     } catch (err) {
-      console.error("Erro no scanner:", err);
-
-      destruirScanner();
-
-      setSeguro(() => {
-        setErro(
-          err?.message ||
-            "Não consegui abrir a câmera. Verifique a permissão do navegador."
-        );
-        setLoading(false);
-      });
-    } finally {
-      iniciandoRef.current = false;
+      console.warn("Não consegui listar câmeras:", err);
     }
   }
 
-  async function melhorarCamera() {
-    const stream = videoRef.current?.srcObject;
-    if (!stream) return;
-
-    const [track] = stream.getVideoTracks();
-    if (!track) return;
-
-    const caps = track.getCapabilities?.() || {};
-    const advanced = [];
-
-    setSeguro(() => setTorchAvailable(Boolean(caps.torch)));
-
-    if (caps.focusMode?.includes("continuous")) {
-      advanced.push({ focusMode: "continuous" });
-    }
-
-    if (caps.exposureMode?.includes("continuous")) {
-      advanced.push({ exposureMode: "continuous" });
-    }
-
-    if (caps.whiteBalanceMode?.includes("continuous")) {
-      advanced.push({ whiteBalanceMode: "continuous" });
-    }
-
-    if (caps.zoom) {
-      advanced.push({
-        zoom: Math.min(caps.zoom.max || 1, Math.max(caps.zoom.min || 1, 1.4)),
+  function criarDetector() {
+    try {
+      detectorRef.current = new window.BarcodeDetector({
+        formats: FORMATOS_CODIGO,
       });
+    } catch (err) {
+      console.warn("Detector com formatos falhou, usando detector padrão:", err);
+
+      try {
+        detectorRef.current = new window.BarcodeDetector();
+      } catch (erroDetector) {
+        console.error("BarcodeDetector indisponível:", erroDetector);
+        detectorRef.current = null;
+        setLeitorDisponivel(false);
+        setStatus("manual");
+      }
+    }
+  }
+
+  function prepararRecursosCamera(stream) {
+    const track = stream.getVideoTracks?.()[0];
+
+    if (!track?.getCapabilities) {
+      setTorchDisponivel(false);
+      setZoomDisponivel(false);
+      return;
     }
 
-    if (advanced.length) {
+    const capacidades = track.getCapabilities();
+
+    const temTorch = Boolean(capacidades.torch);
+    setTorchDisponivel(temTorch);
+    setTorchAtiva(false);
+
+    if ("zoom" in capacidades) {
+      const min = Number(capacidades.zoom?.min || 1);
+      const max = Number(capacidades.zoom?.max || 1);
+      const step = Number(capacidades.zoom?.step || 0.1);
+
+      setZoomDisponivel(max > min);
+      setZoomMin(min);
+      setZoomMax(max);
+      setZoomStep(step);
+      setZoom(min);
+    } else {
+      setZoomDisponivel(false);
+      setZoom(1);
+    }
+  }
+
+  function iniciarLoopLeitura() {
+    if (!detectorRef.current) return;
+
+    scanningRef.current = true;
+    setStatus("lendo");
+
+    async function loop() {
+      if (!scanningRef.current) return;
+
+      rafRef.current = requestAnimationFrame(loop);
+
+      const agora = Date.now();
+
+      if (agora - ultimaTentativaRef.current < 220) return;
+
+      ultimaTentativaRef.current = agora;
+
+      const video = videoRef.current;
+      const detector = detectorRef.current;
+
+      if (!video || !detector || video.readyState < 2) return;
+
       try {
-        await track.applyConstraints({ advanced });
-      } catch {
-        // navegador não aceitou, segue o baile
+        const codigos = await detector.detect(video);
+
+        if (!codigos?.length) return;
+
+        const bruto =
+          codigos[0]?.rawValue ||
+          codigos[0]?.rawValueText ||
+          codigos[0]?.displayValue ||
+          "";
+
+        if (bruto) {
+          await processarCodigo(bruto);
+        }
+      } catch (err) {
+        console.warn("Falha momentânea na leitura:", err);
       }
     }
 
-    try {
-      await videoRef.current.play();
-    } catch {
-      // autoplay mobile pode ignorar
+    loop();
+  }
+
+  async function processarCodigo(codigo) {
+    const codigoLimpo = String(codigo || "").replace(/\s/g, "").trim();
+
+    if (!codigoLimpo) return;
+
+    const agora = Date.now();
+    const ultimo = ultimoCodigoRef.current;
+
+    if (ultimo.codigo === codigoLimpo && agora - ultimo.tempo < 1800) {
+      return;
     }
+
+    ultimoCodigoRef.current = {
+      codigo: codigoLimpo,
+      tempo: agora,
+    };
+
+    setCodigoLido(codigoLimpo);
+    setStatus("lido");
+
+    tocarBip();
+
+    if (navigator.vibrate) {
+      navigator.vibrate([45, 35, 45]);
+    }
+
+    try {
+      await Promise.resolve(onScan?.(codigoLimpo, { modoContinuo }));
+    } catch (err) {
+      console.error("Erro no onScan:", err);
+      setErro("Código lido, mas ocorreu erro ao processar.");
+      setStatus("erro");
+      return;
+    }
+
+    setTimeout(() => {
+      if (modoContinuo) {
+        setCodigoLido("");
+        setStatus(leitorDisponivel ? "lendo" : "manual");
+      }
+    }, 1200);
+  }
+
+  function tocarBip() {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+
+      if (!AudioContext) return;
+
+      const contexto = new AudioContext();
+      const oscillator = contexto.createOscillator();
+      const gain = contexto.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.value = 880;
+      gain.gain.value = 0.04;
+
+      oscillator.connect(gain);
+      gain.connect(contexto.destination);
+
+      oscillator.start();
+
+      setTimeout(() => {
+        oscillator.stop();
+        contexto.close();
+      }, 90);
+    } catch {
+      // Sem drama se o navegador bloquear áudio.
+    }
+  }
+
+  function pararCamera() {
+    scanningRef.current = false;
+
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    detectorRef.current = null;
+    setTorchAtiva(false);
+    setTorchDisponivel(false);
+    setZoomDisponivel(false);
+  }
+
+  function pararScanner() {
+    pararCamera();
+  }
+
+  function fecharScanner() {
+    pararScanner();
+    onClose?.();
+  }
+
+  async function reiniciarScanner() {
+    setErro("");
+    setCodigoLido("");
+    await iniciar(cameraAtual);
   }
 
   async function trocarCamera() {
-    if (devices.length <= 1) return;
+    if (cameras.length <= 1) {
+      setErro("Só encontrei uma câmera neste dispositivo.");
+      return;
+    }
 
-    const next = deviceIndex + 1 >= devices.length ? 0 : deviceIndex + 1;
+    const indiceAtual = cameras.findIndex(
+      (camera) => camera.deviceId === cameraAtual
+    );
 
-    destruirScanner();
-    setDeviceIndex(next);
+    const proxima = cameras[(indiceAtual + 1) % cameras.length];
 
-    setTimeout(() => {
-      iniciarScanner(next);
-    }, 250);
+    if (!proxima?.deviceId) return;
+
+    setCameraAtual(proxima.deviceId);
+    setCodigoLido("");
+    await iniciar(proxima.deviceId);
   }
 
   async function alternarLanterna() {
-    try {
-      const [track] = streamRef.current?.getVideoTracks?.() || [];
-      if (!track) return;
+    const track = streamRef.current?.getVideoTracks?.()[0];
 
+    if (!track) return;
+
+    try {
       await track.applyConstraints({
-        advanced: [{ torch: !torchOn }],
+        advanced: [{ torch: !torchAtiva }],
       });
 
-      setTorchOn((prev) => !prev);
-    } catch {
-      setErro("Lanterna não suportada neste dispositivo.");
+      setTorchAtiva((prev) => !prev);
+    } catch (err) {
+      console.warn("Lanterna indisponível:", err);
+      setErro("Lanterna não disponível nesta câmera.");
     }
   }
 
-  function tentarNovamente() {
-    destruirScanner();
+  async function aplicarZoom(valor) {
+    const novoZoom = Number(valor);
+    setZoom(novoZoom);
 
-    setSeguro(() => {
-      setErro("");
-      setLoading(true);
-    });
+    const track = streamRef.current?.getVideoTracks?.()[0];
 
-    setTimeout(() => iniciarScanner(deviceIndex), 250);
+    if (!track) return;
+
+    try {
+      await track.applyConstraints({
+        advanced: [{ zoom: novoZoom }],
+      });
+    } catch (err) {
+      console.warn("Zoom indisponível:", err);
+    }
   }
 
-  function fechar() {
-    mountedRef.current = false;
-    destruirScanner();
-    onClose();
-  }
+  function enviarManual(e) {
+    e.preventDefault();
 
-  function enviarManual() {
     const codigo = codigoManual.replace(/\D/g, "").trim();
 
-    if (!codigo) return;
-
-    if (navigator.vibrate) navigator.vibrate(30);
-
-    onScan(codigo);
+    if (!codigo) {
+      setErro("Digite um código válido.");
+      return;
+    }
 
     setCodigoManual("");
-    setManualOpen(false);
-    fechar();
+    processarCodigo(codigo);
   }
 
+  const cameraLigada = status === "lendo" || status === "lido" || status === "manual";
+  const lendo = status === "lendo";
+  const lido = status === "lido";
+  const iniciando = status === "iniciando";
+  const emErro = status === "erro";
+
   return (
-    <div className="fixed inset-0 z-[99999] overflow-hidden bg-black text-white">
-      <video
-        ref={videoRef}
-        autoPlay
-        muted
-        playsInline
-        className="absolute inset-0 h-full w-full object-cover"
-      />
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="
+        fixed inset-0 z-[99999]
+        flex flex-col overflow-hidden
+        bg-slate-950 text-white
+      "
+    >
+      {/* VIDEO */}
+      <div className="absolute inset-0">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          className={`
+            h-full w-full object-cover transition
+            ${cameraLigada ? "opacity-100" : "opacity-20"}
+          `}
+        />
 
-      <div className="absolute inset-0 bg-black/35" />
-
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
-        <div className="relative h-72 w-72 rounded-[2rem] border border-emerald-400/40 shadow-[0_0_60px_rgba(52,211,153,0.35)]">
-          <div className="absolute left-0 top-0 h-12 w-12 rounded-tl-[1.5rem] border-l-4 border-t-4 border-emerald-400" />
-          <div className="absolute right-0 top-0 h-12 w-12 rounded-tr-[1.5rem] border-r-4 border-t-4 border-emerald-400" />
-          <div className="absolute bottom-0 left-0 h-12 w-12 rounded-bl-[1.5rem] border-b-4 border-l-4 border-emerald-400" />
-          <div className="absolute bottom-0 right-0 h-12 w-12 rounded-br-[1.5rem] border-b-4 border-r-4 border-emerald-400" />
-
-          <div className="absolute left-4 right-4 top-1/2 h-1 rounded-full bg-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.95)] animate-pulse" />
-
-          <div className="absolute -bottom-16 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/55 px-4 py-2 text-xs text-white/80 backdrop-blur-md">
-            <ScanLine size={15} />
-            Aproxime e mantenha firme
-          </div>
-        </div>
+        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/10 to-black/80" />
       </div>
 
-      <div className="absolute left-0 right-0 top-0 z-50 flex items-center justify-between p-4">
-        <div className="rounded-3xl bg-black/40 px-4 py-3 backdrop-blur-md">
-          <div className="flex items-center gap-2">
-            <Barcode size={20} className="text-emerald-400" />
-            <p className="font-black">Scanner Inteligente</p>
+      {/* HEADER */}
+      <div className="relative z-10 flex items-center justify-between gap-3 p-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/15 shadow-xl backdrop-blur-md">
+            <ScanLine size={25} />
           </div>
 
-          <p className="mt-1 text-xs text-white/70">
-            Mire no código de barras
-          </p>
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-black">
+              Scanner Blindado
+            </h2>
+
+            <p className="truncate text-xs text-white/70">
+              Mire no código de barras
+            </p>
+          </div>
         </div>
 
         <button
           type="button"
-          onClick={fechar}
-          className="flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white backdrop-blur-md transition active:scale-95"
+          onClick={fecharScanner}
+          className="
+            flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
+            bg-white text-slate-950 shadow-xl transition active:scale-95
+          "
         >
-          <X size={24} />
+          <X size={23} />
         </button>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 z-50 p-4">
-        <div className="mx-auto flex max-w-md items-center justify-center gap-3 rounded-3xl border border-white/10 bg-black/50 p-3 backdrop-blur-xl">
-          <button
-            type="button"
-            onClick={trocarCamera}
-            disabled={devices.length <= 1}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-white/10 text-sm font-bold transition active:scale-95 disabled:opacity-40"
-          >
-            <RefreshCcw size={18} />
-            Câmera
-          </button>
+      {/* STATUS */}
+      <div className="relative z-10 px-4">
+        <StatusScanner
+          iniciando={iniciando}
+          lendo={lendo}
+          lido={lido}
+          emErro={emErro}
+          leitorDisponivel={leitorDisponivel}
+          codigoLido={codigoLido}
+          erro={erro}
+        />
+      </div>
 
-          <button
-            type="button"
-            onClick={alternarLanterna}
-            disabled={!torchAvailable}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-white/10 text-sm font-bold transition active:scale-95 disabled:opacity-40"
-          >
-            {torchOn ? <FlashlightOff size={18} /> : <Flashlight size={18} />}
-            Luz
-          </button>
+      {/* ÁREA DE MIRA */}
+      <div className="relative z-10 flex flex-1 items-center justify-center p-6">
+        <div className="relative h-[230px] w-full max-w-sm">
+          <div
+            className={`
+              absolute inset-0 rounded-[2rem] border-2
+              ${
+                lido
+                  ? "border-emerald-400 shadow-[0_0_40px_rgba(52,211,153,0.35)]"
+                  : emErro
+                  ? "border-red-400 shadow-[0_0_40px_rgba(248,113,113,0.25)]"
+                  : "border-white/70 shadow-[0_0_40px_rgba(255,255,255,0.12)]"
+              }
+            `}
+          />
 
-          <button
-            type="button"
-            onClick={() => setManualOpen(true)}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-sm font-black text-white shadow-lg shadow-emerald-500/25 transition active:scale-95"
-          >
-            <Keyboard size={18} />
-            Manual
-          </button>
+          <div className="absolute -left-1 -top-1 h-12 w-12 rounded-tl-[2rem] border-l-4 border-t-4 border-emerald-400" />
+          <div className="absolute -right-1 -top-1 h-12 w-12 rounded-tr-[2rem] border-r-4 border-t-4 border-emerald-400" />
+          <div className="absolute -bottom-1 -left-1 h-12 w-12 rounded-bl-[2rem] border-b-4 border-l-4 border-emerald-400" />
+          <div className="absolute -bottom-1 -right-1 h-12 w-12 rounded-br-[2rem] border-b-4 border-r-4 border-emerald-400" />
+
+          {lendo && (
+            <motion.div
+              initial={{ y: 10, opacity: 0.6 }}
+              animate={{ y: 190, opacity: 1 }}
+              transition={{
+                duration: 1.35,
+                repeat: Infinity,
+                repeatType: "reverse",
+                ease: "easeInOut",
+              }}
+              className="
+                absolute left-5 right-5 top-3 h-1 rounded-full
+                bg-emerald-400 shadow-[0_0_22px_rgba(52,211,153,0.95)]
+              "
+            />
+          )}
+
+          <div className="pointer-events-none absolute inset-x-6 top-1/2 flex -translate-y-1/2 items-center justify-center">
+            <div className="rounded-full border border-white/15 bg-black/35 px-4 py-2 text-xs font-bold text-white/85 backdrop-blur-md">
+              {lido ? "Código capturado ✨" : "Centralize o código aqui"}
+            </div>
+          </div>
         </div>
       </div>
 
-      {codigoLido && (
-        <div className="absolute left-1/2 top-28 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-sm font-black text-white shadow-xl">
-          <CheckCircle2 size={18} />
-          Código lido
-        </div>
-      )}
+      {/* CONTROLES */}
+      <div className="relative z-10 space-y-3 p-4 pb-5">
+        {zoomDisponivel && (
+          <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-bold">
+                <Crosshair size={17} />
+                Zoom
+              </div>
 
-      {loading && (
-        <TelaCentro>
-          <Loader2 className="mx-auto mb-4 animate-spin text-emerald-400" size={54} />
-          <p className="font-black">Abrindo câmera...</p>
-          <p className="mt-2 text-sm text-white/60">
-            Permita o acesso quando o navegador pedir.
-          </p>
-        </TelaCentro>
-      )}
-
-      {erro && (
-        <TelaCentro>
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/15 text-red-300">
-            <AlertTriangle size={30} />
-          </div>
-
-          <h2 className="text-lg font-black">Erro na câmera</h2>
-
-          <p className="mt-2 text-sm text-white/70">{erro}</p>
-
-          <div className="mt-6 flex gap-3">
-            <button
-              type="button"
-              onClick={tentarNovamente}
-              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-white text-sm font-black text-black transition active:scale-95"
-            >
-              <RotateCcw size={18} />
-              Tentar
-            </button>
-
-            <button
-              type="button"
-              onClick={fechar}
-              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-red-600 text-sm font-black text-white transition active:scale-95"
-            >
-              <CameraOff size={18} />
-              Fechar
-            </button>
-          </div>
-        </TelaCentro>
-      )}
-
-      {manualOpen && (
-        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white p-6 text-center text-gray-950 shadow-2xl dark:bg-gray-900 dark:text-white">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
-              <Camera size={30} />
+              <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-black">
+                {zoom.toFixed(1)}x
+              </span>
             </div>
-
-            <h2 className="text-lg font-black">Digitar código</h2>
-
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              Use quando a câmera não conseguir ler.
-            </p>
 
             <input
-              autoFocus
-              inputMode="numeric"
+              type="range"
+              min={zoomMin}
+              max={zoomMax}
+              step={zoomStep}
+              value={zoom}
+              onChange={(e) => aplicarZoom(e.target.value)}
+              className="w-full accent-emerald-400"
+            />
+          </div>
+        )}
+
+        <div className="grid grid-cols-4 gap-2">
+          <BotaoControle
+            icon={RefreshCcw}
+            label="Reiniciar"
+            onClick={reiniciarScanner}
+          />
+
+          <BotaoControle
+            icon={RotateCw}
+            label="Câmera"
+            onClick={trocarCamera}
+            disabled={cameras.length <= 1}
+          />
+
+          <BotaoControle
+            icon={torchAtiva ? LightbulbOff : Lightbulb}
+            label={torchAtiva ? "Apagar" : "Luz"}
+            onClick={alternarLanterna}
+            disabled={!torchDisponivel}
+          />
+
+          <BotaoControle
+            icon={modoContinuo ? Zap : ShieldCheck}
+            label={modoContinuo ? "Contínuo" : "Único"}
+            disabled
+          />
+        </div>
+
+        {/* MANUAL */}
+        <form
+          onSubmit={enviarManual}
+          className="rounded-3xl border border-white/10 bg-white/10 p-3 backdrop-blur-md"
+        >
+          <div className="mb-2 flex items-center gap-2 text-xs font-bold text-white/75">
+            <Keyboard size={16} />
+            Entrada manual, para PC ou câmera teimosa
+          </div>
+
+          <div className="flex gap-2">
+            <input
               value={codigoManual}
               onChange={(e) =>
-                setCodigoManual(e.target.value.replace(/\D/g, "").slice(0, 32))
+                setCodigoManual(e.target.value.replace(/\D/g, ""))
               }
-              placeholder="Código de barras"
-              className="mt-5 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-lg font-bold outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-gray-800 dark:bg-gray-950"
+              inputMode="numeric"
+              placeholder="Digite o código de barras"
+              className="
+                min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/30 px-4 py-3
+                text-sm font-bold text-white outline-none placeholder:text-white/35
+                focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/15
+              "
             />
 
-            <div className="mt-5 flex gap-3">
-              <button
-                type="button"
-                onClick={enviarManual}
-                className="h-12 flex-1 rounded-2xl bg-emerald-700 text-sm font-black text-white transition active:scale-95"
-              >
-                Confirmar
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setManualOpen(false)}
-                className="h-12 flex-1 rounded-2xl bg-gray-100 text-sm font-black text-gray-700 transition active:scale-95 dark:bg-gray-800 dark:text-gray-200"
-              >
-                Cancelar
-              </button>
-            </div>
+            <button
+              type="submit"
+              className="
+                flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
+                bg-emerald-600 text-white shadow-lg shadow-emerald-600/25
+                transition active:scale-95
+              "
+            >
+              <Barcode size={22} />
+            </button>
           </div>
-        </div>
-      )}
-    </div>
+        </form>
+      </div>
+    </motion.div>
   );
 }
 
-function TelaCentro({ children }) {
+function StatusScanner({
+  iniciando,
+  lendo,
+  lido,
+  emErro,
+  leitorDisponivel,
+  codigoLido,
+  erro,
+}) {
+  if (iniciando) {
+    return (
+      <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
+        <Loader2 size={22} className="animate-spin text-emerald-300" />
+        <div>
+          <p className="text-sm font-black">Abrindo câmera...</p>
+          <p className="text-xs text-white/65">Preparando o radar farmacêutico</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (lido) {
+    return (
+      <div className="flex items-center gap-3 rounded-3xl border border-emerald-400/30 bg-emerald-500/15 p-4 text-emerald-100 backdrop-blur-md">
+        <CheckCircle2 size={23} />
+        <div className="min-w-0">
+          <p className="text-sm font-black">Código lido</p>
+          <p className="truncate text-xs text-emerald-100/80">{codigoLido}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (emErro) {
+    return (
+      <div className="flex items-start gap-3 rounded-3xl border border-red-400/30 bg-red-500/15 p-4 text-red-100 backdrop-blur-md">
+        <AlertTriangle size={23} className="mt-0.5 shrink-0" />
+        <div>
+          <p className="text-sm font-black">Scanner em modo segurança</p>
+          <p className="text-xs text-red-100/80">{erro}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!leitorDisponivel) {
+    return (
+      <div className="flex items-start gap-3 rounded-3xl border border-amber-400/30 bg-amber-500/15 p-4 text-amber-100 backdrop-blur-md">
+        <Keyboard size={23} className="mt-0.5 shrink-0" />
+        <div>
+          <p className="text-sm font-black">Leitura automática indisponível</p>
+          <p className="text-xs text-amber-100/80">
+            A câmera pode abrir, mas este navegador precisa da entrada manual.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (lendo) {
+    return (
+      <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
+        <Camera size={22} className="text-emerald-300" />
+        <div>
+          <p className="text-sm font-black">Scanner ativo</p>
+          <p className="text-xs text-white/65">
+            Boa luz, código reto e câmera firme. O resto é feitiçaria óptica.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="absolute inset-0 z-[55] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white/10 p-6 text-center shadow-2xl backdrop-blur-xl">
-        {children}
+    <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
+      <CameraOff size={22} />
+      <div>
+        <p className="text-sm font-black">Câmera pausada</p>
+        <p className="text-xs text-white/65">Use reiniciar ou digite manualmente.</p>
       </div>
     </div>
   );
 }
+
+function BotaoControle({ icon: Icon, label, onClick, disabled = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="
+        flex min-h-[68px] flex-col items-center justify-center gap-1 rounded-2xl
+        border border-white/10 bg-white/10 px-2 py-3 text-xs font-bold
+        text-white backdrop-blur-md transition active:scale-95
+        disabled:cursor-not-allowed disabled:opacity-40
+      "
+    >
+      <Icon size={20} />
+      {label}
+    </button>
+  );
+}
+
+export default Scanner;

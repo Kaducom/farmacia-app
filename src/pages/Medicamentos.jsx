@@ -347,31 +347,44 @@ if (codigoScanner) {
     setAbrirScanner(true);
   }
 
-async function aoEscanear(codigo) {
-  setAbrirScanner(false);
+async function aoEscanear(codigo, opcoes = {}) {
+  const modoContinuo = opcoes.modoContinuo === true;
+
+  if (!modoContinuo) {
+    setAbrirScanner(false);
+  }
+
   addToast("Código lido 🔎", "info");
 
-  // 1. Primeiro procura no estoque atual
-  const existenteEstoque = medicamentos.find((m) => m.codigo === codigo);
+  const codigoLimpo = String(codigo || "").trim();
+
+  if (!codigoLimpo) {
+    addToast("Código inválido 😕", "erro");
+    return;
+  }
+
+  const existenteEstoque = medicamentos.find(
+    (m) => String(m.codigo || "") === codigoLimpo
+  );
 
   if (existenteEstoque) {
     await db.medicamentos.update(existenteEstoque.id, {
-      quantidade: (existenteEstoque.quantidade || 1) + 1,
+      quantidade: Number(existenteEstoque.quantidade || 1) + 1,
     });
 
-    addToast("Produto já cadastrado. +1 unidade 📦", "ok");
+    addToast("Produto já contado. +1 unidade 📦", "ok");
     await carregar();
     return;
   }
 
-  // 2. Depois procura na sua base local aprendida
   const produtoLocal = await db.produtosCodigo
     .where("codigo")
-    .equals(codigo)
+    .equals(codigoLimpo)
     .first();
 
   limpar();
-  setCodigoScanner(codigo);
+
+  setCodigoScanner(codigoLimpo);
   setQuantidade(1);
   setValidade("");
 
@@ -381,14 +394,14 @@ async function aoEscanear(codigo) {
     setDiasRemover(produtoLocal.diasRemover || 7);
     setDiasPre(produtoLocal.diasPreVencido || "");
 
-    addToast("Produto encontrado na sua base 🧠", "ok");
+    addToast("Produto reconhecido. Só informe a validade ⚡", "ok");
   } else {
     setNome("");
     setImagem(null);
     setDiasRemover(7);
     setDiasPre(2);
 
-    addToast("Novo código. Cadastre uma vez e eu aprendo ✍️", "aviso");
+    addToast("Novo produto. Cadastre uma vez e eu aprendo 🧠", "aviso");
   }
 
   setAbrirModal(true);
@@ -758,8 +771,12 @@ async function aoEscanear(codigo) {
       {/* SCANNER */}
       <AnimatePresence>
         {abrirScanner && (
-          <Scanner onClose={() => setAbrirScanner(false)} onScan={aoEscanear} />
-        )}
+        <Scanner
+          onClose={() => setAbrirScanner(false)}
+          onScan={aoEscanear}
+          modoContinuo={true}
+        />  
+)}
       </AnimatePresence>
     </div>
   );

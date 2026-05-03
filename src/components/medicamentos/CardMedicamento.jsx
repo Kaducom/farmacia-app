@@ -153,44 +153,49 @@ function CardMedicamento({
           dark:border-gray-800 dark:bg-gray-900
         "
       >
-        {/* IMAGEM */}
-        {m.imagem ? (
-          <div className="relative">
-            <img
-              src={m.imagem}
-              alt={m.nome || "Imagem do medicamento"}
-              onClick={(e) => {
-                e.stopPropagation();
-                setPreview(m.imagem);
-              }}
-              className="h-48 w-full cursor-pointer object-cover"
-            />
+{/* IMAGEM */}
+{m.imagem ? (
+  <div className="relative">
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        setPreview(m.imagem);
+      }}
+      className="block h-48 w-full overflow-hidden text-left"
+    >
+      <img
+        src={m.imagem}
+        alt={m.nome || "Imagem do medicamento"}
+        className="h-full w-full object-cover transition duration-300 hover:scale-105"
+      />
+    </button>
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
 
-            <div className="absolute right-4 top-4">
-              <StatusBadge statusInfo={statusInfo} StatusIcon={StatusIcon} />
-            </div>
-          </div>
-        ) : (
-          <div
-            className="
-              flex h-24 items-center justify-between bg-gradient-to-br
-              from-emerald-700 to-emerald-900 px-5 text-white
-            "
-          >
-            <div>
-              <p className="text-xs font-medium text-white/70">
-                Medicamento
-              </p>
-              <p className="text-lg font-bold">Sem imagem</p>
-            </div>
+    <div className="pointer-events-none absolute right-4 top-4">
+      <StatusBadge statusInfo={statusInfo} StatusIcon={StatusIcon} />
+    </div>
+  </div>
+) : (
+  <div
+    className="
+      flex h-24 items-center justify-between bg-gradient-to-br
+      from-emerald-700 to-emerald-900 px-5 text-white
+    "
+  >
+    <div>
+      <p className="text-xs font-medium text-white/70">
+        Medicamento
+      </p>
+      <p className="text-lg font-bold">Sem imagem</p>
+    </div>
 
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
-              <ImageIcon size={28} />
-            </div>
-          </div>
-        )}
+    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
+      <ImageIcon size={28} />
+    </div>
+  </div>
+)}
 
         {/* BODY */}
         <div className="space-y-4 p-5">

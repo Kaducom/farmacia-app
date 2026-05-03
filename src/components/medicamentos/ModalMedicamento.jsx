@@ -246,11 +246,12 @@ function ModalMedicamento({
                   </label>
                 ) : (
                   <div className="relative overflow-hidden rounded-3xl border border-gray-200 shadow-xl dark:border-gray-800">
-                    <img
-                      src={imagem}
-                      alt="Preview do medicamento"
-                      className="h-56 w-full object-cover"
-                    />
+                   <img
+                    src={imagem}
+                    alt="Preview do medicamento"
+                    onClick={() => window.open(imagem, "_blank")}
+                    className="h-56 w-full cursor-pointer object-cover"
+                  />
 
                     <div className="absolute inset-0 flex items-end justify-center gap-3 bg-gradient-to-t from-black/70 via-black/15 to-transparent p-4">
                       <label className="flex cursor-pointer items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-bold text-gray-900 shadow-lg transition active:scale-95">

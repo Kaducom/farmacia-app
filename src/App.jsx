@@ -1,4 +1,6 @@
 import { useState } from "react";
+import Mapeamentos from "./pages/Mapeamentos";
+import Backup from "./pages/Backup";
 import {
   Pill,
   FileText,
@@ -13,6 +15,8 @@ import Posologia from "./pages/Posologia";
 import Doutor from "./pages/Doutor";
 import Menu from "./pages/Menu";
 import BaseProdutos from "./pages/BaseProdutos";
+import Perfil from "./pages/Perfil";
+import Notificacoes from "./pages/Notificacoes";
 
 function App() {
   const [pagina, setPagina] = useState("medicamentos");
@@ -24,6 +28,10 @@ function App() {
     doutor: "Assistente",
     menu: "Menu",
     baseProdutos: "Base de Produtos",
+    mapeamentos: "Mapeamentos",
+    backup: "Backup",
+    perfil: "Perfil",
+    notificacoes: "Notificações",
   };
 
   function renderPagina() {
@@ -45,6 +53,18 @@ function App() {
 
       case "baseProdutos":
         return <BaseProdutos />;
+
+      case "mapeamentos":
+        return <Mapeamentos />;
+
+      case "backup":
+        return <Backup />;
+
+      case "perfil":
+        return <Perfil />;
+
+      case "notificacoes":
+        return <Notificacoes />;
 
       default:
         return <Medicamentos />;
@@ -111,7 +131,14 @@ function App() {
           <Tab
             icon={MenuIcon}
             label="Menu"
-            ativa={pagina === "menu" || pagina === "baseProdutos"}
+            ativa={
+            pagina === "menu" ||
+            pagina === "baseProdutos" ||
+            pagina === "mapeamentos" ||
+            pagina === "backup" ||
+            pagina === "perfil" ||
+            pagina === "notificacoes"
+          }
             onClick={() => setPagina("menu")}
           />
         </div>
