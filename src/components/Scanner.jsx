@@ -679,11 +679,11 @@ async function listarCameras() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="
-        fixed inset-0 z-[99999]
-        flex flex-col overflow-hidden
-        bg-slate-950 text-white
-      "
+     className="
+  fixed inset-0 z-[99999]
+  flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden
+  bg-slate-950 text-white
+"
     >
       {/* VIDEO */}
       <div className="absolute inset-0">
@@ -752,8 +752,8 @@ async function listarCameras() {
       </div>
 
       {/* MIRA */}
-      <div className="relative z-10 flex flex-1 items-center justify-center p-6">
-        <div className="relative h-[230px] w-full max-w-sm">
+      <div className="relative z-10 flex min-h-[180px] shrink-0 items-center justify-center p-4 sm:min-h-[240px] sm:p-6">
+        <div className="relative h-[170px] w-full max-w-sm sm:h-[230px]">
           <div
             className={`
               absolute inset-0 rounded-[2rem] border-2
@@ -777,7 +777,7 @@ async function listarCameras() {
           {lendo && (
             <motion.div
               initial={{ y: 10, opacity: 0.7 }}
-              animate={{ y: 190, opacity: 1 }}
+              animate={{ y: window.innerWidth >= 640 ? 190 : 135, opacity: 1 }}
               transition={{
                 duration: 1.25,
                 repeat: Infinity,
@@ -804,7 +804,12 @@ async function listarCameras() {
       </div>
 
       {/* CONTROLES */}
-      <div className="relative z-10 space-y-3 p-4 pb-5">
+      <div
+  className="
+    relative z-10 min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain
+    p-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]
+  "
+>
 {codigoBloqueado ? (
   <button
     type="button"
