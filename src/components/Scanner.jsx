@@ -777,7 +777,7 @@ async function listarCameras() {
           {lendo && (
             <motion.div
               initial={{ y: 10, opacity: 0.7 }}
-              animate={{ y: 135, opacity: 1 }}
+              animate={{ y: window.innerWidth >= 640 ? 190 : 135, opacity: 1 }}
               transition={{
                 duration: 1.25,
                 repeat: Infinity,

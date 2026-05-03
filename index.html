@@ -1,23 +1,48 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
-    <script>
-  const dark = localStorage.getItem("dark") === "true";
-  if (dark) {
-    document.documentElement.classList.add("dark");
-  }
-</script>
-    <link rel="icon" href="/icons/favicon.ico" />
-<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
-<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-<link rel="manifest" href="/manifest.json" />
+    <meta charset="UTF-8" />
 
-<meta name="theme-color" content="#047857" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Farmácia" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+
+    <title>Farmácia</title>
+
+    <link rel="icon" href="/icons/favicon.ico" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="/icons/favicon-16x16.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="/icons/favicon-32x32.png"
+    />
+
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <meta name="theme-color" content="#047857" />
+
+    <meta name="application-name" content="Farmácia" />
+    <meta name="apple-mobile-web-app-title" content="Farmácia" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+
+    <meta
+      name="description"
+      content="Controle de medicamentos, validade, estoque e scanner."
+    />
   </head>
+
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
