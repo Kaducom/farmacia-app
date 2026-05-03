@@ -20,10 +20,13 @@ import {
   Lightbulb,
   LightbulbOff,
   Loader2,
+  PackageCheck,
+  Pill,
   RefreshCcw,
   RotateCw,
   ScanLine,
   ShieldCheck,
+  Trash2,
   X,
   Zap,
 } from "lucide-react";
@@ -47,7 +50,13 @@ function criarHints() {
   return hints;
 }
 
-function Scanner({ onClose, onScan, modoContinuo = false }) {
+function Scanner({
+  onClose,
+  onScan,
+  modoContinuo = false,
+  itensPreview = [],
+  onLimparPreview,
+}) {
   const videoRef = useRef(null);
   const readerRef = useRef(null);
   const controlsRef = useRef(null);
@@ -737,6 +746,11 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
           </div>
         )}
 
+        <MiniPreviewScanner
+          itens={itensPreview}
+          onLimpar={onLimparPreview}
+        />
+
         <div className="grid grid-cols-4 gap-2">
           <BotaoControle
             icon={RefreshCcw}
@@ -934,6 +948,114 @@ function BotaoControle({ icon: Icon, label, onClick, disabled = false }) {
       <Icon size={20} />
       {label}
     </button>
+  );
+}
+function MiniPreviewScanner({ itens = [], onLimpar }) {
+  if (!itens.length) {
+    return (
+      <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 text-white">
+            <PackageCheck size={21} />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-black">Itens escaneados</p>
+            <p className="text-xs text-white/60">
+              Os produtos somados aparecem aqui em tempo real.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const ultimo = itens[0];
+  const restantes = itens.slice(1);
+
+  return (
+    <div className="rounded-3xl border border-emerald-400/20 bg-emerald-500/15 p-3 text-emerald-50 shadow-2xl backdrop-blur-md">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <PackageCheck size={18} />
+          <p className="text-sm font-black">Adicionado agora</p>
+        </div>
+
+        {onLimpar && (
+          <button
+            type="button"
+            onClick={onLimpar}
+            className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 text-white transition active:scale-95"
+            title="Limpar preview"
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3 rounded-2xl bg-black/20 p-3">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/15">
+          {ultimo.imagem ? (
+            <img
+              src={ultimo.imagem}
+              alt={ultimo.nome || "Medicamento"}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <Pill size={24} />
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-base font-black">
+            {ultimo.nome || "Medicamento"}
+          </p>
+
+          <p className="mt-0.5 truncate text-xs text-emerald-100/75">
+            {ultimo.validade ? `Val: ${ultimo.validade}` : "Sem validade exibida"}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-emerald-500 px-3 py-2 text-center text-white shadow-lg shadow-emerald-500/20">
+          <p className="text-[10px] font-bold leading-none">Qtd</p>
+          <p className="text-xl font-black leading-none">
+            {ultimo.quantidade || 1}
+          </p>
+        </div>
+      </div>
+
+      {restantes.length > 0 && (
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+          {restantes.map((item) => (
+            <div
+              key={item.id}
+              className="flex min-w-[160px] items-center gap-2 rounded-2xl bg-black/20 p-2"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/15">
+                {item.imagem ? (
+                  <img
+                    src={item.imagem}
+                    alt={item.nome || "Medicamento"}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <Pill size={18} />
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-black">
+                  {item.nome || "Medicamento"}
+                </p>
+                <p className="text-[11px] text-emerald-100/70">
+                  x{item.quantidade || 1}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

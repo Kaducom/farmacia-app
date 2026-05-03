@@ -46,6 +46,7 @@ function Medicamentos() {
   const [abrirScanner, setAbrirScanner] = useState(false);
   const [scannerKey, setScannerKey] = useState(0);
   const [modoReposicao, setModoReposicao] = useState(false);
+  const [scannerPreviewItens, setScannerPreviewItens] = useState([]);
 
   const [inputValidadeRapida, setInputValidadeRapida] = useState(null);
   const [codigoScanner, setCodigoScanner] = useState("");
@@ -391,24 +392,49 @@ function Medicamentos() {
   // 📷 FLUXO DO SCANNER
   // =============================
 
-  function fecharScannerSeguro() {
-    setAbrirScanner(false);
-    setFabOpen(false);
+function fecharScannerSeguro() {
+  setAbrirScanner(false);
+  setFabOpen(false);
+  setScannerPreviewItens([]);
 
-    setTimeout(() => {
-      setScannerKey((prev) => prev + 1);
-    }, 0);
-  }
-
-  async function iniciarScanner() {
-    setFabOpen(false);
-    setAbrirModal(false);
-    setConfirmar(null);
-    setPreview(null);
-
+  setTimeout(() => {
     setScannerKey((prev) => prev + 1);
-    setAbrirScanner(true);
-  }
+  }, 0);
+}
+
+  function adicionarPreviewScanner(item) {
+  const agora = Date.now();
+
+  setScannerPreviewItens((prev) => {
+    const semMesmoCodigo = prev.filter(
+      (p) => String(p.codigo || "") !== String(item.codigo || "")
+    );
+
+    const novoItem = {
+      id: `${item.codigo}-${agora}`,
+      codigo: item.codigo,
+      nome: item.nome || "Medicamento",
+      imagem: item.imagem || null,
+      validade: item.validade || "",
+      quantidade: Number(item.quantidade || 1),
+      tipo: item.tipo || "incrementado",
+      atualizadoEm: agora,
+    };
+
+    return [novoItem, ...semMesmoCodigo].slice(0, 5);
+  });
+}
+
+async function iniciarScanner() {
+  setFabOpen(false);
+  setAbrirModal(false);
+  setConfirmar(null);
+  setPreview(null);
+  setScannerPreviewItens([]);
+
+  setScannerKey((prev) => prev + 1);
+  setAbrirScanner(true);
+}
 
   async function aoEscanear(codigo) {
     const codigoLimpo = String(codigo || "").trim();
@@ -436,20 +462,31 @@ function Medicamentos() {
           .first();
       }
 
-      if (existenteEstoque) {
-        await db.medicamentos.update(existenteEstoque.id, {
-          quantidade: Number(existenteEstoque.quantidade || 1) + 1,
-        });
+if (existenteEstoque) {
+  const novaQuantidade = Number(existenteEstoque.quantidade || 1) + 1;
 
-        addToast("Produto já contado. +1 unidade 📦", "ok");
+  await db.medicamentos.update(existenteEstoque.id, {
+    quantidade: novaQuantidade,
+  });
 
-        await carregar();
+  adicionarPreviewScanner({
+    codigo: codigoLimpo,
+    nome: existenteEstoque.nome || "Medicamento",
+    imagem: existenteEstoque.imagem || null,
+    validade: existenteEstoque.validade || "",
+    quantidade: novaQuantidade,
+    tipo: "incrementado",
+  });
 
-        return {
-          manterAberto: true,
-          continuarScanner: true,
-        };
-      }
+  addToast(`+1 ${existenteEstoque.nome || "produto"} 📦`, "ok");
+
+  await carregar();
+
+  return {
+    manterAberto: true,
+    continuarScanner: true,
+  };
+}
 
       let produtoLocal = await db.produtosCodigo
         .where("codigo")
@@ -893,6 +930,8 @@ function Medicamentos() {
             onClose={fecharScannerSeguro}
             onScan={aoEscanear}
             modoContinuo={true}
+            itensPreview={scannerPreviewItens}
+            onLimparPreview={() => setScannerPreviewItens([])}
           />
         )}
       </AnimatePresence>
