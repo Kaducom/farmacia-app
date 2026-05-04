@@ -2,37 +2,114 @@
 @tailwind components;
 @tailwind utilities;
 
-html.dark {
-  background: #111827;
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
-/* 🔥 ESSA PARTE É O SEGREDO */
-html, body, #root {
-  height: 100%;
+html,
+body,
+#root {
+  min-height: 100%;
+  width: 100%;
+  background: #0f172a;
+}
+
+html {
+  scroll-behavior: smooth;
+  @apply bg-gray-100 dark:bg-gray-900;
 }
 
 body {
-  @apply bg-gray-100 dark:bg-gray-900 text-black dark:text-white;
+  margin: 0;
+  overscroll-behavior-y: none;
+  @apply bg-gray-100 text-black dark:bg-gray-900 dark:text-white;
   transition: background 0.3s, color 0.3s;
 }
-* 
-body,
+
+* {
+  box-sizing: border-box;
+}
+
 button,
 input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+input,
+textarea,
+select,
 div {
   transition:
     background-color 0.25s ease,
     color 0.25s ease,
-    border-color 0.25s ease;
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
 }
-html {
-  scroll-behavior: smooth;
+
+html.dark {
+  background: #111827;
 }
+
+/* SAFE AREA iOS / PWA */
+.pt-safe {
+  padding-top: var(--safe-top);
+}
+
+.pb-safe {
+  padding-bottom: var(--safe-bottom);
+}
+
+.app-main-safe {
+  padding-bottom: calc(6.5rem + var(--safe-bottom));
+}
+
+.app-bottom-nav-safe {
+  padding-bottom: calc(0.5rem + var(--safe-bottom));
+}
+
+/* ANIMAÇÕES */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slideIn {
+  animation: slideIn 0.3s ease;
+}
+
 @keyframes slideInRight {
   from {
     opacity: 0;
     transform: translateX(40px) scale(0.98);
   }
+
   to {
     opacity: 1;
     transform: translateX(0) scale(1);
@@ -44,6 +121,7 @@ html {
     opacity: 1;
     transform: translateX(0) scale(1);
   }
+
   to {
     opacity: 0;
     transform: translateX(-40px) scale(0.98);
@@ -57,10 +135,12 @@ html {
 .animate-exit {
   animation: slideOutLeft 0.25s cubic-bezier(0.4, 0, 1, 1);
 }
+
 @keyframes modalUp {
   from {
     transform: translateY(100%);
   }
+
   to {
     transform: translateY(0);
   }
@@ -69,19 +149,13 @@ html {
 .animate-modal {
   animation: modalUp 0.3s ease;
 }
-/* SAFE AREA estilo iOS */
-.pt-safe {
-  padding-top: env(safe-area-inset-top);
-}
 
-.pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
-}
 @keyframes slideUp {
   from {
     transform: translateY(100%);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;

@@ -81,12 +81,6 @@ function Scanner({
   const [torchDisponivel, setTorchDisponivel] = useState(false);
   const [torchAtiva, setTorchAtiva] = useState(false);
 
-  const [zoomDisponivel, setZoomDisponivel] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [zoomMin, setZoomMin] = useState(1);
-  const [zoomMax, setZoomMax] = useState(1);
-  const [zoomStep, setZoomStep] = useState(0.1);
-
   useEffect(() => {
     mountedRef.current = true;
     fechandoRef.current = false;
@@ -138,88 +132,87 @@ function Scanner({
       setStatus("bloqueado");
     });
   }
+
   function ehCameraUltraWide(camera) {
-  const label = String(camera?.label || "").toLowerCase();
+    const label = String(camera?.label || "").toLowerCase();
 
-  return (
-    label.includes("ultra") ||
-    label.includes("wide") ||
-    label.includes("0.5") ||
-    label.includes("0,5") ||
-    label.includes("macro") ||
-    label.includes("grande angular")
-  );
-}
-
-function ehCameraTraseira(camera) {
-  const label = String(camera?.label || "").toLowerCase();
-
-  return (
-    label.includes("back") ||
-    label.includes("rear") ||
-    label.includes("environment") ||
-    label.includes("traseira") ||
-    label.includes("ambiente")
-  );
-}
-
-function escolherCameraPrincipal(lista = []) {
-  if (!lista.length) return null;
-
-  const traseiras = lista.filter(ehCameraTraseira);
-  const candidatas = traseiras.length ? traseiras : lista;
-
-  const principal =
-    candidatas.find((cam) => !ehCameraUltraWide(cam)) ||
-    candidatas[0] ||
-    lista[0];
-
-  return principal || null;
-}
-
-async function listarCamerasDisponiveis() {
-  try {
-    if (!navigator.mediaDevices?.enumerateDevices) return [];
-
-    const dispositivos = await navigator.mediaDevices.enumerateDevices();
-
-    const lista = dispositivos.filter(
-      (device) => device.kind === "videoinput"
+    return (
+      label.includes("ultra") ||
+      label.includes("wide") ||
+      label.includes("0.5") ||
+      label.includes("0,5") ||
+      label.includes("macro") ||
+      label.includes("grande angular")
     );
-
-    setCameras(lista);
-
-    return lista;
-  } catch (err) {
-    console.warn("Não consegui listar câmeras:", err);
-    return [];
   }
-}
 
-async function aplicarZoomPrincipal() {
-  const stream = videoRef.current?.srcObject;
-  const track = stream?.getVideoTracks?.()[0];
+  function ehCameraTraseira(camera) {
+    const label = String(camera?.label || "").toLowerCase();
 
-  if (!track?.getCapabilities) return;
-
-  const capacidades = track.getCapabilities();
-
-  if (!("zoom" in capacidades)) return;
-
-  const min = Number(capacidades.zoom?.min || 1);
-  const max = Number(capacidades.zoom?.max || 1);
-  const zoomIdeal = Math.min(max, Math.max(min, 1));
-
-  try {
-    await track.applyConstraints({
-      advanced: [{ zoom: zoomIdeal }],
-    });
-
-    setZoom(zoomIdeal);
-  } catch (err) {
-    console.warn("Não consegui aplicar zoom 1x:", err);
+    return (
+      label.includes("back") ||
+      label.includes("rear") ||
+      label.includes("environment") ||
+      label.includes("traseira") ||
+      label.includes("ambiente")
+    );
   }
-}
+
+  function escolherCameraPrincipal(lista = []) {
+    if (!lista.length) return null;
+
+    const traseiras = lista.filter(ehCameraTraseira);
+    const candidatas = traseiras.length ? traseiras : lista;
+
+    const principal =
+      candidatas.find((cam) => !ehCameraUltraWide(cam)) ||
+      candidatas[0] ||
+      lista[0];
+
+    return principal || null;
+  }
+
+  async function listarCamerasDisponiveis() {
+    try {
+      if (!navigator.mediaDevices?.enumerateDevices) return [];
+
+      const dispositivos = await navigator.mediaDevices.enumerateDevices();
+
+      const lista = dispositivos.filter(
+        (device) => device.kind === "videoinput"
+      );
+
+      setCameras(lista);
+
+      return lista;
+    } catch (err) {
+      console.warn("Não consegui listar câmeras:", err);
+      return [];
+    }
+  }
+
+  async function aplicarZoomPrincipal() {
+    const stream = videoRef.current?.srcObject;
+    const track = stream?.getVideoTracks?.()[0];
+
+    if (!track?.getCapabilities) return;
+
+    const capacidades = track.getCapabilities();
+
+    if (!("zoom" in capacidades)) return;
+
+    const min = Number(capacidades.zoom?.min || 1);
+    const max = Number(capacidades.zoom?.max || 1);
+    const zoomIdeal = Math.min(max, Math.max(min, 1));
+
+    try {
+      await track.applyConstraints({
+        advanced: [{ zoom: zoomIdeal }],
+      });
+    } catch (err) {
+      console.warn("Não consegui aplicar zoom 1x:", err);
+    }
+  }
 
   async function iniciar(deviceId = "") {
     try {
@@ -303,40 +296,40 @@ async function aplicarZoomPrincipal() {
         }
       };
 
-let controls;
-let deviceIdFinal = deviceId;
+      let controls;
+      let deviceIdFinal = deviceId;
 
-if (!deviceIdFinal && !iniciouComCameraEscolhidaRef.current) {
-  const lista = await listarCamerasDisponiveis();
-  const principal = escolherCameraPrincipal(lista);
+      if (!deviceIdFinal && !iniciouComCameraEscolhidaRef.current) {
+        const lista = await listarCamerasDisponiveis();
+        const principal = escolherCameraPrincipal(lista);
 
-  if (principal?.deviceId) {
-    deviceIdFinal = principal.deviceId;
-    setCameraAtual(principal.deviceId);
-    iniciouComCameraEscolhidaRef.current = true;
-  }
-}
+        if (principal?.deviceId) {
+          deviceIdFinal = principal.deviceId;
+          setCameraAtual(principal.deviceId);
+          iniciouComCameraEscolhidaRef.current = true;
+        }
+      }
 
-if (deviceIdFinal) {
-  controls = await reader.decodeFromVideoDevice(
-    deviceIdFinal,
-    video,
-    callback
-  );
-} else {
-  controls = await reader.decodeFromConstraints(
-    {
-      audio: false,
-      video: {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-      },
-    },
-    video,
-    callback
-  );
-}
+      if (deviceIdFinal) {
+        controls = await reader.decodeFromVideoDevice(
+          deviceIdFinal,
+          video,
+          callback
+        );
+      } else {
+        controls = await reader.decodeFromConstraints(
+          {
+            audio: false,
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+          },
+          video,
+          callback
+        );
+      }
 
       controlsRef.current = controls;
 
@@ -344,13 +337,13 @@ if (deviceIdFinal) {
         setStatus("lendo");
       });
 
-setTimeout(() => {
-  if (!fechandoRef.current) {
-    listarCameras();
-    prepararRecursosCamera();
-    aplicarZoomPrincipal();
-  }
-}, 500);
+      setTimeout(() => {
+        if (!fechandoRef.current) {
+          listarCameras();
+          prepararRecursosCamera();
+          aplicarZoomPrincipal();
+        }
+      }, 500);
     } catch (err) {
       console.error("Erro ao iniciar scanner:", err);
 
@@ -379,17 +372,17 @@ setTimeout(() => {
     }
   }
 
-async function listarCameras() {
-  const lista = await listarCamerasDisponiveis();
+  async function listarCameras() {
+    const lista = await listarCamerasDisponiveis();
 
-  if (!cameraAtual && lista.length > 0) {
-    const principal = escolherCameraPrincipal(lista);
+    if (!cameraAtual && lista.length > 0) {
+      const principal = escolherCameraPrincipal(lista);
 
-    if (principal?.deviceId) {
-      setCameraAtual(principal.deviceId);
+      if (principal?.deviceId) {
+        setCameraAtual(principal.deviceId);
+      }
     }
   }
-}
 
   function prepararRecursosCamera() {
     const stream = videoRef.current?.srcObject;
@@ -397,7 +390,6 @@ async function listarCameras() {
 
     setTorchDisponivel(false);
     setTorchAtiva(false);
-    setZoomDisponivel(false);
 
     if (!track?.getCapabilities) return;
 
@@ -405,18 +397,6 @@ async function listarCameras() {
 
     if (capacidades.torch) {
       setTorchDisponivel(true);
-    }
-
-    if ("zoom" in capacidades) {
-      const min = Number(capacidades.zoom?.min || 1);
-      const max = Number(capacidades.zoom?.max || 1);
-      const step = Number(capacidades.zoom?.step || 0.1);
-
-      setZoomMin(min);
-      setZoomMax(max);
-      setZoomStep(step);
-      setZoom(min);
-      setZoomDisponivel(max > min);
     }
   }
 
@@ -553,7 +533,6 @@ async function listarCameras() {
 
     setTorchDisponivel(false);
     setTorchAtiva(false);
-    setZoomDisponivel(false);
   }
 
   function pararScanner() {
@@ -606,6 +585,7 @@ async function listarCameras() {
 
     processingRef.current = false;
     codigoBloqueadoRef.current = "";
+    iniciouComCameraEscolhidaRef.current = true;
 
     await iniciar(proxima.deviceId);
   }
@@ -626,24 +606,6 @@ async function listarCameras() {
       console.warn("Lanterna indisponível:", err);
       setErro("Lanterna não disponível nesta câmera.");
       setStatus("erro");
-    }
-  }
-
-  async function aplicarZoom(valor) {
-    const novoZoom = Number(valor);
-    setZoom(novoZoom);
-
-    const stream = videoRef.current?.srcObject;
-    const track = stream?.getVideoTracks?.()[0];
-
-    if (!track) return;
-
-    try {
-      await track.applyConstraints({
-        advanced: [{ zoom: novoZoom }],
-      });
-    } catch (err) {
-      console.warn("Zoom indisponível:", err);
     }
   }
 
@@ -679,13 +641,12 @@ async function listarCameras() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-     className="
-  fixed inset-0 z-[99999]
-  flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden
-  bg-slate-950 text-white
-"
+      className="
+        fixed inset-0 z-[99999]
+        flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden
+        bg-slate-950 text-white
+      "
     >
-      {/* VIDEO */}
       <div className="absolute inset-0">
         <video
           ref={videoRef}
@@ -701,10 +662,19 @@ async function listarCameras() {
         <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/10 to-black/85" />
       </div>
 
-      {/* HEADER */}
-      <div className="relative z-10 flex items-center justify-between gap-3 p-4">
+      <div
+        className="
+          relative z-20 flex items-center justify-between gap-3
+          px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)]
+        "
+      >
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/15 shadow-xl backdrop-blur-md">
+          <div
+            className="
+              flex h-12 w-12 items-center justify-center rounded-2xl
+              border border-white/10 bg-white/15 shadow-xl backdrop-blur-md
+            "
+          >
             <ScanLine size={25} />
           </div>
 
@@ -712,7 +682,7 @@ async function listarCameras() {
             <h2 className="truncate text-lg font-black">Scanner</h2>
 
             <p className="truncate text-xs text-white/70">
-              Mire no código de barras
+              Mira segura, leitura rápida
             </p>
           </div>
         </div>
@@ -724,20 +694,30 @@ async function listarCameras() {
             e.stopPropagation();
             fecharScanner();
           }}
+          onTouchStart={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fecharScanner();
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fecharScanner();
+          }}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
           }}
           className="
-            flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
-            bg-white text-slate-950 shadow-xl transition active:scale-95
+            flex h-14 w-14 shrink-0 items-center justify-center rounded-3xl
+            bg-white text-slate-950 shadow-2xl shadow-black/30
+            ring-1 ring-black/5 transition active:scale-95
           "
         >
-          <X size={23} />
+          <X size={25} strokeWidth={3} />
         </button>
       </div>
 
-      {/* STATUS */}
       <div className="relative z-10 px-4">
         <StatusScanner
           iniciando={iniciando}
@@ -751,9 +731,13 @@ async function listarCameras() {
         />
       </div>
 
-      {/* MIRA */}
-      <div className="relative z-10 flex min-h-[180px] shrink-0 items-center justify-center p-4 sm:min-h-[240px] sm:p-6">
-        <div className="relative h-[170px] w-full max-w-sm sm:h-[230px]">
+      <div
+        className="
+          relative z-10 flex min-h-[170px] shrink-0 items-center justify-center
+          p-4 sm:min-h-[240px] sm:p-6
+        "
+      >
+        <div className="relative h-[165px] w-full max-w-sm sm:h-[230px]">
           <div
             className={`
               absolute inset-0 rounded-[2rem] border-2
@@ -777,7 +761,7 @@ async function listarCameras() {
           {lendo && (
             <motion.div
               initial={{ y: 10, opacity: 0.7 }}
-              animate={{ y: window.innerWidth >= 640 ? 190 : 135, opacity: 1 }}
+              animate={{ y: 130, opacity: 1 }}
               transition={{
                 duration: 1.25,
                 repeat: Infinity,
@@ -803,52 +787,48 @@ async function listarCameras() {
         </div>
       </div>
 
-      {/* CONTROLES */}
       <div
-  className="
-    relative z-10 min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain
-    p-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]
-  "
->
-{codigoBloqueado ? (
-  <button
-    type="button"
-    onClick={limparBloqueio}
-    className="
-      flex w-full items-center justify-center gap-2 rounded-3xl
-      border border-emerald-400/20 bg-emerald-500/15 px-4 py-4
-      text-sm font-black text-emerald-100 shadow-2xl backdrop-blur-md
-      transition active:scale-[0.98]
-    "
-  >
-    <ShieldCheck size={20} />
-    Liberar mesmo código
-  </button>
-) : (
-  <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-    <div className="flex items-center gap-3">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
-        <Crosshair size={20} />
-      </div>
+        className="
+          relative z-10 min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain
+          px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]
+        "
+      >
+        {codigoBloqueado ? (
+          <button
+            type="button"
+            onClick={limparBloqueio}
+            className="
+              flex w-full items-center justify-center gap-2 rounded-3xl
+              border border-emerald-400/20 bg-emerald-500/15 px-4 py-4
+              text-sm font-black text-emerald-100 shadow-2xl backdrop-blur-md
+              transition active:scale-[0.98]
+            "
+          >
+            <ShieldCheck size={20} />
+            Liberar mesmo código
+          </button>
+        ) : (
+          <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
+                <Crosshair size={20} />
+              </div>
 
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-black">Câmera principal</p>
-        <p className="text-xs text-white/60">
-          Tentando usar 1x e evitar ultra-wide 0,5x.
-        </p>
-      </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-black">Câmera principal</p>
+                <p className="text-xs text-white/60">
+                  Tentando usar 1x e evitar ultra-wide 0,5x.
+                </p>
+              </div>
 
-      <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-black">
-        1x
-      </span>
-    </div>
-  </div>
-)}
+              <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-black">
+                1x
+              </span>
+            </div>
+          </div>
+        )}
 
-        <MiniPreviewScanner
-          itens={itensPreview}
-          onLimpar={onLimparPreview}
-        />
+        <MiniPreviewScanner itens={itensPreview} onLimpar={onLimparPreview} />
 
         <div className="grid grid-cols-4 gap-2">
           <BotaoControle
@@ -878,7 +858,6 @@ async function listarCameras() {
           />
         </div>
 
-        {/* MANUAL */}
         <form
           onSubmit={enviarManual}
           className="rounded-3xl border border-white/10 bg-white/10 p-3 backdrop-blur-md"
@@ -1033,6 +1012,7 @@ function BotaoControle({ icon: Icon, label, onClick, disabled = false }) {
     </button>
   );
 }
+
 function MiniPreviewScanner({ itens = [], onLimpar }) {
   if (!itens.length) {
     return (
@@ -1095,7 +1075,9 @@ function MiniPreviewScanner({ itens = [], onLimpar }) {
           </p>
 
           <p className="mt-0.5 truncate text-xs text-emerald-100/75">
-            {ultimo.validade ? `Val: ${ultimo.validade}` : "Sem validade exibida"}
+            {ultimo.validade
+              ? `Val: ${ultimo.validade}`
+              : "Sem validade exibida"}
           </p>
         </div>
 
