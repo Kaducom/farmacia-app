@@ -55,7 +55,7 @@ function FabMedicamentos({
         )}
       </AnimatePresence>
 
-      <div className="fixed bottom-24 right-5 z-50 flex flex-col items-end gap-3">
+      <div className="fixed right-5 z-[60] bottom-[calc(env(safe-area-inset-bottom)+6.25rem)]">
         <AnimatePresence>
           {fabOpen && (
             <motion.div

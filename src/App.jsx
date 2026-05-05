@@ -92,7 +92,7 @@ return (
       </div>
     </div>
 
-    <main className="flex-1 overflow-y-auto app-main-safe">
+    <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+7.5rem)]">
       {renderPagina()}
     </main>
 

@@ -733,11 +733,11 @@ function Scanner({
 
       <div
         className="
-          relative z-10 flex min-h-[170px] shrink-0 items-center justify-center
-          p-4 sm:min-h-[240px] sm:p-6
+          relative z-10 flex min-h-[220px] shrink-0 items-center justify-center
+          p-4 sm:min-h-[280px] sm:p-6
         "
       >
-        <div className="relative h-[165px] w-full max-w-sm sm:h-[230px]">
+        <div className="relative h-[210px] w-full max-w-sm sm:h-[260px]">
           <div
             className={`
               absolute inset-0 rounded-[2rem] border-2
@@ -761,7 +761,7 @@ function Scanner({
           {lendo && (
             <motion.div
               initial={{ y: 10, opacity: 0.7 }}
-              animate={{ y: 130, opacity: 1 }}
+              animate={{ y: 170, opacity: 1 }}
               transition={{
                 duration: 1.25,
                 repeat: Infinity,
