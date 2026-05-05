@@ -23,6 +23,7 @@ import CardMedicamento from "../components/medicamentos/CardMedicamento";
 import BuscaMedicamentos from "../components/medicamentos/BuscaMedicamentos";
 import FabMedicamentos from "../components/medicamentos/FabMedicamentos";
 import ModalMedicamento from "../components/medicamentos/ModalMedicamento";
+import FundoBolhas from "../components/FundoBolhas";
 
 // =============================
 // 💊 COMPONENTE PRINCIPAL
@@ -913,11 +914,14 @@ function Medicamentos() {
   // 🎨 RENDER
   // =============================
 
-  return (
+return (
+  <div className="relative min-h-screen overflow-hidden">
+    <FundoBolhas variant="emerald" />
+
     <div
       ref={topRef}
       className="
-        mx-auto min-h-screen max-w-5xl px-4 pb-28 pt-4
+        relative z-10 mx-auto min-h-screen max-w-5xl px-4 pb-28 pt-4
         text-gray-900 dark:text-white
       "
     >
@@ -1287,8 +1291,9 @@ function Medicamentos() {
           />
         )}
       </AnimatePresence>
-    </div>
-  );
+     </div>
+  </div>
+);
 }
 
 // =============================

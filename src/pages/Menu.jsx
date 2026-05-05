@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "../context/ThemeContext";
 import { db } from "../db";
+import FundoBolhas from "../components/FundoBolhas";
 
 import {
   User,
@@ -11,7 +12,6 @@ import {
   Shield,
   Database,
   ChevronRight,
-  LogOut,
   Pill,
   Brain,
   RotateCcw,
@@ -25,6 +25,10 @@ import {
   BookOpenCheck,
   History,
   Loader2,
+  Sparkles,
+  RefreshCcw,
+  LockKeyhole,
+  HardDrive,
 } from "lucide-react";
 
 const dashboardInicial = {
@@ -35,6 +39,7 @@ const dashboardInicial = {
   produtosAprendidos: 0,
   ultimoMapeamento: null,
 };
+
 const PERFIL_KEY = "farmaciaPerfil";
 
 const perfilPadrao = {
@@ -46,47 +51,51 @@ const perfilPadrao = {
 function Menu({ setPagina }) {
   const { theme, toggleTheme } = useTheme();
   const dark = theme === "dark";
+
   const [toast, setToast] = useState(null);
   const [confirmarMapeamento, setConfirmarMapeamento] = useState(false);
+  const [abrirSeguranca, setAbrirSeguranca] = useState(false);
+
   const [carregando, setCarregando] = useState(true);
   const [criandoMapeamento, setCriandoMapeamento] = useState(false);
+
   const [dashboard, setDashboard] = useState(dashboardInicial);
-  const [perfil, setPerfil] = useState(perfilPadrao); 
+  const [perfil, setPerfil] = useState(perfilPadrao);
 
   useEffect(() => {
     carregarDashboard();
   }, []);
 
   useEffect(() => {
-  carregarPerfilMenu();
+    carregarPerfilMenu();
 
-  window.addEventListener("perfilFarmaciaAtualizado", carregarPerfilMenu);
+    window.addEventListener("perfilFarmaciaAtualizado", carregarPerfilMenu);
 
-  return () => {
-    window.removeEventListener("perfilFarmaciaAtualizado", carregarPerfilMenu);
-  };
-}, []);
+    return () => {
+      window.removeEventListener("perfilFarmaciaAtualizado", carregarPerfilMenu);
+    };
+  }, []);
 
-function carregarPerfilMenu() {
-  try {
-    const salvo = localStorage.getItem(PERFIL_KEY);
+  function carregarPerfilMenu() {
+    try {
+      const salvo = localStorage.getItem(PERFIL_KEY);
 
-    if (!salvo) {
+      if (!salvo) {
+        setPerfil(perfilPadrao);
+        return;
+      }
+
+      const dados = JSON.parse(salvo);
+
+      setPerfil({
+        ...perfilPadrao,
+        ...dados,
+      });
+    } catch (err) {
+      console.error("Erro ao carregar perfil no menu:", err);
       setPerfil(perfilPadrao);
-      return;
     }
-
-    const dados = JSON.parse(salvo);
-
-    setPerfil({
-      ...perfilPadrao,
-      ...dados,
-    });
-  } catch (err) {
-    console.error("Erro ao carregar perfil no menu:", err);
-    setPerfil(perfilPadrao);
   }
-}
 
   function mostrarToast(msg, tipo = "ok") {
     setToast({ msg, tipo });
@@ -137,11 +146,12 @@ function carregarPerfilMenu() {
     try {
       setCarregando(true);
 
-      const [medicamentos, produtosAprendidos, mapeamentos] = await Promise.all([
-        db.medicamentos.toArray(),
-        db.produtosCodigo.count(),
-        db.mapeamentos.orderBy("dataCriacao").reverse().limit(1).toArray(),
-      ]);
+      const [medicamentos, produtosAprendidos, mapeamentos] =
+        await Promise.all([
+          db.medicamentos.toArray(),
+          db.produtosCodigo.count(),
+          db.mapeamentos.orderBy("dataCriacao").reverse().limit(1).toArray(),
+        ]);
 
       const hoje = new Date();
 
@@ -157,7 +167,9 @@ function carregarPerfilMenu() {
         if (!validade) return;
 
         const dias = diferencaEmDias(validade, hoje);
-        const diasPreVencido = Number(item.diasPre || item.diasPreVencido || 30);
+        const diasPreVencido = Number(
+          item.diasPre || item.diasPreVencido || 30
+        );
         const diasRemover = Number(item.diasRemover || 7);
         const limiteAlerta = Math.max(diasPreVencido, diasRemover);
 
@@ -209,7 +221,9 @@ function carregarPerfilMenu() {
 
       await db.transaction("rw", db.mapeamentos, db.medicamentos, async () => {
         await db.mapeamentos.add({
-          nome: `Mapeamento ${agora.toLocaleDateString("pt-BR")} ${agora.toLocaleTimeString("pt-BR", {
+          nome: `Mapeamento ${agora.toLocaleDateString(
+            "pt-BR"
+          )} ${agora.toLocaleTimeString("pt-BR", {
             hour: "2-digit",
             minute: "2-digit",
           })}`,
@@ -248,16 +262,25 @@ function carregarPerfilMenu() {
     return {
       titulo: ultimo.nome || "Último mapeamento",
       descricao: data
-        ? `${data.toLocaleDateString("pt-BR")} às ${data.toLocaleTimeString("pt-BR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })} • ${ultimo.totalItens || 0} itens • ${ultimo.totalUnidades || 0} unidades`
-        : `${ultimo.totalItens || 0} itens • ${ultimo.totalUnidades || 0} unidades`,
+        ? `${data.toLocaleDateString("pt-BR")} às ${data.toLocaleTimeString(
+            "pt-BR",
+            {
+              hour: "2-digit",
+              minute: "2-digit",
+            }
+          )} • ${ultimo.totalItens || 0} itens • ${
+            ultimo.totalUnidades || 0
+          } unidades`
+        : `${ultimo.totalItens || 0} itens • ${
+            ultimo.totalUnidades || 0
+          } unidades`,
     };
   }, [dashboard.ultimoMapeamento]);
 
   return (
-    <>
+    <div className="relative min-h-screen overflow-hidden">
+      <FundoBolhas variant="emerald" />
+
       {toast && <Toast toast={toast} fechar={() => setToast(null)} />}
 
       {confirmarMapeamento && (
@@ -270,46 +293,49 @@ function carregarPerfilMenu() {
         />
       )}
 
-      <div className="mx-auto max-w-4xl space-y-5 p-4 pb-32 text-black dark:text-white">
+      {abrirSeguranca && (
+        <ModalSeguranca
+          onFechar={() => setAbrirSeguranca(false)}
+          onAbrirBackup={() => {
+            setAbrirSeguranca(false);
+            setPagina("backup");
+          }}
+        />
+      )}
+
+      <div className="relative z-10 mx-auto max-w-4xl space-y-5 p-4 pb-32 text-black dark:text-white">
         {/* HEADER PERFIL */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-green-700 via-emerald-800 to-emerald-950 p-6 text-white shadow-2xl">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-green-700 via-emerald-800 to-emerald-950 p-6 text-white shadow-2xl shadow-emerald-950/25">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10" />
           <div className="absolute -bottom-16 left-10 h-36 w-36 rounded-full bg-emerald-300/10" />
+          <div className="absolute right-20 top-16 h-8 w-8 rounded-full bg-white/10 blur-sm" />
 
           <div className="relative flex items-center gap-4">
-<div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white/20 shadow-xl backdrop-blur-md">
-  {perfil.avatar ? (
-    <img
-      src={perfil.avatar}
-      alt={perfil.nome || "Avatar"}
-      className="h-full w-full object-cover"
-    />
-  ) : (
-    <User size={36} />
-  )}
-</div>
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white/20 shadow-xl backdrop-blur-md">
+              {perfil.avatar ? (
+                <img
+                  src={perfil.avatar}
+                  alt={perfil.nome || "Avatar"}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <User size={36} />
+              )}
+            </div>
 
-<div className="min-w-0 flex-1">
-  <p className="truncate text-2xl font-black">
-    {perfil.nome || "Usuário"}
-  </p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-2xl font-black">
+                {perfil.nome || "Usuário"}
+              </p>
 
-  <p className="truncate text-sm text-green-100">
-    {perfil.farmacia || "Painel local do estoque"}
-  </p>
+              <p className="truncate text-sm text-green-100">
+                {perfil.farmacia || "Painel local do estoque"}
+              </p>
 
               <div className="mt-3 flex flex-wrap gap-2">
-                <span className="rounded-full border border-white/10 bg-white/15 px-3 py-1 text-xs backdrop-blur-sm">
-                  💊 Farmácia
-                </span>
-
-                <span className="rounded-full border border-white/10 bg-white/15 px-3 py-1 text-xs backdrop-blur-sm">
-                  📦 Estoque
-                </span>
-
-                <span className="rounded-full border border-white/10 bg-white/15 px-3 py-1 text-xs backdrop-blur-sm">
-                  🧠 Scanner aprende
-                </span>
+                <Chip>💊 Farmácia</Chip>
+                <Chip>📦 Estoque</Chip>
+                <Chip>🧠 Scanner aprende</Chip>
               </div>
             </div>
           </div>
@@ -317,23 +343,24 @@ function carregarPerfilMenu() {
           <div className="relative mt-6 grid grid-cols-2 gap-3">
             <button
               type="button"
+              onClick={() => setPagina("perfil")}
               className="rounded-2xl bg-white py-3 font-bold text-green-800 shadow-lg transition active:scale-95"
             >
-              Fazer Login
+              Editar Perfil
             </button>
 
             <button
               type="button"
-              onClick={() => setPagina("perfil")}
-              className="bg-white/10 border border-white/20 backdrop-blur-sm py-3 rounded-2xl font-semibold active:scale-95 transition"
+              onClick={carregarDashboard}
+              className="rounded-2xl border border-white/20 bg-white/10 py-3 font-semibold backdrop-blur-sm transition active:scale-95"
             >
-              Perfil
+              Atualizar
             </button>
           </div>
         </div>
 
         {/* DASHBOARD */}
-        <div className="space-y-4 rounded-3xl bg-white p-5 shadow-xl dark:bg-gray-800">
+        <div className="space-y-4 rounded-3xl border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="flex items-center gap-2 text-lg font-black">
@@ -355,7 +382,7 @@ function carregarPerfilMenu() {
               {carregando ? (
                 <Loader2 size={25} className="animate-spin" />
               ) : (
-                <Pill size={26} />
+                <RefreshCcw size={25} />
               )}
             </button>
           </div>
@@ -402,11 +429,13 @@ function carregarPerfilMenu() {
               icon={History}
               titulo="Mapeamento"
               valor={dashboard.ultimoMapeamento ? "1" : "0"}
-              descricao={dashboard.ultimoMapeamento ? "histórico salvo" : "nenhum ainda"}
+              descricao={
+                dashboard.ultimoMapeamento ? "histórico salvo" : "nenhum ainda"
+              }
             />
           </div>
 
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
+          <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-700 dark:bg-gray-950/60">
             <div className="flex items-start gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-purple-600 text-white">
                 <History size={20} />
@@ -420,47 +449,27 @@ function carregarPerfilMenu() {
               </div>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={carregarDashboard}
-            className="w-full rounded-2xl bg-purple-600 py-3 font-bold text-white transition hover:bg-purple-700 active:scale-[0.98]"
-          >
-            Atualizar Dashboard
-          </button>
         </div>
 
-        {/* CONFIGURAÇÕES */}
-        <div className="space-y-3 rounded-3xl bg-white p-5 shadow-xl dark:bg-gray-800">
+        {/* AÇÕES IMPORTANTES */}
+        <div className="space-y-3 rounded-3xl border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-black">
-              <Settings size={20} />
-              Configurações
+              <Sparkles size={20} />
+              Ações rápidas
             </h2>
 
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Ajustes do aplicativo
+              Atalhos principais do controle de estoque
             </p>
           </div>
 
-           <CardOpcao
-             icon={Bell}
-             titulo="Notificações"
-             descricao="Alertas e avisos de vencimento"
-             onClick={() => setPagina("notificacoes")}
-            />
-
           <CardOpcao
-            icon={Shield}
-            titulo="Segurança"
-            descricao="Privacidade e proteção"
-          />
-
-         <CardOpcao
-            icon={Database}
-            titulo="Backup"
-            descricao="Salvar e restaurar dados"
-            onClick={() => setPagina("backup")}
+            icon={RotateCcw}
+            titulo="Novo Mapeamento"
+            descricao="Salvar estoque atual e começar nova contagem"
+            onClick={() => setConfirmarMapeamento(true)}
+            destaque
           />
 
           <CardOpcao
@@ -471,24 +480,52 @@ function carregarPerfilMenu() {
           />
 
           <CardOpcao
-            icon={RotateCcw}
-            titulo="Novo Mapeamento"
-            descricao="Salvar estoque atual e começar nova contagem"
-            onClick={() => setConfirmarMapeamento(true)}
+            icon={History}
+            titulo="Histórico de Mapeamentos"
+            descricao="Ver contagens anteriores"
+            onClick={() => setPagina("mapeamentos")}
           />
         </div>
 
-        <CardOpcao
-          icon={History}
-          titulo="Histórico de Mapeamentos"
-          descricao="Ver contagens anteriores"
-          onClick={() => setPagina("mapeamentos")}
-        />
+        {/* CONFIGURAÇÕES */}
+        <div className="space-y-3 rounded-3xl border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-black">
+              <Settings size={20} />
+              Configurações
+            </h2>
+
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Ajustes e proteção dos dados
+            </p>
+          </div>
+
+          <CardOpcao
+            icon={Bell}
+            titulo="Notificações"
+            descricao="Alertas e avisos de vencimento"
+            onClick={() => setPagina("notificacoes")}
+          />
+
+          <CardOpcao
+            icon={Database}
+            titulo="Backup"
+            descricao="Salvar e restaurar dados"
+            onClick={() => setPagina("backup")}
+          />
+
+          <CardOpcao
+            icon={Shield}
+            titulo="Privacidade Local"
+            descricao="Entenda onde seus dados ficam salvos"
+            onClick={() => setAbrirSeguranca(true)}
+          />
+        </div>
 
         {/* DARK MODE */}
-        <div className="flex items-center justify-between rounded-3xl bg-white p-5 shadow-xl dark:bg-gray-800">
+        <div className="flex items-center justify-between rounded-3xl border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-700">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800">
               <Moon size={20} />
             </div>
 
@@ -512,21 +549,36 @@ function carregarPerfilMenu() {
           </button>
         </div>
 
-        {/* SAIR */}
-        <div className="rounded-3xl bg-white p-5 shadow-xl dark:bg-gray-800">
-          <CardOpcao
-            icon={LogOut}
-            titulo="Sair da Conta"
-            descricao="Encerrar sessão atual"
-            danger
-          />
+        {/* STATUS LOCAL */}
+        <div className="rounded-3xl border border-emerald-200 bg-emerald-50/90 p-5 text-emerald-800 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+          <div className="flex gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white">
+              <HardDrive size={22} />
+            </div>
+
+            <div>
+              <p className="font-black">Modo local ativo</p>
+              <p className="mt-1 text-sm">
+                Seus dados estão salvos neste dispositivo. Para trocar de celular
+                ou PC, use Backup até a futura versão com conta em nuvem.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="pt-2 text-center text-xs text-gray-400">
           Farmácia App • build turbo mega deluxe 🚀
         </div>
       </div>
-    </>
+    </div>
+  );
+}
+
+function Chip({ children }) {
+  return (
+    <span className="rounded-full border border-white/10 bg-white/15 px-3 py-1 text-xs backdrop-blur-sm">
+      {children}
+    </span>
   );
 }
 
@@ -541,13 +593,13 @@ function CardMetrica({
   return (
     <div
       className={`
-        rounded-2xl border p-4
+        rounded-2xl border p-4 shadow-sm
         ${
           alerta
             ? "border-red-200 bg-red-50 dark:border-red-500/20 dark:bg-red-500/10"
             : aviso
             ? "border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10"
-            : "border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-700/60"
+            : "border-gray-200 bg-gray-100/80 dark:border-gray-700 dark:bg-gray-800/70"
         }
       `}
     >
@@ -584,7 +636,14 @@ function CardMetrica({
   );
 }
 
-function CardOpcao({ icon: Icon, titulo, descricao, danger = false, onClick }) {
+function CardOpcao({
+  icon: Icon,
+  titulo,
+  descricao,
+  danger = false,
+  destaque = false,
+  onClick,
+}) {
   return (
     <button
       type="button"
@@ -594,36 +653,55 @@ function CardOpcao({ icon: Icon, titulo, descricao, danger = false, onClick }) {
         ${
           danger
             ? "border border-red-500/20 bg-red-500/10 hover:bg-red-500/20"
-            : "bg-gray-100 hover:bg-gray-200 dark:bg-gray-700/60 dark:hover:bg-gray-700"
+            : destaque
+            ? "bg-gradient-to-br from-emerald-600 to-emerald-800 text-white shadow-lg shadow-emerald-700/20"
+            : "bg-gray-100/90 hover:bg-gray-200 dark:bg-gray-800/70 dark:hover:bg-gray-800"
         }
       `}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-4">
         <div
           className={`
-            flex h-11 w-11 items-center justify-center rounded-xl
-            ${danger ? "bg-red-500 text-white" : "bg-green-700 text-white"}
+            flex h-11 w-11 shrink-0 items-center justify-center rounded-xl
+            ${
+              danger
+                ? "bg-red-500 text-white"
+                : destaque
+                ? "bg-white/15 text-white"
+                : "bg-green-700 text-white"
+            }
           `}
         >
           <Icon size={20} />
         </div>
 
-        <div className="text-left">
+        <div className="min-w-0 text-left">
           <p
             className={`font-bold ${
-              danger ? "text-red-500" : "text-black dark:text-white"
+              danger
+                ? "text-red-500"
+                : destaque
+                ? "text-white"
+                : "text-black dark:text-white"
             }`}
           >
             {titulo}
           </p>
 
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p
+            className={`truncate text-xs ${
+              destaque ? "text-white/75" : "text-gray-500 dark:text-gray-400"
+            }`}
+          >
             {descricao}
           </p>
         </div>
       </div>
 
-      <ChevronRight size={18} className="text-gray-400" />
+      <ChevronRight
+        size={18}
+        className={destaque ? "text-white/70" : "text-gray-400"}
+      />
     </button>
   );
 }
@@ -724,6 +802,112 @@ function ConfirmarMapeamento({
             Confirmar
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ModalSeguranca({ onFechar, onAbrirBackup }) {
+  return (
+    <div
+      onClick={onFechar}
+      className="fixed inset-0 z-[99998] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md overflow-hidden rounded-3xl border border-gray-200 bg-white text-gray-950 shadow-2xl dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+      >
+        <div className="relative overflow-hidden bg-gradient-to-br from-emerald-700 to-slate-950 p-5 text-white">
+          <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10" />
+          <div className="absolute -bottom-12 left-8 h-32 w-32 rounded-full bg-emerald-300/10" />
+
+          <div className="relative flex items-start justify-between gap-3">
+            <div>
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
+                <LockKeyhole size={25} />
+              </div>
+
+              <h2 className="text-xl font-black">Privacidade Local</h2>
+              <p className="mt-1 text-sm text-emerald-100">
+                O app ainda trabalha com dados salvos no dispositivo.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onFechar}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/15 transition active:scale-95"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-3 p-5">
+          <InfoSeguranca
+            icon={HardDrive}
+            titulo="Banco local"
+            texto="Medicamentos, receitas, base aprendida e mapeamentos ficam salvos no navegador usando Dexie."
+          />
+
+          <InfoSeguranca
+            icon={AlertTriangle}
+            titulo="Cuidado ao limpar dados"
+            texto="Se limpar cache/dados do navegador, trocar de aparelho ou reinstalar o PWA, você pode perder informações sem backup."
+            aviso
+          />
+
+          <InfoSeguranca
+            icon={Database}
+            titulo="Backup é o escudo atual"
+            texto="Enquanto não existe login em nuvem, a melhor proteção é exportar backup com frequência."
+          />
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={onFechar}
+              className="rounded-2xl bg-gray-100 py-3 font-bold text-gray-700 transition active:scale-95 dark:bg-gray-800 dark:text-gray-200"
+            >
+              Entendi
+            </button>
+
+            <button
+              type="button"
+              onClick={onAbrirBackup}
+              className="rounded-2xl bg-emerald-700 py-3 font-bold text-white transition active:scale-95"
+            >
+              Abrir Backup
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoSeguranca({ icon: Icon, titulo, texto, aviso = false }) {
+  return (
+    <div
+      className={`
+        flex gap-3 rounded-2xl border p-4
+        ${
+          aviso
+            ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
+            : "border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300"
+        }
+      `}
+    >
+      <Icon
+        size={21}
+        className={`mt-0.5 shrink-0 ${
+          aviso ? "text-amber-600" : "text-emerald-600 dark:text-emerald-300"
+        }`}
+      />
+
+      <div>
+        <p className="font-black">{titulo}</p>
+        <p className="mt-1 text-sm opacity-80">{texto}</p>
       </div>
     </div>
   );

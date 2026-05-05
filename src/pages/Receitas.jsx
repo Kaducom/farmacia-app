@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { db } from "../db";
+import FundoBolhas from "../components/FundoBolhas";
 
 import {
   FileText,
@@ -155,177 +156,181 @@ function Receitas() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-4 pb-24 text-gray-950 dark:text-white">
-      {toast && <Toast toast={toast} fechar={() => setToast(null)} />}
+    <div className="relative min-h-screen overflow-hidden">
+      <FundoBolhas variant="blue" />
 
-      <div className="mb-5 flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
-          <FileText size={24} />
-        </div>
+      <div className="relative z-10 mx-auto max-w-4xl p-4 pb-24 text-gray-950 dark:text-white">
+        {toast && <Toast toast={toast} fechar={() => setToast(null)} />}
 
-        <div>
-          <h1 className="text-xl font-black tracking-tight">
-            Validade de Receita
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Veja rapidamente se a receita ainda vale.
-          </p>
-        </div>
-      </div>
-
-      <div className="rounded-[2rem] border border-gray-200 bg-white p-5 shadow-xl shadow-black/5 dark:border-gray-800 dark:bg-gray-900">
-        <div className="mb-5 rounded-3xl bg-blue-50 p-4 text-sm text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
-          Informe a data da receita e o tipo. O app calcula se ainda está
-          válida, se vence hoje, em quantos dias vence ou há quantos dias
-          venceu.
-        </div>
-
-        {erro && (
-          <div className="mb-4 flex items-center gap-2 rounded-2xl bg-red-50 p-4 text-sm font-bold text-red-600 dark:bg-red-500/10 dark:text-red-300">
-            <AlertTriangle size={18} />
-            {erro}
+        <div className="mb-5 flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+            <FileText size={24} />
           </div>
-        )}
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Campo label="Data da receita" icon={CalendarDays}>
-            <input
-              type="date"
-              max={hojeFormatado}
-              value={dataReceita}
-              onChange={(e) => {
-                setDataReceita(e.target.value);
-                setResultado(null);
-                setErro("");
-              }}
-              className="w-full rounded-2xl bg-gray-100 p-4 outline-none focus:ring-4 focus:ring-blue-500/15 dark:bg-gray-950"
-            />
-          </Campo>
+          <div>
+            <h1 className="text-xl font-black tracking-tight">
+              Validade de Receita
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Veja rapidamente se a receita ainda vale.
+            </p>
+          </div>
+        </div>
 
-          <Campo label="Tipo de receita" icon={FileText}>
-            <select
-              value={tipo}
-              onChange={(e) => {
-                setTipo(e.target.value);
-                setResultado(null);
-                setErro("");
-              }}
-              className="w-full rounded-2xl bg-gray-100 p-4 outline-none focus:ring-4 focus:ring-blue-500/15 dark:bg-gray-950"
-            >
-              <option value="controlado">Controlado (30 dias)</option>
-              <option value="antibiotico">Antibiótico (10 dias)</option>
-              <option value="popular">Popular (180 dias)</option>
-              <option value="outros">Outros</option>
-            </select>
-          </Campo>
+        <div className="rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+          <div className="mb-5 rounded-3xl bg-blue-50/90 p-4 text-sm text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+            Informe a data da receita e o tipo. O app calcula se ainda está
+            válida, se vence hoje, em quantos dias vence ou há quantos dias
+            venceu.
+          </div>
 
-          {tipo === "outros" && (
-            <Campo label="Validade personalizada" icon={Clock3}>
+          {erro && (
+            <div className="mb-4 flex items-center gap-2 rounded-2xl bg-red-50 p-4 text-sm font-bold text-red-600 dark:bg-red-500/10 dark:text-red-300">
+              <AlertTriangle size={18} />
+              {erro}
+            </div>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Campo label="Data da receita" icon={CalendarDays}>
               <input
-                inputMode="numeric"
-                placeholder="Ex: 60"
-                value={diasValidade}
+                type="date"
+                max={hojeFormatado}
+                value={dataReceita}
                 onChange={(e) => {
-                  setDiasValidade(e.target.value.replace(/\D/g, ""));
+                  setDataReceita(e.target.value);
                   setResultado(null);
                   setErro("");
                 }}
                 className="w-full rounded-2xl bg-gray-100 p-4 outline-none focus:ring-4 focus:ring-blue-500/15 dark:bg-gray-950"
               />
             </Campo>
-          )}
-        </div>
 
-        <div className="mt-5 flex flex-col gap-3 md:flex-row">
-          <button
-            type="button"
-            onClick={verificar}
-            className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-blue-600 font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 active:scale-95"
-          >
-            <CheckCircle2 size={18} />
-            Ver validade
-          </button>
+            <Campo label="Tipo de receita" icon={FileText}>
+              <select
+                value={tipo}
+                onChange={(e) => {
+                  setTipo(e.target.value);
+                  setResultado(null);
+                  setErro("");
+                }}
+                className="w-full rounded-2xl bg-gray-100 p-4 outline-none focus:ring-4 focus:ring-blue-500/15 dark:bg-gray-950"
+              >
+                <option value="controlado">Controlado (30 dias)</option>
+                <option value="antibiotico">Antibiótico (10 dias)</option>
+                <option value="popular">Popular (180 dias)</option>
+                <option value="outros">Outros</option>
+              </select>
+            </Campo>
 
-          <button
-            type="button"
-            onClick={limpar}
-            className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl border border-gray-300 bg-white font-bold text-gray-700 transition hover:bg-gray-100 active:scale-95 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-800"
-          >
-            <RotateCcw size={18} />
-            Limpar
-          </button>
-        </div>
+            {tipo === "outros" && (
+              <Campo label="Validade personalizada" icon={Clock3}>
+                <input
+                  inputMode="numeric"
+                  placeholder="Ex: 60"
+                  value={diasValidade}
+                  onChange={(e) => {
+                    setDiasValidade(e.target.value.replace(/\D/g, ""));
+                    setResultado(null);
+                    setErro("");
+                  }}
+                  className="w-full rounded-2xl bg-gray-100 p-4 outline-none focus:ring-4 focus:ring-blue-500/15 dark:bg-gray-950"
+                />
+              </Campo>
+            )}
+          </div>
 
-        {resultado && (
-          <>
-            <Resultado resultado={resultado} formatarData={formatarData} />
+          <div className="mt-5 flex flex-col gap-3 md:flex-row">
+            <button
+              type="button"
+              onClick={verificar}
+              className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-blue-600 font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 active:scale-95"
+            >
+              <CheckCircle2 size={18} />
+              Ver validade
+            </button>
 
             <button
               type="button"
-              onClick={salvarConsulta}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 active:scale-95"
+              onClick={limpar}
+              className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl border border-gray-300 bg-white font-bold text-gray-700 transition hover:bg-gray-100 active:scale-95 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-800"
             >
-              <Save size={18} />
-              Salvar consulta, se precisar
+              <RotateCcw size={18} />
+              Limpar
             </button>
-          </>
+          </div>
+
+          {resultado && (
+            <>
+              <Resultado resultado={resultado} formatarData={formatarData} />
+
+              <button
+                type="button"
+                onClick={salvarConsulta}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 active:scale-95"
+              >
+                <Save size={18} />
+                Salvar consulta, se precisar
+              </button>
+            </>
+          )}
+        </div>
+
+        {historico.length > 0 && (
+          <div className="mt-6">
+            <h2 className="mb-3 text-sm font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Histórico salvo
+            </h2>
+
+            <div className="space-y-3">
+              {historico.map((r) => {
+                const final = calcularFinalHistorico(r);
+                const diff = calcularDiferencaDias(final);
+                const vencida = diff < 0;
+
+                return (
+                  <div
+                    key={r.id}
+                    className="flex items-center justify-between gap-3 rounded-3xl border border-gray-200 bg-white/90 p-4 shadow-lg shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90"
+                  >
+                    <div>
+                      <p className="font-black">{r.nome || "Receita"}</p>
+
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        Receita: {formatarData(`${r.dataReceita}T00:00:00`)}
+                      </p>
+
+                      <p
+                        className={`mt-1 text-sm font-bold ${
+                          vencida
+                            ? "text-red-500"
+                            : diff <= 3
+                            ? "text-amber-500"
+                            : "text-emerald-500"
+                        }`}
+                      >
+                        {vencida
+                          ? `Venceu há ${Math.abs(diff)} dia(s)`
+                          : diff === 0
+                          ? "Vence hoje"
+                          : `Vence em ${diff} dia(s)`}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => remover(r.id)}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white transition hover:bg-red-600 active:scale-95"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
-
-      {historico.length > 0 && (
-        <div className="mt-6">
-          <h2 className="mb-3 text-sm font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            Histórico salvo
-          </h2>
-
-          <div className="space-y-3">
-            {historico.map((r) => {
-              const final = calcularFinalHistorico(r);
-              const diff = calcularDiferencaDias(final);
-              const vencida = diff < 0;
-
-              return (
-                <div
-                  key={r.id}
-                  className="flex items-center justify-between gap-3 rounded-3xl border border-gray-200 bg-white p-4 shadow-lg shadow-black/5 dark:border-gray-800 dark:bg-gray-900"
-                >
-                  <div>
-                    <p className="font-black">{r.nome || "Receita"}</p>
-
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      Receita: {formatarData(`${r.dataReceita}T00:00:00`)}
-                    </p>
-
-                    <p
-                      className={`mt-1 text-sm font-bold ${
-                        vencida
-                          ? "text-red-500"
-                          : diff <= 3
-                          ? "text-amber-500"
-                          : "text-emerald-500"
-                      }`}
-                    >
-                      {vencida
-                        ? `Venceu há ${Math.abs(diff)} dia(s)`
-                        : diff === 0
-                        ? "Vence hoje"
-                        : `Vence em ${diff} dia(s)`}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => remover(r.id)}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white transition hover:bg-red-600 active:scale-95"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

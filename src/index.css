@@ -165,3 +165,74 @@ html.dark {
 .animate-slideUp {
   animation: slideUp 0.3s ease;
 }
+@keyframes floatBubbleSlow {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(-18px, 24px, 0) scale(1.08);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes floatBubbleMedium {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(24px, -18px, 0) scale(1.05);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes floatBubbleFast {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(-12px, -22px, 0) scale(1.12);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes floatBubbleTiny {
+  0% {
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(calc(-50% + 16px), -16px, 0) scale(1.1);
+  }
+
+  100% {
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+}
+
+.animate-floatBubbleSlow {
+  animation: floatBubbleSlow 14s ease-in-out infinite;
+}
+
+.animate-floatBubbleMedium {
+  animation: floatBubbleMedium 11s ease-in-out infinite;
+}
+
+.animate-floatBubbleFast {
+  animation: floatBubbleFast 8s ease-in-out infinite;
+}
+
+.animate-floatBubbleTiny {
+  animation: floatBubbleTiny 9s ease-in-out infinite;
+}
