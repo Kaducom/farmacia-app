@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "../context/ThemeContext";
 import { db } from "../db";
 import FundoBolhas from "../components/FundoBolhas";
+import { useAuth } from "../context/AuthContext";
+import { LogOut, UserPlus } from "lucide-react";
 
 import {
   User,
@@ -49,6 +51,7 @@ const perfilPadrao = {
 };
 
 function Menu({ setPagina }) {
+  const { usuarioAtual, isAdmin, logout, criarUsuario } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const dark = theme === "dark";
 
