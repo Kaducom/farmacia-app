@@ -1,81 +1,153 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+} from "firebase/auth";
+
+import {
+  doc,
+  getDoc,
+  setDoc,
+} from "firebase/firestore";
+
+import { auth, firestore } from "../firebase";
 
 const AuthContext = createContext();
 
-const USERS_KEY = "farmaciaUsuarios";
-const CURRENT_KEY = "farmaciaUsuarioAtual";
-
-const usuarioAdminPadrao = {
-  id: "admin-kadu",
-  nome: "Kadu",
-  pin: "123",
-  tipo: "admin",
-};
-
 export function AuthProvider({ children }) {
-  const [usuarios, setUsuarios] = useState([]);
+
   const [usuarioAtual, setUsuarioAtual] = useState(null);
 
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    carregarAuth();
-  }, []);
 
-  function carregarAuth() {
-    const salvos = JSON.parse(localStorage.getItem(USERS_KEY) || "[]");
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async (user) => {
 
-    const existeAdmin = salvos.some((u) => u.id === usuarioAdminPadrao.id);
-    const lista = existeAdmin ? salvos : [usuarioAdminPadrao, ...salvos];
+        if (!user) {
+          setUsuarioAtual(null);
+          setLoading(false);
+          return;
+        }
 
-    localStorage.setItem(USERS_KEY, JSON.stringify(lista));
-    setUsuarios(lista);
+        const ref = doc(
+          firestore,
+          "usuarios",
+          user.uid
+        );
 
-    const atual = JSON.parse(localStorage.getItem(CURRENT_KEY) || "null");
-    if (atual) setUsuarioAtual(atual);
-  }
+        const snap = await getDoc(ref);
 
-  function login(nome, pin) {
-    const usuario = usuarios.find(
-      (u) =>
-        u.nome.toLowerCase() === nome.trim().toLowerCase() &&
-        u.pin === pin.trim()
+        if (!snap.exists()) {
+          setUsuarioAtual(null);
+          setLoading(false);
+          return;
+        }
+
+        setUsuarioAtual({
+          uid: user.uid,
+          email: user.email,
+          ...snap.data(),
+        });
+
+        setLoading(false);
+      }
     );
 
-    if (!usuario) return false;
+    return unsubscribe;
 
-    setUsuarioAtual(usuario);
-    localStorage.setItem(CURRENT_KEY, JSON.stringify(usuario));
-    return true;
+  }, []);
+
+  async function login(email, senha) {
+
+    try {
+
+      await signInWithEmailAndPassword(
+        auth,
+        email,
+        senha
+      );
+
+      return {
+        ok: true
+      };
+
+    } catch (err) {
+
+      return {
+        ok: false,
+        erro: traduzirErro(err.code)
+      };
+
+    }
   }
 
-  function logout() {
-    setUsuarioAtual(null);
-    localStorage.removeItem(CURRENT_KEY);
+  async function logout() {
+    await signOut(auth);
   }
 
-  function criarUsuario({ nome, pin, tipo = "comum" }) {
-    if (!nome.trim() || !pin.trim()) return false;
+  async function criarUsuario({
+    nome,
+    email,
+    senha,
+    tipo = "comum",
+  }) {
 
-    const novo = {
-      id: crypto.randomUUID(),
-      nome: nome.trim(),
-      pin: pin.trim(),
-      tipo,
-    };
+    try {
 
-    const novaLista = [...usuarios, novo];
-    setUsuarios(novaLista);
-    localStorage.setItem(USERS_KEY, JSON.stringify(novaLista));
+      const cred = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        senha
+      );
 
-    return true;
+      await setDoc(
+        doc(
+          firestore,
+          "usuarios",
+          cred.user.uid
+        ),
+        {
+          nome,
+          email,
+          tipo,
+          farmaciaId: "farmacia-principal",
+          criadoEm: Date.now(),
+        }
+      );
+
+      return {
+        ok: true
+      };
+
+    } catch (err) {
+
+      return {
+        ok: false,
+        erro: traduzirErro(err.code)
+      };
+
+    }
   }
 
-  const isAdmin = usuarioAtual?.tipo === "admin";
+  const isAdmin =
+    usuarioAtual?.tipo === "admin";
 
   return (
     <AuthContext.Provider
       value={{
-        usuarios,
         usuarioAtual,
+        loading,
         isAdmin,
         login,
         logout,
@@ -85,6 +157,27 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
+}
+
+function traduzirErro(code) {
+
+  switch (code) {
+
+    case "auth/email-already-in-use":
+      return "Email já utilizado";
+
+    case "auth/invalid-email":
+      return "Email inválido";
+
+    case "auth/weak-password":
+      return "Senha muito fraca";
+
+    case "auth/invalid-credential":
+      return "Email ou senha inválidos";
+
+    default:
+      return "Erro inesperado";
+  }
 }
 
 export function useAuth() {

@@ -1,36 +1,42 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTheme } from "../context/ThemeContext";
-import { db } from "../db";
-import FundoBolhas from "../components/FundoBolhas";
 import { useAuth } from "../context/AuthContext";
-import { LogOut, UserPlus } from "lucide-react";
+import FundoBolhas from "../components/FundoBolhas";
+import { db } from "../db";
 
 import {
   User,
-  LayoutDashboard,
   Settings,
   Moon,
+  LogOut,
+  Database,
   Bell,
   Shield,
-  Database,
   ChevronRight,
-  Pill,
-  Brain,
-  RotateCcw,
-  CheckCircle2,
-  AlertTriangle,
-  X,
+  LayoutDashboard,
   Package,
   Boxes,
-  CalendarClock,
   Skull,
+  CalendarClock,
   BookOpenCheck,
   History,
-  Loader2,
-  Sparkles,
   RefreshCcw,
-  LockKeyhole,
+  Loader2,
   HardDrive,
+  X,
+  CheckCircle2,
+  AlertTriangle,
+  Cloud,
+  CloudOff,
+  Sparkles,
+  ScanBarcode,
+  Map,
+  UserPlus,
+  Mail,
+  Lock,
+  Crown,
+  Wrench,
+  Download,
 } from "lucide-react";
 
 const dashboardInicial = {
@@ -39,75 +45,34 @@ const dashboardInicial = {
   vencidos: 0,
   proximos: 0,
   produtosAprendidos: 0,
-  ultimoMapeamento: null,
-};
-
-const PERFIL_KEY = "farmaciaPerfil";
-
-const perfilPadrao = {
-  nome: "Usuário",
-  farmacia: "Painel local do estoque",
-  avatar: null,
+  mapeamentos: 0,
 };
 
 function Menu({ setPagina }) {
-  const { usuarioAtual, isAdmin, logout, criarUsuario } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { usuarioAtual, isAdmin, logout, criarUsuario } = useAuth();
+
   const dark = theme === "dark";
 
   const [toast, setToast] = useState(null);
-  const [confirmarMapeamento, setConfirmarMapeamento] = useState(false);
-  const [abrirSeguranca, setAbrirSeguranca] = useState(false);
-
-  const [carregando, setCarregando] = useState(true);
-  const [criandoMapeamento, setCriandoMapeamento] = useState(false);
-
+  const [carregando, setCarregando] = useState(false);
   const [dashboard, setDashboard] = useState(dashboardInicial);
-  const [perfil, setPerfil] = useState(perfilPadrao);
+
+  const [novoUsuario, setNovoUsuario] = useState({
+    nome: "",
+    email: "",
+    senha: "",
+    tipo: "comum",
+  });
 
   useEffect(() => {
     carregarDashboard();
   }, []);
 
-  useEffect(() => {
-    carregarPerfilMenu();
-
-    window.addEventListener("perfilFarmaciaAtualizado", carregarPerfilMenu);
-
-    return () => {
-      window.removeEventListener("perfilFarmaciaAtualizado", carregarPerfilMenu);
-    };
-  }, []);
-
-  function carregarPerfilMenu() {
-    try {
-      const salvo = localStorage.getItem(PERFIL_KEY);
-
-      if (!salvo) {
-        setPerfil(perfilPadrao);
-        return;
-      }
-
-      const dados = JSON.parse(salvo);
-
-      setPerfil({
-        ...perfilPadrao,
-        ...dados,
-      });
-    } catch (err) {
-      console.error("Erro ao carregar perfil no menu:", err);
-      setPerfil(perfilPadrao);
-    }
-  }
-
   function mostrarToast(msg, tipo = "ok") {
     setToast({ msg, tipo });
-
     if (navigator.vibrate) navigator.vibrate(30);
-
-    setTimeout(() => {
-      setToast(null);
-    }, 2800);
+    setTimeout(() => setToast(null), 3000);
   }
 
   function normalizarData(valor) {
@@ -153,7 +118,7 @@ function Menu({ setPagina }) {
         await Promise.all([
           db.medicamentos.toArray(),
           db.produtosCodigo.count(),
-          db.mapeamentos.orderBy("dataCriacao").reverse().limit(1).toArray(),
+          db.mapeamentos.count(),
         ]);
 
       const hoje = new Date();
@@ -170,9 +135,7 @@ function Menu({ setPagina }) {
         if (!validade) return;
 
         const dias = diferencaEmDias(validade, hoje);
-        const diasPreVencido = Number(
-          item.diasPre || item.diasPreVencido || 30
-        );
+        const diasPreVencido = Number(item.diasPre || item.diasPreVencido || 30);
         const diasRemover = Number(item.diasRemover || 7);
         const limiteAlerta = Math.max(diasPreVencido, diasRemover);
 
@@ -192,7 +155,7 @@ function Menu({ setPagina }) {
         vencidos,
         proximos,
         produtosAprendidos,
-        ultimoMapeamento: mapeamentos[0] || null,
+        mapeamentos,
       });
     } catch (err) {
       console.error(err);
@@ -202,83 +165,30 @@ function Menu({ setPagina }) {
     }
   }
 
-  async function novoMapeamento() {
-    if (criandoMapeamento) return;
+  async function criarNovaConta() {
+    if (!isAdmin) return;
 
-    try {
-      setCriandoMapeamento(true);
-
-      const medicamentos = await db.medicamentos.toArray();
-
-      if (medicamentos.length === 0) {
-        setConfirmarMapeamento(false);
-        mostrarToast("Nada para mapear. O estoque já está vazio 📭", "info");
-        return;
-      }
-
-      const agora = new Date();
-
-      const totalUnidades = medicamentos.reduce((total, item) => {
-        return total + Number(item.quantidade || 1);
-      }, 0);
-
-      await db.transaction("rw", db.mapeamentos, db.medicamentos, async () => {
-        await db.mapeamentos.add({
-          nome: `Mapeamento ${agora.toLocaleDateString(
-            "pt-BR"
-          )} ${agora.toLocaleTimeString("pt-BR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}`,
-          dataCriacao: agora.toISOString(),
-          totalItens: medicamentos.length,
-          totalUnidades,
-          itens: medicamentos,
-        });
-
-        await db.medicamentos.clear();
-      });
-
-      setConfirmarMapeamento(false);
-      mostrarToast("Mapeamento salvo e estoque limpo ✨", "ok");
-      await carregarDashboard();
-    } catch (err) {
-      console.error(err);
-      mostrarToast("Erro ao criar novo mapeamento 😕", "erro");
-    } finally {
-      setCriandoMapeamento(false);
+    if (!novoUsuario.nome || !novoUsuario.email || !novoUsuario.senha) {
+      mostrarToast("Preencha nome, email e senha ⚠️", "erro");
+      return;
     }
+
+    const res = await criarUsuario(novoUsuario);
+
+    if (!res.ok) {
+      mostrarToast(res.erro || "Erro ao criar usuário 😕", "erro");
+      return;
+    }
+
+    setNovoUsuario({
+      nome: "",
+      email: "",
+      senha: "",
+      tipo: "comum",
+    });
+
+    mostrarToast("Usuário criado na nuvem ✨", "ok");
   }
-
-  const resumoMapeamento = useMemo(() => {
-    const ultimo = dashboard.ultimoMapeamento;
-
-    if (!ultimo) {
-      return {
-        titulo: "Nenhum mapeamento ainda",
-        descricao: "Quando criar um novo mapeamento, ele aparece aqui.",
-      };
-    }
-
-    const data = normalizarData(ultimo.dataCriacao);
-
-    return {
-      titulo: ultimo.nome || "Último mapeamento",
-      descricao: data
-        ? `${data.toLocaleDateString("pt-BR")} às ${data.toLocaleTimeString(
-            "pt-BR",
-            {
-              hour: "2-digit",
-              minute: "2-digit",
-            }
-          )} • ${ultimo.totalItens || 0} itens • ${
-            ultimo.totalUnidades || 0
-          } unidades`
-        : `${ultimo.totalItens || 0} itens • ${
-            ultimo.totalUnidades || 0
-          } unidades`,
-    };
-  }, [dashboard.ultimoMapeamento]);
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -286,313 +196,425 @@ function Menu({ setPagina }) {
 
       {toast && <Toast toast={toast} fechar={() => setToast(null)} />}
 
-      {confirmarMapeamento && (
-        <ConfirmarMapeamento
-          totalItens={dashboard.totalMedicamentos}
-          totalUnidades={dashboard.totalUnidades}
-          carregando={criandoMapeamento}
-          onCancelar={() => setConfirmarMapeamento(false)}
-          onConfirmar={novoMapeamento}
-        />
-      )}
+      <div className="relative z-10 mx-auto max-w-5xl space-y-5 p-4 pb-32 text-black dark:text-white">
+        {/* HEADER */}
+        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-green-700 via-emerald-800 to-slate-950 p-6 text-white shadow-2xl shadow-emerald-950/30">
+          <div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-white/10" />
+          <div className="absolute -bottom-20 left-10 h-44 w-44 rounded-full bg-emerald-300/10" />
+          <div className="absolute right-24 top-20 h-10 w-10 rounded-full bg-white/10 blur-sm" />
 
-      {abrirSeguranca && (
-        <ModalSeguranca
-          onFechar={() => setAbrirSeguranca(false)}
-          onAbrirBackup={() => {
-            setAbrirSeguranca(false);
-            setPagina("backup");
-          }}
-        />
-      )}
+          <div className="relative flex flex-col gap-5 md:flex-row md:items-center">
+            <div className="flex items-center gap-4">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-white/20 bg-white/20 shadow-xl backdrop-blur-md">
+                <User size={38} />
+              </div>
 
-      <div className="relative z-10 mx-auto max-w-4xl space-y-5 p-4 pb-32 text-black dark:text-white">
-        {/* HEADER PERFIL */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-green-700 via-emerald-800 to-emerald-950 p-6 text-white shadow-2xl shadow-emerald-950/25">
-          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10" />
-          <div className="absolute -bottom-16 left-10 h-36 w-36 rounded-full bg-emerald-300/10" />
-          <div className="absolute right-20 top-16 h-8 w-8 rounded-full bg-white/10 blur-sm" />
+              <div className="min-w-0">
+                <p className="truncate text-3xl font-black">
+                  {usuarioAtual?.nome || "Usuário"}
+                </p>
 
-          <div className="relative flex items-center gap-4">
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white/20 shadow-xl backdrop-blur-md">
-              {perfil.avatar ? (
-                <img
-                  src={perfil.avatar}
-                  alt={perfil.nome || "Avatar"}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <User size={36} />
-              )}
-            </div>
+                <p className="truncate text-sm text-green-100">
+                  {usuarioAtual?.email || "Conta Firebase"}
+                </p>
 
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-2xl font-black">
-                {perfil.nome || "Usuário"}
-              </p>
-
-              <p className="truncate text-sm text-green-100">
-                {perfil.farmacia || "Painel local do estoque"}
-              </p>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Chip>💊 Farmácia</Chip>
-                <Chip>📦 Estoque</Chip>
-                <Chip>🧠 Scanner aprende</Chip>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Chip>{isAdmin ? "👑 Admin" : "👤 Usuário"}</Chip>
+                  <Chip>{isAdmin ? "Acesso completo" : "Receitas + Posologia"}</Chip>
+                  <Chip>Firebase ativo</Chip>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="relative mt-6 grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setPagina("perfil")}
-              className="rounded-2xl bg-white py-3 font-bold text-green-800 shadow-lg transition active:scale-95"
-            >
-              Editar Perfil
-            </button>
+            <div className="grid flex-1 grid-cols-2 gap-3 md:max-w-sm">
+              <button
+                type="button"
+                onClick={() => setPagina("perfil")}
+                className="rounded-2xl bg-white py-3 font-bold text-green-800 shadow-lg transition active:scale-95"
+              >
+                Perfil
+              </button>
 
-            <button
-              type="button"
-              onClick={carregarDashboard}
-              className="rounded-2xl border border-white/20 bg-white/10 py-3 font-semibold backdrop-blur-sm transition active:scale-95"
-            >
-              Atualizar
-            </button>
+              <button
+                type="button"
+                onClick={logout}
+                className="flex items-center justify-center gap-2 rounded-2xl border border-white/20 bg-red-500/20 py-3 font-bold backdrop-blur-sm transition active:scale-95"
+              >
+                <LogOut size={18} />
+                Sair
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* DASHBOARD */}
-        <div className="space-y-4 rounded-3xl border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
-          <div className="flex items-center justify-between gap-3">
+        {/* STATUS */}
+        <div className="grid gap-4 md:grid-cols-3">
+          <StatusCard
+            icon={Cloud}
+            titulo="Nuvem"
+            valor="Firebase"
+            descricao="Login real ativo"
+            ativo
+          />
+
+          <StatusCard
+            icon={HardDrive}
+            titulo="Banco local"
+            valor="IndexedDB"
+            descricao="Dados locais ainda ativos"
+          />
+
+          <StatusCard
+            icon={Wrench}
+            titulo="Próxima fase"
+            valor="Sync"
+            descricao="Migrar estoque para Firestore"
+            aviso
+          />
+        </div>
+
+        {/* ADMIN DASHBOARD */}
+        {isAdmin && (
+          <div className="space-y-4 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-xl font-black">
+                  <LayoutDashboard size={22} />
+                  Dashboard Admin
+                </h2>
+
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Visão geral dos dados locais deste aparelho
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={carregarDashboard}
+                className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-700 text-white shadow-lg transition active:scale-95"
+              >
+                {carregando ? (
+                  <Loader2 size={25} className="animate-spin" />
+                ) : (
+                  <RefreshCcw size={25} />
+                )}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              <CardMetrica
+                icon={Package}
+                titulo="Medicamentos"
+                valor={dashboard.totalMedicamentos}
+                descricao="itens cadastrados"
+              />
+
+              <CardMetrica
+                icon={Boxes}
+                titulo="Unidades"
+                valor={dashboard.totalUnidades}
+                descricao="quantidade total"
+              />
+
+              <CardMetrica
+                icon={Skull}
+                titulo="Vencidos"
+                valor={dashboard.vencidos}
+                descricao="exigem atenção"
+                alerta={dashboard.vencidos > 0}
+              />
+
+              <CardMetrica
+                icon={CalendarClock}
+                titulo="Próximos"
+                valor={dashboard.proximos}
+                descricao="vencer/remover"
+                aviso={dashboard.proximos > 0}
+              />
+
+              <CardMetrica
+                icon={BookOpenCheck}
+                titulo="Base local"
+                valor={dashboard.produtosAprendidos}
+                descricao="scanner aprendeu"
+              />
+
+              <CardMetrica
+                icon={History}
+                titulo="Mapeamentos"
+                valor={dashboard.mapeamentos}
+                descricao="históricos salvos"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* FERRAMENTAS ADMIN */}
+        {isAdmin && (
+          <div className="space-y-3 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
             <div>
-              <h2 className="flex items-center gap-2 text-lg font-black">
-                <LayoutDashboard size={20} />
-                Dashboard
+              <h2 className="flex items-center gap-2 text-xl font-black">
+                <Sparkles size={22} />
+                Central Admin
               </h2>
 
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Dados reais salvos no banco de dados
+                Atalhos principais do sistema completo
               </p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <CardOpcao
+                icon={ScanBarcode}
+                titulo="Base de Produtos"
+                descricao="Produtos aprendidos pelo scanner"
+                onClick={() => setPagina("baseProdutos")}
+              />
+
+              <CardOpcao
+                icon={Map}
+                titulo="Mapeamentos"
+                descricao="Histórico das contagens"
+                onClick={() => setPagina("mapeamentos")}
+              />
+
+              <CardOpcao
+                icon={Bell}
+                titulo="Notificações"
+                descricao="Alertas e avisos"
+                onClick={() => setPagina("notificacoes")}
+              />
+
+              <CardOpcao
+                icon={Download}
+                titulo="Backup"
+                descricao="Exportar e restaurar dados"
+                onClick={() => setPagina("backup")}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* CRIAR USUÁRIO */}
+        {isAdmin && (
+          <div className="space-y-4 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+            <div>
+              <h2 className="flex items-center gap-2 text-xl font-black">
+                <UserPlus size={22} />
+                Criar usuário
+              </h2>
+
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Crie contas reais no Firebase. Usuário comum vê apenas Receitas,
+                Posologia e Menu.
+              </p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <Campo
+                icon={User}
+                label="Nome"
+                value={novoUsuario.nome}
+                placeholder="Ex: Maria"
+                onChange={(v) =>
+                  setNovoUsuario((prev) => ({ ...prev, nome: v }))
+                }
+              />
+
+              <Campo
+                icon={Mail}
+                label="Email"
+                type="email"
+                value={novoUsuario.email}
+                placeholder="maria@email.com"
+                onChange={(v) =>
+                  setNovoUsuario((prev) => ({ ...prev, email: v }))
+                }
+              />
+
+              <Campo
+                icon={Lock}
+                label="Senha"
+                type="password"
+                value={novoUsuario.senha}
+                placeholder="Mínimo 6 caracteres"
+                onChange={(v) =>
+                  setNovoUsuario((prev) => ({ ...prev, senha: v }))
+                }
+              />
+
+              <div>
+                <label className="mb-1 flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400">
+                  <Crown size={16} />
+                  Tipo
+                </label>
+
+                <select
+                  value={novoUsuario.tipo}
+                  onChange={(e) =>
+                    setNovoUsuario((prev) => ({
+                      ...prev,
+                      tipo: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 font-semibold outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-gray-800 dark:bg-gray-950"
+                >
+                  <option value="comum">Comum</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
             </div>
 
             <button
               type="button"
-              onClick={carregarDashboard}
-              className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-700 text-white shadow-lg transition active:scale-95"
-              title="Recarregar dashboard"
+              onClick={criarNovaConta}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 py-3 font-black text-white shadow-lg shadow-emerald-700/20 transition active:scale-95"
             >
-              {carregando ? (
-                <Loader2 size={25} className="animate-spin" />
-              ) : (
-                <RefreshCcw size={25} />
-              )}
+              <UserPlus size={20} />
+              Criar conta Firebase
             </button>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <CardMetrica
-              icon={Package}
-              titulo="Medicamentos"
-              valor={dashboard.totalMedicamentos}
-              descricao="itens no estoque"
-            />
-
-            <CardMetrica
-              icon={Boxes}
-              titulo="Unidades"
-              valor={dashboard.totalUnidades}
-              descricao="quantidade total"
-            />
-
-            <CardMetrica
-              icon={Skull}
-              titulo="Vencidos"
-              valor={dashboard.vencidos}
-              descricao="precisam atenção"
-              alerta={dashboard.vencidos > 0}
-            />
-
-            <CardMetrica
-              icon={CalendarClock}
-              titulo="Próximos"
-              valor={dashboard.proximos}
-              descricao="vencer/remover"
-              aviso={dashboard.proximos > 0}
-            />
-
-            <CardMetrica
-              icon={BookOpenCheck}
-              titulo="Base Local"
-              valor={dashboard.produtosAprendidos}
-              descricao="produtos aprendidos"
-            />
-
-            <CardMetrica
-              icon={History}
-              titulo="Mapeamento"
-              valor={dashboard.ultimoMapeamento ? "1" : "0"}
-              descricao={
-                dashboard.ultimoMapeamento ? "histórico salvo" : "nenhum ainda"
-              }
-            />
-          </div>
-
-          <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-700 dark:bg-gray-950/60">
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-purple-600 text-white">
-                <History size={20} />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="font-black">{resumoMapeamento.titulo}</p>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  {resumoMapeamento.descricao}
-                </p>
-              </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+              ⚠️ Se ao criar usuário o Firebase trocar para a nova conta, a
+              gente corrige no próximo passo usando autenticação secundária.
             </div>
           </div>
-        </div>
-
-        {/* AÇÕES IMPORTANTES */}
-        <div className="space-y-3 rounded-3xl border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
-          <div>
-            <h2 className="flex items-center gap-2 text-lg font-black">
-              <Sparkles size={20} />
-              Ações rápidas
-            </h2>
-
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Atalhos principais do controle de estoque
-            </p>
-          </div>
-
-          <CardOpcao
-            icon={RotateCcw}
-            titulo="Novo Mapeamento"
-            descricao="Salvar estoque atual e começar nova contagem"
-            onClick={() => setConfirmarMapeamento(true)}
-            destaque
-          />
-
-          <CardOpcao
-            icon={Brain}
-            titulo="Base de Produtos"
-            descricao={`${dashboard.produtosAprendidos} produtos aprendidos pelo scanner`}
-            onClick={() => setPagina("baseProdutos")}
-          />
-
-          <CardOpcao
-            icon={History}
-            titulo="Histórico de Mapeamentos"
-            descricao="Ver contagens anteriores"
-            onClick={() => setPagina("mapeamentos")}
-          />
-        </div>
+        )}
 
         {/* CONFIGURAÇÕES */}
-        <div className="space-y-3 rounded-3xl border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+        <div className="space-y-3 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-black">
-              <Settings size={20} />
+            <h2 className="flex items-center gap-2 text-xl font-black">
+              <Settings size={22} />
               Configurações
             </h2>
 
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Ajustes e proteção dos dados
+              Ajustes gerais da conta
             </p>
           </div>
 
           <CardOpcao
-            icon={Bell}
-            titulo="Notificações"
-            descricao="Alertas e avisos de vencimento"
-            onClick={() => setPagina("notificacoes")}
+            icon={User}
+            titulo="Perfil"
+            descricao="Editar informações do perfil"
+            onClick={() => setPagina("perfil")}
           />
 
-          <CardOpcao
-            icon={Database}
-            titulo="Backup"
-            descricao="Salvar e restaurar dados"
-            onClick={() => setPagina("backup")}
-          />
+          <div className="flex items-center justify-between rounded-2xl bg-gray-100/90 p-4 dark:bg-gray-800/70">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-700 text-white">
+                <Moon size={20} />
+              </div>
 
-          <CardOpcao
-            icon={Shield}
-            titulo="Privacidade Local"
-            descricao="Entenda onde seus dados ficam salvos"
-            onClick={() => setAbrirSeguranca(true)}
-          />
-        </div>
-
-        {/* DARK MODE */}
-        <div className="flex items-center justify-between rounded-3xl border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800">
-              <Moon size={20} />
+              <div>
+                <p className="font-bold">Modo Escuro</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Alternar aparência
+                </p>
+              </div>
             </div>
 
-            <div>
-              <p className="font-bold">Modo Escuro</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Alternar aparência
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className={`flex h-7 w-14 items-center rounded-full px-1 transition-all ${
+                dark ? "justify-end bg-green-500" : "justify-start bg-gray-400"
+              }`}
+            >
+              <div className="h-5 w-5 rounded-full bg-white shadow-md" />
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className={`
-              flex h-7 w-14 items-center rounded-full px-1 transition-all
-              ${dark ? "justify-end bg-green-500" : "justify-start bg-gray-400"}
-            `}
-          >
-            <div className="h-5 w-5 rounded-full bg-white shadow-md" />
-          </button>
+          {isAdmin && (
+            <CardOpcao
+              icon={Shield}
+              titulo="Privacidade local"
+              descricao="Estado atual dos dados locais e nuvem"
+              onClick={() =>
+                mostrarToast("Login já está na nuvem. Dados do estoque ainda serão migrados 🛡️", "info")
+              }
+            />
+          )}
         </div>
 
-        {/* STATUS LOCAL */}
-        <div className="rounded-3xl border border-emerald-200 bg-emerald-50/90 p-5 text-emerald-800 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+        {/* RODAPÉ */}
+        <div className="rounded-[2rem] border border-emerald-200 bg-emerald-50/90 p-5 text-emerald-800 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
           <div className="flex gap-3">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white">
-              <HardDrive size={22} />
+              {isAdmin ? <Cloud size={22} /> : <CloudOff size={22} />}
             </div>
 
             <div>
-              <p className="font-black">Modo local ativo</p>
+              <p className="font-black">
+                {isAdmin ? "Modo premium admin ativo" : "Conta de usuário ativa"}
+              </p>
               <p className="mt-1 text-sm">
-                Seus dados estão salvos neste dispositivo. Para trocar de celular
-                ou PC, use Backup até a futura versão com conta em nuvem.
+                {isAdmin
+                  ? "Login real funcionando. Próximo passo: vincular medicamentos, receitas e base de produtos ao Firestore."
+                  : "Você tem acesso às áreas liberadas para uso básico do app."}
               </p>
             </div>
           </div>
-        </div>
-
-        <div className="pt-2 text-center text-xs text-gray-400">
-          Farmácia App • build turbo mega deluxe 🚀
         </div>
       </div>
     </div>
   );
 }
 
+function Campo({ icon: Icon, label, value, onChange, placeholder, type = "text" }) {
+  return (
+    <div>
+      <label className="mb-1 flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400">
+        <Icon size={16} />
+        {label}
+      </label>
+
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 font-semibold outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-gray-800 dark:bg-gray-950"
+      />
+    </div>
+  );
+}
+
 function Chip({ children }) {
   return (
-    <span className="rounded-full border border-white/10 bg-white/15 px-3 py-1 text-xs backdrop-blur-sm">
+    <span className="rounded-full border border-white/10 bg-white/15 px-3 py-1 text-xs font-bold backdrop-blur-sm">
       {children}
     </span>
   );
 }
 
-function CardMetrica({
-  icon: Icon,
-  titulo,
-  valor,
-  descricao,
-  alerta = false,
-  aviso = false,
-}) {
+function StatusCard({ icon: Icon, titulo, valor, descricao, ativo = false, aviso = false }) {
+  return (
+    <div
+      className={`
+        rounded-3xl border p-4 shadow-xl backdrop-blur-xl
+        ${
+          ativo
+            ? "border-emerald-200 bg-emerald-50/90 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200"
+            : aviso
+            ? "border-amber-200 bg-amber-50/90 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
+            : "border-gray-200 bg-white/90 dark:border-gray-800 dark:bg-gray-900/90"
+        }
+      `}
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-sm font-black">{titulo}</p>
+        <Icon size={20} />
+      </div>
+
+      <p className="text-2xl font-black">{valor}</p>
+      <p className="mt-1 text-xs opacity-75">{descricao}</p>
+    </div>
+  );
+}
+
+function CardMetrica({ icon: Icon, titulo, valor, descricao, alerta = false, aviso = false }) {
   return (
     <div
       className={`
@@ -611,24 +633,10 @@ function CardMetrica({
           {titulo}
         </p>
 
-        <Icon
-          size={18}
-          className={
-            alerta
-              ? "text-red-500"
-              : aviso
-              ? "text-amber-500"
-              : "text-green-600 dark:text-green-400"
-          }
-        />
+        <Icon size={18} />
       </div>
 
-      <p
-        className={`
-          text-2xl font-black
-          ${alerta ? "text-red-500" : aviso ? "text-amber-500" : ""}
-        `}
-      >
+      <p className={`text-2xl font-black ${alerta ? "text-red-500" : aviso ? "text-amber-500" : ""}`}>
         {valor}
       </p>
 
@@ -639,72 +647,27 @@ function CardMetrica({
   );
 }
 
-function CardOpcao({
-  icon: Icon,
-  titulo,
-  descricao,
-  danger = false,
-  destaque = false,
-  onClick,
-}) {
+function CardOpcao({ icon: Icon, titulo, descricao, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`
-        flex w-full items-center justify-between rounded-2xl p-4 transition-all active:scale-[0.98]
-        ${
-          danger
-            ? "border border-red-500/20 bg-red-500/10 hover:bg-red-500/20"
-            : destaque
-            ? "bg-gradient-to-br from-emerald-600 to-emerald-800 text-white shadow-lg shadow-emerald-700/20"
-            : "bg-gray-100/90 hover:bg-gray-200 dark:bg-gray-800/70 dark:hover:bg-gray-800"
-        }
-      `}
+      className="flex w-full items-center justify-between rounded-2xl bg-gray-100/90 p-4 transition-all hover:bg-gray-200 active:scale-[0.98] dark:bg-gray-800/70 dark:hover:bg-gray-800"
     >
       <div className="flex min-w-0 items-center gap-4">
-        <div
-          className={`
-            flex h-11 w-11 shrink-0 items-center justify-center rounded-xl
-            ${
-              danger
-                ? "bg-red-500 text-white"
-                : destaque
-                ? "bg-white/15 text-white"
-                : "bg-green-700 text-white"
-            }
-          `}
-        >
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-700 text-white">
           <Icon size={20} />
         </div>
 
         <div className="min-w-0 text-left">
-          <p
-            className={`font-bold ${
-              danger
-                ? "text-red-500"
-                : destaque
-                ? "text-white"
-                : "text-black dark:text-white"
-            }`}
-          >
-            {titulo}
-          </p>
-
-          <p
-            className={`truncate text-xs ${
-              destaque ? "text-white/75" : "text-gray-500 dark:text-gray-400"
-            }`}
-          >
+          <p className="font-bold text-black dark:text-white">{titulo}</p>
+          <p className="truncate text-xs text-gray-500 dark:text-gray-400">
             {descricao}
           </p>
         </div>
       </div>
 
-      <ChevronRight
-        size={18}
-        className={destaque ? "text-white/70" : "text-gray-400"}
-      />
+      <ChevronRight size={18} className="text-gray-400" />
     </button>
   );
 }
@@ -728,10 +691,9 @@ function Toast({ toast, fechar }) {
         `}
       >
         <div
-          className={`
-            flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white
-            ${erro ? "bg-red-500" : info ? "bg-blue-500" : "bg-emerald-600"}
-          `}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white ${
+            erro ? "bg-red-500" : info ? "bg-blue-500" : "bg-emerald-600"
+          }`}
         >
           {erro ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
         </div>
@@ -745,172 +707,6 @@ function Toast({ toast, fechar }) {
         >
           <X size={17} />
         </button>
-      </div>
-    </div>
-  );
-}
-
-function ConfirmarMapeamento({
-  onCancelar,
-  onConfirmar,
-  totalItens,
-  totalUnidades,
-  carregando,
-}) {
-  return (
-    <div className="fixed inset-0 z-[99998] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-3xl border border-gray-200 bg-white p-6 text-gray-950 shadow-2xl dark:border-gray-800 dark:bg-gray-900 dark:text-white">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-          <RotateCcw size={28} />
-        </div>
-
-        <h2 className="text-center text-lg font-black">
-          Criar novo mapeamento?
-        </h2>
-
-        <p className="mt-2 text-center text-sm text-gray-500 dark:text-gray-400">
-          O estoque atual será salvo no histórico e depois a lista de
-          medicamentos será limpa. A base aprendida do scanner não será apagada.
-        </p>
-
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-gray-100 p-3 text-center dark:bg-gray-800">
-            <p className="text-2xl font-black">{totalItens}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">itens</p>
-          </div>
-
-          <div className="rounded-2xl bg-gray-100 p-3 text-center dark:bg-gray-800">
-            <p className="text-2xl font-black">{totalUnidades}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">unidades</p>
-          </div>
-        </div>
-
-        <div className="mt-6 flex gap-3">
-          <button
-            type="button"
-            onClick={onCancelar}
-            disabled={carregando}
-            className="flex h-12 flex-1 items-center justify-center rounded-2xl bg-gray-100 font-bold text-gray-700 transition active:scale-95 disabled:opacity-60 dark:bg-gray-800 dark:text-gray-200"
-          >
-            Cancelar
-          </button>
-
-          <button
-            type="button"
-            onClick={onConfirmar}
-            disabled={carregando}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-700 font-bold text-white transition active:scale-95 disabled:opacity-60"
-          >
-            {carregando && <Loader2 size={18} className="animate-spin" />}
-            Confirmar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ModalSeguranca({ onFechar, onAbrirBackup }) {
-  return (
-    <div
-      onClick={onFechar}
-      className="fixed inset-0 z-[99998] flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md overflow-hidden rounded-3xl border border-gray-200 bg-white text-gray-950 shadow-2xl dark:border-gray-800 dark:bg-gray-900 dark:text-white"
-      >
-        <div className="relative overflow-hidden bg-gradient-to-br from-emerald-700 to-slate-950 p-5 text-white">
-          <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10" />
-          <div className="absolute -bottom-12 left-8 h-32 w-32 rounded-full bg-emerald-300/10" />
-
-          <div className="relative flex items-start justify-between gap-3">
-            <div>
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
-                <LockKeyhole size={25} />
-              </div>
-
-              <h2 className="text-xl font-black">Privacidade Local</h2>
-              <p className="mt-1 text-sm text-emerald-100">
-                O app ainda trabalha com dados salvos no dispositivo.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={onFechar}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/15 transition active:scale-95"
-            >
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-
-        <div className="space-y-3 p-5">
-          <InfoSeguranca
-            icon={HardDrive}
-            titulo="Banco local"
-            texto="Medicamentos, receitas, base aprendida e mapeamentos ficam salvos no navegador usando Dexie."
-          />
-
-          <InfoSeguranca
-            icon={AlertTriangle}
-            titulo="Cuidado ao limpar dados"
-            texto="Se limpar cache/dados do navegador, trocar de aparelho ou reinstalar o PWA, você pode perder informações sem backup."
-            aviso
-          />
-
-          <InfoSeguranca
-            icon={Database}
-            titulo="Backup é o escudo atual"
-            texto="Enquanto não existe login em nuvem, a melhor proteção é exportar backup com frequência."
-          />
-
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={onFechar}
-              className="rounded-2xl bg-gray-100 py-3 font-bold text-gray-700 transition active:scale-95 dark:bg-gray-800 dark:text-gray-200"
-            >
-              Entendi
-            </button>
-
-            <button
-              type="button"
-              onClick={onAbrirBackup}
-              className="rounded-2xl bg-emerald-700 py-3 font-bold text-white transition active:scale-95"
-            >
-              Abrir Backup
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InfoSeguranca({ icon: Icon, titulo, texto, aviso = false }) {
-  return (
-    <div
-      className={`
-        flex gap-3 rounded-2xl border p-4
-        ${
-          aviso
-            ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
-            : "border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300"
-        }
-      `}
-    >
-      <Icon
-        size={21}
-        className={`mt-0.5 shrink-0 ${
-          aviso ? "text-amber-600" : "text-emerald-600 dark:text-emerald-300"
-        }`}
-      />
-
-      <div>
-        <p className="font-black">{titulo}</p>
-        <p className="mt-1 text-sm opacity-80">{texto}</p>
       </div>
     </div>
   );
