@@ -50,7 +50,14 @@ const dashboardInicial = {
 
 function Menu({ setPagina }) {
   const { theme, toggleTheme } = useTheme();
-  const { usuarioAtual, isAdmin, logout, criarUsuario } = useAuth();
+  const {
+  usuarioAtual,
+  isAdmin,
+  logout,
+  criarUsuario,
+  buscarUsuarioPorId,
+  alterarTipoPorId,
+} = useAuth();
 
   const dark = theme === "dark";
 
@@ -64,6 +71,9 @@ function Menu({ setPagina }) {
     senha: "",
     tipo: "comum",
   });
+  const [buscaId, setBuscaId] = useState("");
+  const [usuarioEncontrado, setUsuarioEncontrado] = useState(null);
+  const [loadingBusca, setLoadingBusca] = useState(false);
 
   useEffect(() => {
     carregarDashboard();
@@ -189,6 +199,50 @@ function Menu({ setPagina }) {
 
     mostrarToast("Usuário criado na nuvem ✨", "ok");
   }
+  async function buscarPorId() {
+  if (!buscaId.trim()) {
+    mostrarToast("Digite um ID 😅", "erro");
+    return;
+  }
+
+  setLoadingBusca(true);
+
+  const res = await buscarUsuarioPorId(buscaId);
+
+  setLoadingBusca(false);
+
+  if (!res.ok) {
+    mostrarToast(res.erro, "erro");
+    setUsuarioEncontrado(null);
+    return;
+  }
+
+  setUsuarioEncontrado(res.usuario);
+
+  mostrarToast("Usuário encontrado 🔍");
+}
+
+async function alterarPermissao(tipo) {
+  if (!usuarioEncontrado) return;
+
+  const res = await alterarTipoPorId(
+    usuarioEncontrado.publicId,
+    tipo
+  );
+
+  if (!res.ok) {
+    mostrarToast(res.erro, "erro");
+    return;
+  }
+
+  setUsuarioEncontrado(res.usuario);
+
+  mostrarToast(
+    tipo === "admin"
+      ? "Usuário promovido 👑"
+      : "Usuário rebaixado 👤"
+  );
+}
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -480,6 +534,131 @@ function Menu({ setPagina }) {
             </div>
           </div>
         )}
+
+        {/* GERENCIAR ACESSOS */}
+{isAdmin && (
+  <div className="space-y-4 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+
+    <div>
+      <h2 className="flex items-center gap-2 text-xl font-black">
+        <Shield size={22} />
+        Gerenciar acessos
+      </h2>
+
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        Promover ou rebaixar usuários usando ID público
+      </p>
+    </div>
+
+    {/* BUSCA */}
+    <div className="flex gap-2">
+      <input
+        value={buscaId}
+        onChange={(e) => setBuscaId(e.target.value)}
+        placeholder="Digite o ID"
+        className="
+          flex-1 rounded-2xl border border-gray-200
+          bg-gray-50 px-4 py-3 font-semibold
+          outline-none focus:border-emerald-500
+          focus:ring-4 focus:ring-emerald-500/20
+          dark:border-gray-800 dark:bg-gray-950
+        "
+      />
+
+      <button
+        onClick={buscarPorId}
+        className="
+          rounded-2xl bg-emerald-700 px-5
+          font-bold text-white
+        "
+      >
+        {loadingBusca ? "..." : "Buscar"}
+      </button>
+    </div>
+
+    {/* RESULTADO */}
+    {usuarioEncontrado && (
+      <div className="
+        rounded-3xl border border-gray-200
+        bg-gray-100/80 p-5
+        dark:border-gray-700
+        dark:bg-gray-800/70
+      ">
+
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xl font-black">
+              {usuarioEncontrado.nome}
+            </p>
+
+            <p className="text-sm text-gray-500">
+              ID: {usuarioEncontrado.publicId}
+            </p>
+          </div>
+
+          <div className={`
+            rounded-full px-3 py-1 text-xs font-black
+            ${
+              usuarioEncontrado.tipo === "admin"
+                ? "bg-yellow-500 text-black"
+                : "bg-blue-500 text-white"
+            }
+          `}>
+            {usuarioEncontrado.tipo}
+          </div>
+        </div>
+
+        {(usuarioEncontrado.permissaoAtualizadaPor ||
+          usuarioEncontrado.criadoPor) && (
+          <div className="
+            mt-4 rounded-2xl bg-black/5 p-3
+            text-sm dark:bg-white/5
+          ">
+            <p>
+              👤 Última alteração por:
+              <span className="font-bold">
+                {" "}
+                {usuarioEncontrado.permissaoAtualizadaPor ||
+                  usuarioEncontrado.criadoPor}
+              </span>
+            </p>
+
+            {usuarioEncontrado.permissaoAtualizadaEm && (
+              <p className="mt-1 text-xs text-gray-500">
+                {new Date(
+                  usuarioEncontrado.permissaoAtualizadaEm
+                ).toLocaleString("pt-BR")}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="mt-5 flex gap-3">
+          <button
+            onClick={() => alterarPermissao("admin")}
+            className="
+              flex-1 rounded-2xl bg-yellow-500
+              py-3 font-black text-black
+            "
+          >
+            👑 Tornar admin
+          </button>
+
+          <button
+            onClick={() => alterarPermissao("comum")}
+            className="
+              flex-1 rounded-2xl bg-blue-600
+              py-3 font-black text-white
+            "
+          >
+            👤 Tornar comum
+          </button>
+        </div>
+
+      </div>
+    )}
+  </div>
+)}
 
         {/* CONFIGURAÇÕES */}
         <div className="space-y-3 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">

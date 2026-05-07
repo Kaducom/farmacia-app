@@ -7,6 +7,7 @@ import {
   Syringe,
   Stethoscope,
   Menu as MenuIcon,
+  ArrowLeft,
 } from "lucide-react";
 
 import Medicamentos from "./pages/Medicamentos";
@@ -19,6 +20,7 @@ import Perfil from "./pages/Perfil";
 import Notificacoes from "./pages/Notificacoes";
 import { useAuth } from "./context/AuthContext";
 
+
 function App() {
   const {
   usuarioAtual,
@@ -27,6 +29,32 @@ function App() {
   criarUsuario,
 } = useAuth();
   const [pagina, setPagina] = useState(isAdmin ? "medicamentos" : "receitas");
+
+  const paginasMenu = [
+  "baseProdutos",
+  "mapeamentos",
+  "backup",
+  "perfil",
+  "notificacoes",
+];
+
+const mostrarVoltar =
+  paginasMenu.includes(pagina);
+
+function voltarPagina() {
+
+  if (paginasMenu.includes(pagina)) {
+    setPagina("menu");
+    return;
+  }
+
+  if (!isAdmin) {
+    setPagina("receitas");
+    return;
+  }
+
+  setPagina("medicamentos");
+}
 
   const titulos = {
     medicamentos: "Medicamentos",
@@ -102,9 +130,40 @@ function App() {
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-gray-100 text-black transition-colors duration-300 dark:bg-[#0f172a] dark:text-white">
-      <div className="sticky top-0 z-40 border-b border-gray-200/70 bg-white/85 pt-safe text-center text-lg font-black backdrop-blur-md dark:border-gray-700/70 dark:bg-[#111827]/90">
-        <div className="px-4 py-3">{titulos[pagina]}</div>
-      </div>
+<div
+  className="
+    sticky top-0 z-40 border-b border-gray-200/70
+    bg-white/85 pt-safe
+    backdrop-blur-md
+    dark:border-gray-700/70
+    dark:bg-[#111827]/90
+  "
+>
+  <div className="relative flex items-center justify-center px-4 py-3">
+
+    {mostrarVoltar && (
+      <button
+        type="button"
+        onClick={voltarPagina}
+        className="
+          absolute left-3
+          flex h-11 w-11 items-center justify-center
+          rounded-2xl
+          bg-gray-100 text-gray-700
+          transition active:scale-95
+          dark:bg-gray-800 dark:text-white
+        "
+      >
+        <ArrowLeft size={21} />
+      </button>
+    )}
+
+    <p className="text-lg font-black">
+      {titulos[pagina]}
+    </p>
+
+  </div>
+</div>
 
       <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+7.5rem)]">
         {renderPagina()}
@@ -168,7 +227,7 @@ function TelaLogin({ login, criarUsuario }) {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
-
+  
   const senhaRef = useRef(null);
 
   async function entrar() {

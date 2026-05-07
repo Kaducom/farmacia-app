@@ -1,11 +1,11 @@
 import { initializeApp } from "firebase/app";
 
 import {
-  getAuth
+  getAuth,
 } from "firebase/auth";
 
 import {
-  getFirestore
+  getFirestore,
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -15,11 +15,30 @@ const firebaseConfig = {
   storageBucket: "farmacia-app-d2121.firebasestorage.app",
   messagingSenderId: "106560458564",
   appId: "1:106560458564:web:058dec73a8d56de1fcd111",
-  measurementId: "G-40P7VC1134"
+  measurementId: "G-40P7VC1134",
 };
 
+
+// 🔥 app principal
 const app = initializeApp(firebaseConfig);
 
+
+// 🔥 app secundário
+const secondaryApp = initializeApp(
+  firebaseConfig,
+  "Secondary"
+);
+
+
+// 🔥 auth principal
 export const auth = getAuth(app);
 
-export const firestore = getFirestore(app);
+
+// 🔥 auth secundário
+export const secondaryAuth =
+  getAuth(secondaryApp);
+
+
+// 🔥 firestore
+export const firestore =
+  getFirestore(app);

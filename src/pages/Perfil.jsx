@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 import {
   User,
   Camera,
@@ -9,6 +10,8 @@ import {
   Layers3,
   ShieldCheck,
   X,
+  Copy,
+  Fingerprint,
 } from "lucide-react";
 import FundoBolhas from "../components/FundoBolhas";
 
@@ -25,6 +28,7 @@ const perfilPadrao = {
 function Perfil() {
   const [perfil, setPerfil] = useState(perfilPadrao);
   const [toast, setToast] = useState(null);
+  const { usuarioAtual, garantirMeuPublicId } = useAuth();
 
   useEffect(() => {
     carregarPerfil();
@@ -67,7 +71,6 @@ function Perfil() {
     };
 
     localStorage.setItem(PERFIL_KEY, JSON.stringify(dados));
-
     window.dispatchEvent(new Event("perfilFarmaciaAtualizado"));
 
     setPerfil(dados);
@@ -76,7 +79,6 @@ function Perfil() {
 
   function removerPerfil() {
     localStorage.removeItem(PERFIL_KEY);
-
     window.dispatchEvent(new Event("perfilFarmaciaAtualizado"));
 
     setPerfil(perfilPadrao);
@@ -99,6 +101,15 @@ function Perfil() {
     };
 
     reader.readAsDataURL(file);
+  }
+
+  function copiarId() {
+    if (!usuarioAtual?.publicId) return;
+
+    navigator.clipboard.writeText(usuarioAtual.publicId);
+    mostrarToast("ID copiado 📋", "ok");
+
+    if (navigator.vibrate) navigator.vibrate(20);
   }
 
   function mostrarToast(msg, tipo = "ok") {
@@ -148,18 +159,93 @@ function Perfil() {
 
             <div className="min-w-0 flex-1">
               <p className="text-3xl font-black">
-                {perfil.nome || "Usuário"}
+                {perfil.nome || usuarioAtual?.nome || "Usuário"}
               </p>
 
               <p className="mt-1 text-sm text-green-100">
                 {perfil.farmacia || "Painel local do estoque"}
               </p>
 
-              <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
-                <Chip>{perfil.cargo || "Auxiliar"}</Chip>
-                <Chip>Seção {perfil.secao || "Geral"}</Chip>
-                <Chip>Modo local</Chip>
-              </div>
+<div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
+  <Chip>{perfil.cargo || "Auxiliar"}</Chip>
+  <Chip>Seção {perfil.secao || "Geral"}</Chip>
+
+  <Chip>
+    {usuarioAtual?.tipo === "admin"
+      ? "👑 Admin"
+      : "👤 Usuário"}
+  </Chip>
+
+  <Chip>Firebase ativo</Chip>
+</div>
+
+{/* 🔥 ID PÚBLICO */}
+{/* 🔥 ID PÚBLICO */}
+<div className="mt-5 rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
+
+  <div className="flex items-center justify-between">
+    <div>
+      <p className="text-[10px] font-black uppercase tracking-[0.25em] text-green-100/50">
+        ID
+      </p>
+
+      {usuarioAtual?.publicId ? (
+        <p className="mt-1 text-lg font-black tracking-[0.18em] text-white">
+          {usuarioAtual.publicId}
+        </p>
+      ) : (
+        <p className="mt-1 text-sm text-yellow-200">
+          Nenhum ID gerado
+        </p>
+      )}
+    </div>
+
+    {usuarioAtual?.publicId && (
+      <button
+        type="button"
+        onClick={() => {
+          navigator.clipboard.writeText(usuarioAtual.publicId);
+
+          if (navigator.vibrate) navigator.vibrate(20);
+
+          mostrarToast("ID copiado ✨");
+        }}
+        className="
+          flex h-10 w-10 items-center justify-center
+          rounded-2xl bg-white/90 text-emerald-700
+          shadow-lg transition active:scale-90
+        "
+      >
+        <Copy size={18} />
+      </button>
+    )}
+  </div>
+
+  {!usuarioAtual?.publicId && (
+    <button
+      type="button"
+      onClick={async () => {
+        const novoId = await garantirMeuPublicId();
+
+        if (novoId) {
+          mostrarToast("ID gerado ✨");
+        } else {
+          mostrarToast("Erro ao gerar ID ⚠️", "erro");
+        }
+      }}
+      className="
+        mt-4 w-full rounded-2xl
+        bg-gradient-to-r from-yellow-400 to-amber-500
+        py-2.5 text-sm font-black text-black
+        shadow-lg transition active:scale-95
+      "
+    >
+      ✨ Gerar ID
+    </button>
+  )}
+
+</div>
+
             </div>
           </div>
         </div>
@@ -227,7 +313,7 @@ function Perfil() {
             <button
               type="button"
               onClick={salvarPerfil}
-              className="flex h-13 items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-4 py-3 font-bold text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-800 active:scale-95"
+              className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-4 py-3 font-bold text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-800 active:scale-95"
             >
               <Save size={20} />
               Salvar perfil
@@ -236,7 +322,7 @@ function Perfil() {
             <button
               type="button"
               onClick={removerPerfil}
-              className="flex h-13 items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 py-3 font-bold text-white shadow-lg shadow-red-500/20 transition hover:bg-red-600 active:scale-95"
+              className="flex items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 py-3 font-bold text-white shadow-lg shadow-red-500/20 transition hover:bg-red-600 active:scale-95"
             >
               <Trash2 size={20} />
               Resetar
@@ -252,10 +338,9 @@ function Perfil() {
             </div>
 
             <div>
-              <p className="font-black">Perfil local ativo</p>
+              <p className="font-black">Conta e perfil</p>
               <p className="mt-1 text-sm">
-                Por enquanto, o perfil fica salvo apenas neste aparelho. Quando
-                entrar login Google, esses campos já podem virar a base da conta.
+                O login já está na nuvem. Este perfil visual ainda fica salvo neste aparelho.
               </p>
             </div>
           </div>
