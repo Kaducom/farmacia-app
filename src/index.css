@@ -44,7 +44,8 @@ button,
 input,
 textarea,
 select,
-div {
+.smooth-theme,
+.theme-transition { 
   transition:
     background-color 0.25s ease,
     color 0.25s ease,
