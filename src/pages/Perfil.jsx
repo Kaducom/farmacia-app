@@ -1,392 +1,416 @@
-import { useEffect, useState } from "react";
-import { useAuth } from "../context/AuthContext";
 import {
-  User,
-  Camera,
-  Save,
-  Trash2,
-  Building2,
-  BadgeCheck,
-  Layers3,
-  ShieldCheck,
-  X,
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clipboard,
+  Cloud,
+  CloudOff,
   Copy,
-  Fingerprint,
+  LogOut,
+  Mail,
+  Moon,
+  Pencil,
+  Save,
+  Shield,
+  User,
+  X,
 } from "lucide-react";
+
 import FundoBolhas from "../components/FundoBolhas";
-
-const PERFIL_KEY = "farmaciaPerfil";
-
-const perfilPadrao = {
-  nome: "Usuário",
-  farmacia: "Painel local do estoque",
-  cargo: "Auxiliar",
-  secao: "Geral",
-  avatar: null,
-};
+import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 
 function Perfil() {
-  const [perfil, setPerfil] = useState(perfilPadrao);
+  const {
+    usuarioAtual,
+    isAdmin,
+    isVisitante,
+    logout,
+    atualizarMeuPerfil,
+    garantirMeuPublicId,
+  } = useAuth();
+
+  const { theme, toggleTheme } = useTheme();
+
+  const [nome, setNome] = useState(usuarioAtual?.nome || "");
+  const [editando, setEditando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
   const [toast, setToast] = useState(null);
-  const { usuarioAtual, garantirMeuPublicId } = useAuth();
+
+  const dark = theme === "dark";
 
   useEffect(() => {
-    carregarPerfil();
-  }, []);
+    setNome(usuarioAtual?.nome || "");
+  }, [usuarioAtual?.nome]);
 
-  function carregarPerfil() {
-    try {
-      const salvo = localStorage.getItem(PERFIL_KEY);
+  function mostrarToast(msg, tipo = "ok") {
+    setToast({
+      msg,
+      tipo,
+    });
 
-      if (!salvo) {
-        setPerfil(perfilPadrao);
-        return;
-      }
-
-      setPerfil({
-        ...perfilPadrao,
-        ...JSON.parse(salvo),
-      });
-    } catch (err) {
-      console.error(err);
-      setPerfil(perfilPadrao);
+    if (navigator.vibrate) {
+      navigator.vibrate(25);
     }
+
+    setTimeout(() => {
+      setToast(null);
+    }, 3000);
   }
 
-  function atualizarCampo(campo, valor) {
-    setPerfil((prev) => ({
-      ...prev,
-      [campo]: valor,
-    }));
-  }
-
-  function salvarPerfil() {
-    const dados = {
-      ...perfil,
-      nome: perfil.nome.trim() || "Usuário",
-      farmacia: perfil.farmacia.trim() || "Painel local do estoque",
-      cargo: perfil.cargo || "Auxiliar",
-      secao: perfil.secao || "Geral",
-      atualizadoEm: new Date().toISOString(),
-    };
-
-    localStorage.setItem(PERFIL_KEY, JSON.stringify(dados));
-    window.dispatchEvent(new Event("perfilFarmaciaAtualizado"));
-
-    setPerfil(dados);
-    mostrarToast("Perfil salvo com sucesso ✨", "ok");
-  }
-
-  function removerPerfil() {
-    localStorage.removeItem(PERFIL_KEY);
-    window.dispatchEvent(new Event("perfilFarmaciaAtualizado"));
-
-    setPerfil(perfilPadrao);
-    mostrarToast("Perfil resetado 🧹", "info");
-  }
-
-  function handleAvatar(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      mostrarToast("Imagem muito grande. Use até 2MB ⚠️", "erro");
+  async function salvarPerfil() {
+    if (isVisitante) {
+      mostrarToast(
+        "Visitante não salva perfil na nuvem. Crie uma conta para salvar.",
+        "info"
+      );
       return;
     }
 
-    const reader = new FileReader();
+    if (!nome.trim()) {
+      mostrarToast("Digite seu nome", "erro");
+      return;
+    }
 
-    reader.onloadend = () => {
-      atualizarCampo("avatar", reader.result);
-    };
+    setSalvando(true);
 
-    reader.readAsDataURL(file);
+    const res = await atualizarMeuPerfil({
+      nome: nome.trim(),
+    });
+
+    setSalvando(false);
+
+    if (!res.ok) {
+      mostrarToast(res.erro || "Erro ao salvar perfil", "erro");
+      return;
+    }
+
+    setEditando(false);
+    mostrarToast("Perfil atualizado ✨", "ok");
   }
 
-  function copiarId() {
-    if (!usuarioAtual?.publicId) return;
+  async function copiarId() {
+    const id = usuarioAtual?.publicId;
 
-    navigator.clipboard.writeText(usuarioAtual.publicId);
-    mostrarToast("ID copiado 📋", "ok");
+    if (!id || isVisitante) {
+      mostrarToast("Conta visitante não tem ID público fixo", "info");
+      return;
+    }
 
-    if (navigator.vibrate) navigator.vibrate(20);
+    try {
+      await navigator.clipboard.writeText(id);
+      mostrarToast("ID copiado 📋", "ok");
+    } catch {
+      mostrarToast("Não foi possível copiar o ID", "erro");
+    }
   }
 
-  function mostrarToast(msg, tipo = "ok") {
-    setToast({ msg, tipo });
+  async function gerarId() {
+    if (isVisitante) {
+      mostrarToast("Visitante não gera ID público", "info");
+      return;
+    }
 
-    if (navigator.vibrate) navigator.vibrate(25);
+    const id = await garantirMeuPublicId();
 
-    setTimeout(() => setToast(null), 2800);
+    if (!id) {
+      mostrarToast("Não foi possível gerar ID", "erro");
+      return;
+    }
+
+    mostrarToast(`ID pronto: ${id}`, "ok");
   }
 
   return (
     <div className="relative min-h-screen overflow-hidden">
       <FundoBolhas variant="emerald" />
 
-      {toast && <Toast toast={toast} fechar={() => setToast(null)} />}
+      {toast && (
+        <Toast
+          toast={toast}
+          fechar={() => setToast(null)}
+        />
+      )}
 
       <div className="relative z-10 mx-auto max-w-4xl space-y-5 p-4 pb-32 text-black dark:text-white">
-        {/* HEADER */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-green-700 via-emerald-800 to-emerald-950 p-6 text-white shadow-2xl shadow-emerald-950/25">
-          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10" />
-          <div className="absolute -bottom-16 left-10 h-36 w-36 rounded-full bg-emerald-300/10" />
+        <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-green-700 via-emerald-800 to-slate-950 p-6 text-white shadow-2xl shadow-emerald-950/30">
+          <div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-white/10" />
+          <div className="absolute -bottom-20 left-10 h-44 w-44 rounded-full bg-emerald-300/10" />
 
-          <div className="relative flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
-            <div className="relative">
-              <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-3xl border border-white/20 bg-white/20 shadow-xl backdrop-blur-md">
-                {perfil.avatar ? (
-                  <img
-                    src={perfil.avatar}
-                    alt={perfil.nome}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <User size={48} />
-                )}
-              </div>
-
-              <label className="absolute -bottom-2 -right-2 flex h-11 w-11 cursor-pointer items-center justify-center rounded-2xl bg-white text-emerald-800 shadow-lg transition active:scale-95">
-                <Camera size={20} />
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleAvatar}
-                  className="hidden"
-                />
-              </label>
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-[2rem] border border-white/20 bg-white/20 shadow-xl backdrop-blur-md">
+              <User size={44} />
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="text-3xl font-black">
-                {perfil.nome || usuarioAtual?.nome || "Usuário"}
+              <p className="truncate text-3xl font-black">
+                {usuarioAtual?.nome || "Usuário"}
               </p>
 
-              <p className="mt-1 text-sm text-green-100">
-                {perfil.farmacia || "Painel local do estoque"}
+              <p className="mt-1 truncate text-sm text-green-100">
+                {isVisitante
+                  ? "Modo visitante local"
+                  : usuarioAtual?.email || "Conta Firebase"}
               </p>
 
-<div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
-  <Chip>{perfil.cargo || "Auxiliar"}</Chip>
-  <Chip>Seção {perfil.secao || "Geral"}</Chip>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Chip>
+                  {isAdmin
+                    ? "👑 Admin"
+                    : isVisitante
+                    ? "✨ Visitante"
+                    : "👤 Usuário"}
+                </Chip>
 
-  <Chip>
-    {usuarioAtual?.tipo === "admin"
-      ? "👑 Admin"
-      : "👤 Usuário"}
-  </Chip>
+                <Chip>
+                  {isVisitante
+                    ? "Sem nuvem"
+                    : "Firebase ativo"}
+                </Chip>
 
-  <Chip>Firebase ativo</Chip>
-</div>
-
-{/* 🔥 ID PÚBLICO */}
-{/* 🔥 ID PÚBLICO */}
-<div className="mt-5 rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
-
-  <div className="flex items-center justify-between">
-    <div>
-      <p className="text-[10px] font-black uppercase tracking-[0.25em] text-green-100/50">
-        ID
-      </p>
-
-      {usuarioAtual?.publicId ? (
-        <p className="mt-1 text-lg font-black tracking-[0.18em] text-white">
-          {usuarioAtual.publicId}
-        </p>
-      ) : (
-        <p className="mt-1 text-sm text-yellow-200">
-          Nenhum ID gerado
-        </p>
-      )}
-    </div>
-
-    {usuarioAtual?.publicId && (
-      <button
-        type="button"
-        onClick={() => {
-          navigator.clipboard.writeText(usuarioAtual.publicId);
-
-          if (navigator.vibrate) navigator.vibrate(20);
-
-          mostrarToast("ID copiado ✨");
-        }}
-        className="
-          flex h-10 w-10 items-center justify-center
-          rounded-2xl bg-white/90 text-emerald-700
-          shadow-lg transition active:scale-90
-        "
-      >
-        <Copy size={18} />
-      </button>
-    )}
-  </div>
-
-  {!usuarioAtual?.publicId && (
-    <button
-      type="button"
-      onClick={async () => {
-        const novoId = await garantirMeuPublicId();
-
-        if (novoId) {
-          mostrarToast("ID gerado ✨");
-        } else {
-          mostrarToast("Erro ao gerar ID ⚠️", "erro");
-        }
-      }}
-      className="
-        mt-4 w-full rounded-2xl
-        bg-gradient-to-r from-yellow-400 to-amber-500
-        py-2.5 text-sm font-black text-black
-        shadow-lg transition active:scale-95
-      "
-    >
-      ✨ Gerar ID
-    </button>
-  )}
-
-</div>
-
+                {!isVisitante && usuarioAtual?.publicId && (
+                  <Chip>ID: {usuarioAtual.publicId}</Chip>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-
-        {/* FORM */}
-        <div className="rounded-3xl border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
-          <h2 className="mb-1 text-lg font-black">Dados do perfil</h2>
-
-          <p className="mb-5 text-sm text-gray-500 dark:text-gray-400">
-            Essas informações ficam salvas neste dispositivo e aparecem no Menu.
-          </p>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <CampoTexto
-              icon={User}
-              label="Nome"
-              value={perfil.nome}
-              placeholder="Ex: Kadu"
-              onChange={(v) => atualizarCampo("nome", v)}
-            />
-
-            <CampoTexto
-              icon={Building2}
-              label="Farmácia / unidade"
-              value={perfil.farmacia}
-              placeholder="Ex: Farmácia Central"
-              onChange={(v) => atualizarCampo("farmacia", v)}
-            />
-
-            <CampoSelect
-              icon={BadgeCheck}
-              label="Cargo"
-              value={perfil.cargo}
-              onChange={(v) => atualizarCampo("cargo", v)}
-              options={[
-                "Auxiliar",
-                "Atendente",
-                "Farmacêutico",
-                "Responsável",
-                "Admin",
-              ]}
-            />
-
-            <CampoSelect
-              icon={Layers3}
-              label="Seção responsável"
-              value={perfil.secao}
-              onChange={(v) => atualizarCampo("secao", v)}
-              options={[
-                "Geral",
-                "A-E",
-                "F-J",
-                "K-O",
-                "P-T",
-                "U-Z",
-                "Controlados",
-                "Geladeira",
-                "Balcão",
-                "Estoque",
-              ]}
-            />
-          </div>
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={salvarPerfil}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-4 py-3 font-bold text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-800 active:scale-95"
-            >
-              <Save size={20} />
-              Salvar perfil
-            </button>
 
             <button
               type="button"
-              onClick={removerPerfil}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 py-3 font-bold text-white shadow-lg shadow-red-500/20 transition hover:bg-red-600 active:scale-95"
+              onClick={logout}
+              className="flex items-center justify-center gap-2 rounded-2xl border border-white/20 bg-red-500/20 px-5 py-3 font-bold backdrop-blur-sm transition active:scale-95"
             >
-              <Trash2 size={20} />
-              Resetar
+              <LogOut size={18} />
+              Sair
             </button>
           </div>
-        </div>
+        </section>
 
-        {/* CARD INFO */}
-        <div className="rounded-3xl border border-emerald-200 bg-emerald-50/90 p-5 text-emerald-800 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
-          <div className="flex gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white">
-              <ShieldCheck size={22} />
-            </div>
-
+        <section className="space-y-4 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="font-black">Conta e perfil</p>
-              <p className="mt-1 text-sm">
-                O login já está na nuvem. Este perfil visual ainda fica salvo neste aparelho.
+              <h2 className="flex items-center gap-2 text-xl font-black">
+                <Pencil size={22} />
+                Editar perfil
+              </h2>
+
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Dados simples da sua conta
               </p>
             </div>
+
+            {!editando && (
+              <button
+                type="button"
+                onClick={() => setEditando(true)}
+                className="rounded-2xl bg-emerald-700 px-4 py-2 text-sm font-black text-white transition active:scale-95"
+              >
+                Editar
+              </button>
+            )}
           </div>
-        </div>
+
+          <div>
+            <label className="mb-1 flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400">
+              <User size={16} />
+              Nome
+            </label>
+
+            <input
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              disabled={!editando || isVisitante}
+              placeholder="Seu nome"
+              className="
+                w-full rounded-2xl border border-gray-200 bg-gray-50
+                px-4 py-3 font-semibold outline-none
+                focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20
+                disabled:opacity-70
+                dark:border-gray-800 dark:bg-gray-950
+              "
+            />
+          </div>
+
+          <InfoRow
+            icon={Mail}
+            label="Email"
+            value={
+              isVisitante
+                ? "Visitante sem email"
+                : usuarioAtual?.email || "Não informado"
+            }
+          />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {editando && (
+              <button
+                type="button"
+                onClick={salvarPerfil}
+                disabled={salvando || isVisitante}
+                className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 py-3 font-black text-white shadow-lg shadow-emerald-700/20 transition active:scale-95 disabled:opacity-60"
+              >
+                <Save size={19} />
+                {salvando ? "Salvando..." : "Salvar"}
+              </button>
+            )}
+
+            {editando && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNome(usuarioAtual?.nome || "");
+                  setEditando(false);
+                }}
+                className="rounded-2xl border border-gray-200 bg-gray-100 py-3 font-black text-gray-700 transition active:scale-95 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              >
+                Cancelar
+              </button>
+            )}
+          </div>
+
+          {isVisitante && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+              ✨ Você está em modo visitante. Para salvar perfil na nuvem,
+              crie uma conta na tela de login.
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-4 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-black">
+              <Shield size={22} />
+              Conta
+            </h2>
+
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Identificação e estado da conta
+            </p>
+          </div>
+
+          <InfoRow
+            icon={isVisitante ? CloudOff : Cloud}
+            label="Tipo de acesso"
+            value={
+              isAdmin
+                ? "Administrador"
+                : isVisitante
+                ? "Visitante"
+                : "Usuário comum"
+            }
+          />
+
+          <div className="rounded-2xl bg-gray-100/90 p-4 dark:bg-gray-800/70">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-700 text-white">
+                  <Clipboard size={20} />
+                </div>
+
+                <div>
+                  <p className="font-bold">
+                    ID público
+                  </p>
+
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Usado para admin encontrar sua conta
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <div className="flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-3 font-black dark:border-gray-700 dark:bg-gray-950">
+                {isVisitante
+                  ? "Visitante"
+                  : usuarioAtual?.publicId || "Sem ID"}
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  usuarioAtual?.publicId
+                    ? copiarId
+                    : gerarId
+                }
+                disabled={isVisitante}
+                className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-700 text-white transition active:scale-95 disabled:opacity-60"
+                aria-label="Copiar ou gerar ID"
+              >
+                {usuarioAtual?.publicId ? (
+                  <Copy size={19} />
+                ) : (
+                  <Save size={19} />
+                )}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-black">
+              <Moon size={22} />
+              Aparência
+            </h2>
+
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Ajuste rápido do tema visual
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between rounded-2xl bg-gray-100/90 p-4 dark:bg-gray-800/70">
+            <div>
+              <p className="font-bold">
+                Modo Escuro
+              </p>
+
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Tema atual: {dark ? "escuro" : "claro"}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className={`flex h-7 w-14 items-center rounded-full px-1 transition-all ${
+                dark
+                  ? "justify-end bg-green-500"
+                  : "justify-start bg-gray-400"
+              }`}
+            >
+              <div className="h-5 w-5 rounded-full bg-white shadow-md" />
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   );
 }
 
-function CampoTexto({ icon: Icon, label, value, placeholder, onChange }) {
+function InfoRow({
+  icon: Icon,
+  label,
+  value,
+}) {
   return (
-    <div>
-      <label className="mb-1 flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400">
-        <Icon size={16} />
-        {label}
-      </label>
+    <div className="flex items-center gap-3 rounded-2xl bg-gray-100/90 p-4 dark:bg-gray-800/70">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-700 text-white">
+        <Icon size={20} />
+      </div>
 
-      <input
-        value={value || ""}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 font-semibold text-gray-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-gray-800 dark:bg-gray-950 dark:text-white"
-      />
-    </div>
-  );
-}
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-gray-500 dark:text-gray-400">
+          {label}
+        </p>
 
-function CampoSelect({ icon: Icon, label, value, onChange, options }) {
-  return (
-    <div>
-      <label className="mb-1 flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400">
-        <Icon size={16} />
-        {label}
-      </label>
-
-      <select
-        value={value || ""}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 font-semibold text-gray-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-gray-800 dark:bg-gray-950 dark:text-white"
-      >
-        {options.map((op) => (
-          <option key={op} value={op}>
-            {op}
-          </option>
-        ))}
-      </select>
+        <p className="truncate font-black">
+          {value}
+        </p>
+      </div>
     </div>
   );
 }
@@ -399,7 +423,10 @@ function Chip({ children }) {
   );
 }
 
-function Toast({ toast, fechar }) {
+function Toast({
+  toast,
+  fechar,
+}) {
   const erro = toast.tipo === "erro";
   const info = toast.tipo === "info";
 
@@ -417,7 +444,25 @@ function Toast({ toast, fechar }) {
           }
         `}
       >
-        <p className="flex-1 text-sm font-bold">{toast.msg}</p>
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white ${
+            erro
+              ? "bg-red-500"
+              : info
+              ? "bg-blue-500"
+              : "bg-emerald-600"
+          }`}
+        >
+          {erro ? (
+            <AlertTriangle size={20} />
+          ) : (
+            <CheckCircle2 size={20} />
+          )}
+        </div>
+
+        <p className="flex-1 text-sm font-bold">
+          {toast.msg}
+        </p>
 
         <button
           type="button"

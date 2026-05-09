@@ -31,34 +31,62 @@ import {
 
 const AuthContext = createContext();
 
+function criarUsuarioVisitante() {
+  return {
+    uid: "visitante-local",
+    nome: "Visitante",
+    email: "modo.visitante@local",
+    publicId: "VISITA",
+    tipo: "visitante",
+    farmaciaId: "local",
+    visitante: true,
+  };
+}
+
 export function AuthProvider({ children }) {
   const [usuarioAtual, setUsuarioAtual] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
+      try {
+        if (!user) {
+          const modoVisitante =
+            localStorage.getItem("modoVisitante") === "true";
+
+          setUsuarioAtual(
+            modoVisitante
+              ? criarUsuarioVisitante()
+              : null
+          );
+
+          setLoading(false);
+          return;
+        }
+
+        localStorage.removeItem("modoVisitante");
+
+        const ref = doc(firestore, "usuarios", user.uid);
+        const snap = await getDoc(ref);
+
+        if (!snap.exists()) {
+          setUsuarioAtual(null);
+          setLoading(false);
+          return;
+        }
+
+        setUsuarioAtual({
+          uid: user.uid,
+          email: user.email,
+          ...snap.data(),
+        });
+
+        setLoading(false);
+      } catch (err) {
+        console.error(err);
         setUsuarioAtual(null);
         setLoading(false);
-        return;
       }
-
-      const ref = doc(firestore, "usuarios", user.uid);
-      const snap = await getDoc(ref);
-
-      if (!snap.exists()) {
-        setUsuarioAtual(null);
-        setLoading(false);
-        return;
-      }
-
-      setUsuarioAtual({
-        uid: user.uid,
-        email: user.email,
-        ...snap.data(),
-      });
-
-      setLoading(false);
     });
 
     return unsubscribe;
@@ -66,7 +94,13 @@ export function AuthProvider({ children }) {
 
   async function login(email, senha) {
     try {
-      await signInWithEmailAndPassword(auth, email, senha);
+      localStorage.removeItem("modoVisitante");
+
+      await signInWithEmailAndPassword(
+        auth,
+        email,
+        senha
+      );
 
       return { ok: true };
     } catch (err) {
@@ -78,12 +112,44 @@ export function AuthProvider({ children }) {
   }
 
   async function logout() {
-    await signOut(auth);
+    localStorage.removeItem("modoVisitante");
+    setUsuarioAtual(null);
+
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function entrarComoVisitante() {
+    try {
+      localStorage.setItem("modoVisitante", "true");
+
+      try {
+        await signOut(auth);
+      } catch {
+        // Sem problema se não houver usuário logado.
+      }
+
+      setUsuarioAtual(criarUsuarioVisitante());
+
+      return { ok: true };
+    } catch (err) {
+      console.error(err);
+
+      return {
+        ok: false,
+        erro: "Erro ao entrar como visitante",
+      };
+    }
   }
 
   async function gerarPublicIdUnico() {
     for (let i = 0; i < 10; i++) {
-      const id = String(Math.floor(100000 + Math.random() * 900000));
+      const id = String(
+        Math.floor(100000 + Math.random() * 900000)
+      );
 
       const q = query(
         collection(firestore, "usuarios"),
@@ -105,6 +171,11 @@ export function AuthProvider({ children }) {
     tipo = "comum",
   }) {
     try {
+      const tipoSeguro =
+        usuarioAtual?.tipo === "admin" && tipo === "admin"
+          ? "admin"
+          : "comum";
+
       const cred = await createUserWithEmailAndPassword(
         secondaryAuth,
         email,
@@ -117,15 +188,21 @@ export function AuthProvider({ children }) {
         nome,
         email,
         publicId,
-        tipo,
+        tipo: tipoSeguro,
         farmaciaId: "farmacia-principal",
         criadoEm: Date.now(),
-        criadoPor: usuarioAtual?.nome || "Sistema",
+        criadoPor: usuarioAtual?.nome || "Cadastro próprio",
         criadoPorUid: usuarioAtual?.uid || null,
         permissaoAtualizadaEm: null,
         permissaoAtualizadaPor: null,
         permissaoAtualizadaPorUid: null,
       });
+
+      try {
+        await signOut(secondaryAuth);
+      } catch {
+        // Mantém silencioso. O auth secundário não deve atrapalhar o principal.
+      }
 
       return {
         ok: true,
@@ -197,10 +274,11 @@ export function AuthProvider({ children }) {
       if (!encontrado.ok) return encontrado;
 
       const usuario = encontrado.usuario;
+      const atualizadoEm = Date.now();
 
       await updateDoc(doc(firestore, "usuarios", usuario.uid), {
         tipo: novoTipo,
-        permissaoAtualizadaEm: Date.now(),
+        permissaoAtualizadaEm: atualizadoEm,
         permissaoAtualizadaPor: usuarioAtual.nome,
         permissaoAtualizadaPorUid: usuarioAtual.uid,
       });
@@ -210,7 +288,7 @@ export function AuthProvider({ children }) {
         usuario: {
           ...usuario,
           tipo: novoTipo,
-          permissaoAtualizadaEm: Date.now(),
+          permissaoAtualizadaEm: atualizadoEm,
           permissaoAtualizadaPor: usuarioAtual.nome,
           permissaoAtualizadaPorUid: usuarioAtual.uid,
         },
@@ -226,48 +304,89 @@ export function AuthProvider({ children }) {
   }
 
   async function garantirMeuPublicId() {
+    if (!usuarioAtual?.uid || usuarioAtual?.visitante) {
+      return null;
+    }
 
-  if (!usuarioAtual?.uid) {
-    return;
+    if (usuarioAtual?.publicId) {
+      return usuarioAtual.publicId;
+    }
+
+    try {
+      const novoId = await gerarPublicIdUnico();
+
+      const ref = doc(
+        firestore,
+        "usuarios",
+        usuarioAtual.uid
+      );
+
+      await updateDoc(ref, {
+        publicId: novoId,
+      });
+
+      setUsuarioAtual((prev) => ({
+        ...prev,
+        publicId: novoId,
+      }));
+
+      return novoId;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
   }
 
-  if (usuarioAtual?.publicId) {
-    return;
+  async function atualizarMeuPerfil({ nome }) {
+    try {
+      if (!usuarioAtual?.uid || usuarioAtual?.visitante) {
+        return {
+          ok: false,
+          erro: "Visitante não salva perfil na nuvem",
+        };
+      }
+
+      const nomeLimpo = String(nome || "").trim();
+
+      if (!nomeLimpo) {
+        return {
+          ok: false,
+          erro: "Informe um nome",
+        };
+      }
+
+      const ref = doc(
+        firestore,
+        "usuarios",
+        usuarioAtual.uid
+      );
+
+      await updateDoc(ref, {
+        nome: nomeLimpo,
+        perfilAtualizadoEm: Date.now(),
+      });
+
+      setUsuarioAtual((prev) => ({
+        ...prev,
+        nome: nomeLimpo,
+        perfilAtualizadoEm: Date.now(),
+      }));
+
+      return { ok: true };
+    } catch (err) {
+      console.error(err);
+
+      return {
+        ok: false,
+        erro: "Erro ao atualizar perfil",
+      };
+    }
   }
-
-  try {
-
-    const novoId =
-      Math.floor(
-        100000 + Math.random() * 900000
-      ).toString();
-
-    const ref = doc(
-      firestore,
-      "usuarios",
-      usuarioAtual.uid
-    );
-
-    await updateDoc(ref, {
-      publicId: novoId,
-    });
-
-    setUsuarioAtual((prev) => ({
-      ...prev,
-      publicId: novoId,
-    }));
-
-    return novoId;
-
-  } catch (err) {
-
-    console.error(err);
-
-    return null;
-  }
-}
 
   const isAdmin = usuarioAtual?.tipo === "admin";
+  const isVisitante =
+    usuarioAtual?.tipo === "visitante" ||
+    usuarioAtual?.visitante === true;
 
   return (
     <AuthContext.Provider
@@ -275,10 +394,13 @@ export function AuthProvider({ children }) {
         usuarioAtual,
         loading,
         isAdmin,
+        isVisitante,
         login,
         logout,
         criarUsuario,
+        entrarComoVisitante,
         garantirMeuPublicId,
+        atualizarMeuPerfil,
         buscarUsuarioPorId,
         alterarTipoPorId,
       }}
@@ -301,6 +423,12 @@ function traduzirErro(code) {
 
     case "auth/invalid-credential":
       return "Email ou senha inválidos";
+
+    case "auth/missing-password":
+      return "Digite a senha";
+
+    case "auth/too-many-requests":
+      return "Muitas tentativas. Tente novamente daqui a pouco";
 
     default:
       return "Erro inesperado";

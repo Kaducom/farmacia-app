@@ -1,26 +1,60 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
+
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Lock,
+  LogIn,
+  Mail,
+  Sparkles,
+  User,
+  UserRoundCheck,
+} from "lucide-react";
+
 import { useAuth } from "../context/AuthContext";
+
+const contaInicial = {
+  nome: "",
+  email: "",
+  senha: "",
+};
 
 function TelaLogin() {
   const {
     login,
     criarUsuario,
+    entrarComoVisitante,
   } = useAuth();
+
+  const [modo, setModo] = useState("entrar");
 
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [erro, setErro] = useState("");
+
+  const [novaConta, setNovaConta] = useState(contaInicial);
+
+  const [verSenhaLogin, setVerSenhaLogin] = useState(false);
+  const [verSenhaCriar, setVerSenhaCriar] = useState(false);
+
+  const [mensagem, setMensagem] = useState("");
+  const [tipoMensagem, setTipoMensagem] = useState("ok");
   const [carregando, setCarregando] = useState(false);
 
-  const senhaRef = useRef(null);
+  function avisar(texto, tipo = "ok") {
+    setMensagem(texto);
+    setTipoMensagem(tipo);
 
-  const mostrarCriarAdminInicial = import.meta.env.DEV;
+    if (navigator.vibrate) {
+      navigator.vibrate(25);
+    }
+  }
 
   async function entrar() {
-    setErro("");
+    setMensagem("");
 
     if (!email.trim() || !senha.trim()) {
-      setErro("Informe email e senha");
+      avisar("Informe email e senha", "erro");
       return;
     }
 
@@ -34,49 +68,71 @@ function TelaLogin() {
     setCarregando(false);
 
     if (!res.ok) {
-      setErro(res.erro || "Email ou senha inválidos");
+      avisar(res.erro || "Erro ao entrar", "erro");
       return;
     }
 
     if (navigator.vibrate) {
-      navigator.vibrate(30);
+      navigator.vibrate(35);
     }
   }
 
-  async function criarAdminInicial() {
-    setErro("");
+  async function criarConta() {
+    setMensagem("");
+
+    if (
+      !novaConta.nome.trim() ||
+      !novaConta.email.trim() ||
+      !novaConta.senha.trim()
+    ) {
+      avisar("Preencha nome, email e senha", "erro");
+      return;
+    }
+
+    if (novaConta.senha.trim().length < 6) {
+      avisar("A senha precisa ter no mínimo 6 caracteres", "erro");
+      return;
+    }
+
     setCarregando(true);
 
     const res = await criarUsuario({
-      nome: "Kadu",
-      email: "kadu@farmacia.com",
-      senha: "123456",
-      tipo: "admin",
+      nome: novaConta.nome.trim(),
+      email: novaConta.email.trim(),
+      senha: novaConta.senha,
+      tipo: "comum",
     });
 
     setCarregando(false);
 
     if (!res.ok) {
-      setErro(res.erro || "Erro ao criar admin");
+      avisar(res.erro || "Erro ao criar conta", "erro");
       return;
     }
 
-    setEmail("kadu@farmacia.com");
-    setSenha("123456");
-    setErro("Admin criado. Agora clique em Entrar ✨");
+    setEmail(novaConta.email.trim());
+    setSenha(novaConta.senha);
+    setNovaConta(contaInicial);
+    setModo("entrar");
+
+    avisar(
+      res.publicId
+        ? `Conta criada ✨ Seu ID: ${res.publicId}. Agora é só entrar.`
+        : "Conta criada ✨ Agora é só entrar.",
+      "ok"
+    );
   }
 
-  function handleEmailKeyDown(e) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      senhaRef.current?.focus();
-    }
-  }
+  async function entrarVisitante() {
+    setMensagem("");
+    setCarregando(true);
 
-  function handleSenhaKeyDown(e) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      entrar();
+    const res = await entrarComoVisitante();
+
+    setCarregando(false);
+
+    if (!res.ok) {
+      avisar(res.erro || "Erro ao entrar como visitante", "erro");
     }
   }
 
@@ -95,7 +151,7 @@ function TelaLogin() {
       </div>
 
       <div className="relative z-10 flex min-h-[100dvh] items-center justify-center">
-        <div className="w-full max-w-sm rounded-[2rem] border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl">
+        <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-white/10 p-5 shadow-2xl backdrop-blur-xl">
           <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-600 text-4xl shadow-xl shadow-emerald-600/30">
             💊
           </div>
@@ -105,75 +161,271 @@ function TelaLogin() {
           </h1>
 
           <p className="mt-2 text-center text-sm text-gray-300">
-            Acesse com email e senha
+            Controle, consulta e ferramentas rápidas em um só lugar
           </p>
 
-          {erro && (
-            <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/15 p-3 text-center text-sm font-semibold text-emerald-200">
-              {erro}
+          <div className="mt-5 grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/20 p-1">
+            <AbaLogin
+              ativa={modo === "entrar"}
+              onClick={() => setModo("entrar")}
+            >
+              Entrar
+            </AbaLogin>
+
+            <AbaLogin
+              ativa={modo === "criar"}
+              onClick={() => setModo("criar")}
+            >
+              Criar
+            </AbaLogin>
+
+            <AbaLogin
+              ativa={modo === "visitante"}
+              onClick={() => setModo("visitante")}
+            >
+              Visitante
+            </AbaLogin>
+          </div>
+
+          {mensagem && (
+            <div
+              className={`
+                mt-4 rounded-2xl border p-3 text-center text-sm font-semibold
+                ${
+                  tipoMensagem === "erro"
+                    ? "border-red-500/20 bg-red-500/15 text-red-200"
+                    : "border-emerald-500/20 bg-emerald-500/15 text-emerald-200"
+                }
+              `}
+            >
+              {mensagem}
             </div>
           )}
 
-          <div className="mt-6 space-y-3">
-            <div>
-              <label className="mb-1 block text-sm font-bold text-gray-300">
-                Email
-              </label>
-
-              <input
-                autoFocus
+          {modo === "entrar" && (
+            <div className="mt-6 space-y-3">
+              <CampoLogin
+                icon={Mail}
+                label="Email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={handleEmailKeyDown}
-                placeholder="exemplo@email.com"
+                onChange={setEmail}
+                placeholder="seu@email.com"
                 type="email"
-                className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-semibold text-white outline-none transition placeholder:text-gray-500 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/20"
+                autoFocus
               />
-            </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-bold text-gray-300">
-                Senha
-              </label>
-
-              <input
-                ref={senhaRef}
+              <CampoSenha
+                label="Senha"
                 value={senha}
-                onChange={(e) => setSenha(e.target.value)}
-                onKeyDown={handleSenhaKeyDown}
+                onChange={setSenha}
                 placeholder="Digite sua senha"
-                type="password"
-                className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-semibold text-white outline-none transition placeholder:text-gray-500 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/20"
+                visivel={verSenhaLogin}
+                setVisivel={setVerSenhaLogin}
+                onEnter={entrar}
               />
-            </div>
 
-            <button
-              type="button"
-              onClick={entrar}
-              disabled={carregando}
-              className="mt-2 w-full rounded-2xl bg-emerald-700 py-3 font-black text-white shadow-lg shadow-emerald-700/25 transition hover:bg-emerald-800 active:scale-95 disabled:opacity-60"
-            >
-              {carregando ? "Carregando..." : "Entrar"}
-            </button>
-
-            {mostrarCriarAdminInicial && (
               <button
                 type="button"
-                onClick={criarAdminInicial}
+                onClick={entrar}
                 disabled={carregando}
-                className="w-full rounded-2xl border border-white/10 bg-white/5 py-3 text-sm font-bold text-gray-300 transition hover:bg-white/10 active:scale-95 disabled:opacity-60"
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 py-3 font-black text-white shadow-lg shadow-emerald-700/25 transition hover:bg-emerald-800 active:scale-95 disabled:opacity-60"
               >
-                Criar admin inicial
+                <LogIn size={19} />
+                {carregando ? "Entrando..." : "Entrar"}
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
-          {mostrarCriarAdminInicial && (
-            <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-3 text-center text-xs text-gray-400">
-              Primeiro acesso: <strong>kadu@farmacia.com / 123456</strong>
+          {modo === "criar" && (
+            <div className="mt-6 space-y-3">
+              <CampoLogin
+                icon={User}
+                label="Nome"
+                value={novaConta.nome}
+                onChange={(v) =>
+                  setNovaConta((prev) => ({
+                    ...prev,
+                    nome: v,
+                  }))
+                }
+                placeholder="Seu nome"
+                autoFocus
+              />
+
+              <CampoLogin
+                icon={Mail}
+                label="Email"
+                value={novaConta.email}
+                onChange={(v) =>
+                  setNovaConta((prev) => ({
+                    ...prev,
+                    email: v,
+                  }))
+                }
+                placeholder="seu@email.com"
+                type="email"
+              />
+
+              <CampoSenha
+                label="Senha"
+                value={novaConta.senha}
+                onChange={(v) =>
+                  setNovaConta((prev) => ({
+                    ...prev,
+                    senha: v,
+                  }))
+                }
+                placeholder="Mínimo 6 caracteres"
+                visivel={verSenhaCriar}
+                setVisivel={setVerSenhaCriar}
+                onEnter={criarConta}
+              />
+
+              <button
+                type="button"
+                onClick={criarConta}
+                disabled={carregando}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 py-3 font-black text-white shadow-lg shadow-emerald-700/25 transition hover:bg-emerald-800 active:scale-95 disabled:opacity-60"
+              >
+                <UserRoundCheck size={19} />
+                {carregando ? "Criando..." : "Criar conta"}
+              </button>
+
+              <p className="rounded-2xl border border-white/10 bg-white/5 p-3 text-center text-xs text-gray-300">
+                A conta criada entra como usuário comum. Depois um admin pode
+                liberar permissões pelo ID público.
+              </p>
+            </div>
+          )}
+
+          {modo === "visitante" && (
+            <div className="mt-6 space-y-4">
+              <div className="rounded-[1.6rem] border border-emerald-400/20 bg-emerald-400/10 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600">
+                    <Sparkles size={21} />
+                  </div>
+
+                  <div>
+                    <p className="font-black text-emerald-100">
+                      Entrar sem conta
+                    </p>
+
+                    <p className="mt-1 text-sm text-emerald-100/80">
+                      Ideal para testar o app. Alguns dados ficam só no aparelho
+                      e funções de nuvem podem ficar limitadas.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={entrarVisitante}
+                disabled={carregando}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-3 font-black text-emerald-900 shadow-lg transition active:scale-95 disabled:opacity-60"
+              >
+                Continuar como visitante
+                <ArrowRight size={19} />
+              </button>
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AbaLogin({
+  ativa,
+  onClick,
+  children,
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`
+        rounded-xl px-3 py-2 text-sm font-black transition active:scale-95
+        ${
+          ativa
+            ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"
+            : "text-gray-400 hover:bg-white/5 hover:text-white"
+        }
+      `}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CampoLogin({
+  icon: Icon,
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  autoFocus = false,
+}) {
+  return (
+    <div>
+      <label className="mb-1 flex items-center gap-2 text-sm font-bold text-gray-300">
+        <Icon size={16} />
+        {label}
+      </label>
+
+      <input
+        autoFocus={autoFocus}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        type={type}
+        className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-semibold text-white outline-none transition placeholder:text-gray-500 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/20"
+      />
+    </div>
+  );
+}
+
+function CampoSenha({
+  label,
+  value,
+  onChange,
+  placeholder,
+  visivel,
+  setVisivel,
+  onEnter,
+}) {
+  return (
+    <div>
+      <label className="mb-1 flex items-center gap-2 text-sm font-bold text-gray-300">
+        <Lock size={16} />
+        {label}
+      </label>
+
+      <div className="relative">
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onEnter?.();
+            }
+          }}
+          placeholder={placeholder}
+          type={visivel ? "text" : "password"}
+          className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 pr-12 font-semibold text-white outline-none transition placeholder:text-gray-500 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/20"
+        />
+
+        <button
+          type="button"
+          onClick={() => setVisivel((prev) => !prev)}
+          className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl bg-white/5 text-gray-300 transition active:scale-95"
+          aria-label={visivel ? "Esconder senha" : "Mostrar senha"}
+        >
+          {visivel ? <EyeOff size={18} /> : <Eye size={18} />}
+        </button>
       </div>
     </div>
   );
