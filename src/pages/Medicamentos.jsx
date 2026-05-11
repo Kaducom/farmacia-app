@@ -1676,6 +1676,92 @@ function ModalLoteScanner({
   const produto = dados?.produto || {};
   const lotes = Array.isArray(dados?.lotes) ? dados.lotes : [];
 
+  function parseDataLocal(valor) {
+    if (!valor) return null;
+
+    if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+      return valor;
+    }
+
+    const texto = String(valor).trim();
+
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(texto)) {
+      const [dia, mes, ano] = texto.split("/").map(Number);
+      const data = new Date(ano, mes - 1, dia);
+
+      if (
+        data.getDate() !== dia ||
+        data.getMonth() !== mes - 1 ||
+        data.getFullYear() !== ano
+      ) {
+        return null;
+      }
+
+      return data;
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
+      const [ano, mes, dia] = texto.split("-").map(Number);
+      const data = new Date(ano, mes - 1, dia);
+
+      if (
+        data.getDate() !== dia ||
+        data.getMonth() !== mes - 1 ||
+        data.getFullYear() !== ano
+      ) {
+        return null;
+      }
+
+      return data;
+    }
+
+    const convertida = new Date(texto);
+
+    if (Number.isNaN(convertida.getTime())) {
+      return null;
+    }
+
+    return convertida;
+  }
+
+  function calcularDiasAte(valor) {
+    const data = parseDataLocal(valor);
+
+    if (!data) return null;
+
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const alvo = new Date(data);
+    alvo.setHours(0, 0, 0, 0);
+
+    return Math.ceil((alvo - hoje) / (1000 * 60 * 60 * 24));
+  }
+
+  function textoDias(valor) {
+    const dias = calcularDiasAte(valor);
+
+    if (dias === null) return "Sem cálculo";
+    if (dias === 0) return "Hoje";
+    if (dias === 1) return "Amanhã";
+    if (dias < 0) return `${Math.abs(dias)} dias vencido`;
+
+    return `Em ${dias} dias`;
+  }
+
+  const lotesOrdenados = [...lotes].sort((a, b) => {
+    const dataA = parseDataLocal(a.validade);
+    const dataB = parseDataLocal(b.validade);
+
+    if (!dataA && !dataB) return 0;
+    if (!dataA) return 1;
+    if (!dataB) return -1;
+
+    return dataA - dataB;
+  });
+
+  const loteMaisProximo = lotesOrdenados[0] || null;
+
   function handleValidade(e) {
     const formatada = formatarValidadeDigitada(e.target.value);
     const digitos = formatada.replace(/\D/g, "");
@@ -1703,25 +1789,36 @@ function ModalLoteScanner({
       exit={{ opacity: 0 }}
       className="
         fixed inset-0 z-[100000] flex items-end justify-center
-        bg-black/45 p-3 backdrop-blur-sm sm:items-center
+        bg-black/65 px-3
+        pb-[calc(env(safe-area-inset-bottom)+0.75rem)]
+        pt-[calc(env(safe-area-inset-top)+0.75rem)]
+        backdrop-blur-md
+        sm:items-center sm:p-4
       "
     >
       <motion.div
         onClick={(e) => e.stopPropagation()}
-        initial={{ y: 28, opacity: 0, scale: 0.96 }}
+        initial={{ y: 34, opacity: 0, scale: 0.96 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: 28, opacity: 0, scale: 0.96 }}
-        transition={{ duration: 0.2 }}
+        exit={{ y: 34, opacity: 0, scale: 0.96 }}
+        transition={{ duration: 0.22 }}
         className="
-          w-full max-w-md overflow-hidden rounded-3xl border border-gray-200 bg-white
-          text-gray-950 shadow-2xl dark:border-gray-800 dark:bg-gray-900 dark:text-white
+          relative flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)]
+          w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem]
+          border border-gray-200 bg-white text-gray-950 shadow-2xl
+          dark:border-white/10 dark:bg-gray-950 dark:text-white
+          sm:rounded-[2rem] sm:max-h-[92vh]
         "
       >
-        <div className="relative overflow-hidden bg-gradient-to-br from-emerald-700 to-slate-950 p-5 text-white">
-          <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10" />
+        {/* HEADER */}
+        <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-emerald-700 via-emerald-800 to-slate-950 p-5 text-white">
+          <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-white/10" />
+          <div className="absolute -bottom-14 left-8 h-32 w-32 rounded-full bg-emerald-300/10" />
+
+          <div className="relative mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/30 sm:hidden" />
 
           <div className="relative flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-white/15">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-white/15 bg-white/15 shadow-xl backdrop-blur-md">
               {produto.imagem ? (
                 <img
                   src={produto.imagem}
@@ -1729,12 +1826,16 @@ function ModalLoteScanner({
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <Pill size={30} />
+                <Pill size={31} />
               )}
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="truncate text-lg font-black">
+              <span className="mb-1 inline-flex rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-50">
+                Produto reconhecido
+              </span>
+
+              <p className="truncate text-xl font-black">
                 {produto.nome || "Produto reconhecido"}
               </p>
 
@@ -1742,122 +1843,231 @@ function ModalLoteScanner({
                 <Barcode size={14} />
                 {dados.codigo}
               </p>
-
-              <p className="mt-1 text-xs text-emerald-100">
-                {lotes.length > 0
-                  ? "Escolha a validade certa"
-                  : "Informe a validade deste lote"}
-              </p>
             </div>
 
             <button
               type="button"
               onClick={onFechar}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/15 transition active:scale-95"
+              className="
+                flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
+                bg-white/15 text-white transition active:scale-95
+              "
             >
-              <X size={20} />
+              <X size={21} />
             </button>
+          </div>
+
+          <div className="relative mt-5 grid grid-cols-3 gap-2">
+            <MiniLoteInfo label="Lotes" valor={lotes.length} />
+            <MiniLoteInfo
+              label="Unid."
+              valor={lotes.reduce(
+                (total, lote) => total + Number(lote.quantidade || 1),
+                0
+              )}
+            />
+            <MiniLoteInfo
+              label="Próximo"
+              valor={
+                loteMaisProximo ? formatarData(loteMaisProximo.validade) : "Novo"
+              }
+            />
           </div>
         </div>
 
-        <div className="max-h-[65vh] space-y-4 overflow-y-auto p-5">
-          {lotes.length > 0 && (
-            <div>
-              <div className="mb-3 flex items-center gap-2">
-                <Clock3 size={18} className="text-emerald-600" />
-                <p className="font-black">Validades no estoque</p>
+        {/* BODY */}
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-5">
+          {lotesOrdenados.length > 0 ? (
+            <section>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="flex items-center gap-2 font-black">
+                    <Clock3 size={18} className="text-emerald-600" />
+                    Validades no estoque
+                  </p>
+
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Toque na validade correta para somar +1 unidade.
+                  </p>
+                </div>
+
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                  +1
+                </span>
               </div>
 
               <div className="space-y-3">
-                {lotes.map((lote) => (
-                  <button
-                    key={lote.id}
-                    type="button"
-                    disabled={processando}
-                    onClick={() => onSomarLote(lote)}
-                    className="
-                      flex w-full items-center gap-3 rounded-2xl border border-gray-200
-                      bg-gray-100 p-3 text-left transition active:scale-[0.98]
-                      disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800
-                    "
-                  >
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-700 text-white">
-                      <CalendarDays size={20} />
-                    </div>
+                {lotesOrdenados.map((lote, index) => {
+                  const destaque = index === 0;
+                  const dias = calcularDiasAte(lote.validade);
+                  const vencido = dias !== null && dias < 0;
 
-                    <div className="min-w-0 flex-1">
-                      <p className="font-black">{formatarData(lote.validade)}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Quantidade atual: x{lote.quantidade || 1}
-                      </p>
-                    </div>
+                  return (
+                    <button
+                      key={lote.id || `${lote.validade}-${index}`}
+                      type="button"
+                      disabled={processando}
+                      onClick={() => onSomarLote(lote)}
+                      className={`
+                        group flex w-full items-center gap-3 rounded-3xl border p-3 text-left
+                        shadow-sm transition active:scale-[0.985] disabled:opacity-60
+                        ${
+                          destaque
+                            ? "border-emerald-300 bg-emerald-50 dark:border-emerald-500/25 dark:bg-emerald-500/10"
+                            : "border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5"
+                        }
+                      `}
+                    >
+                      <div
+                        className={`
+                          flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg
+                          ${
+                            vencido
+                              ? "bg-red-600"
+                              : destaque
+                              ? "bg-emerald-700"
+                              : "bg-slate-700 dark:bg-slate-600"
+                          }
+                        `}
+                      >
+                        <CalendarDays size={21} />
+                      </div>
 
-                    <div className="flex h-11 min-w-16 items-center justify-center gap-1 rounded-xl bg-emerald-600 px-3 font-black text-white">
-                      {processando ? (
-                        <Loader2 size={18} className="animate-spin" />
-                      ) : (
-                        <>
-                          <Plus size={17} />
-                          1
-                        </>
-                      )}
-                    </div>
-                  </button>
-                ))}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-black">
+                            {formatarData(lote.validade)}
+                          </p>
+
+                          {destaque && (
+                            <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-black uppercase text-white">
+                              mais próxima
+                            </span>
+                          )}
+
+                          {vencido && (
+                            <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black uppercase text-white">
+                              vencida
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {textoDias(lote.validade)} • quantidade atual: x
+                          {lote.quantidade || 1}
+                        </p>
+                      </div>
+
+                      <div className="flex h-12 min-w-16 items-center justify-center gap-1 rounded-2xl bg-emerald-600 px-3 font-black text-white shadow-lg shadow-emerald-600/20 transition group-active:scale-95">
+                        {processando ? (
+                          <Loader2 size={18} className="animate-spin" />
+                        ) : (
+                          <>
+                            <Plus size={18} />
+                            1
+                          </>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-            </div>
+            </section>
+          ) : (
+            <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white">
+                  <PackageCheck size={21} />
+                </div>
+
+                <div>
+                  <p className="font-black">Produto aprendido na base</p>
+                  <p className="mt-1 text-sm">
+                    Ainda não há lote no estoque. Informe a primeira validade
+                    para criar o card.
+                  </p>
+                </div>
+              </div>
+            </section>
           )}
 
-          <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
-            <div className="mb-3 flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-              <PackageCheck size={18} />
-              <p className="font-black">Nova validade</p>
+          {/* NOVA VALIDADE */}
+          <section className="rounded-3xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-500/20 dark:bg-blue-500/10">
+            <div className="mb-3 flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+                <PackageCheck size={20} />
+              </div>
+
+              <div>
+                <p className="font-black text-blue-800 dark:text-blue-300">
+                  Criar nova validade
+                </p>
+
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                  Use quando o mesmo produto chegou com outro vencimento.
+                </p>
+              </div>
             </div>
 
-            <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">
-              Digite <strong>0427</strong> para 04/2027 ou{" "}
-              <strong>15052027</strong> para 15/05/2027.
-            </p>
+            <div className="rounded-2xl bg-white/80 p-3 dark:bg-gray-950/40">
+              <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">
+                Digite <strong>0427</strong> para 04/2027 ou{" "}
+                <strong>15052027</strong> para 15/05/2027.
+              </p>
 
-            <input
-              autoFocus
-              value={validadeRapida}
-              onChange={handleValidade}
-              inputMode="numeric"
-              maxLength={10}
-              placeholder="mmaa ou ddmmaaaa"
-              disabled={processando}
-              className="
-                w-full rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-center
-                text-lg font-black text-gray-950 outline-none transition
-                focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20
-                disabled:opacity-60 dark:border-emerald-500/20 dark:bg-gray-950 dark:text-white
-              "
-            />
+              <input
+                autoFocus
+                value={validadeRapida}
+                onChange={handleValidade}
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="mmaa ou ddmmaaaa"
+                disabled={processando}
+                className="
+                  h-13 h-[52px] w-full rounded-2xl border border-blue-200 bg-white px-4
+                  text-center text-lg font-black text-gray-950 outline-none transition
+                  placeholder:text-gray-400
+                  focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20
+                  disabled:opacity-60
+                  dark:border-blue-500/20 dark:bg-gray-950 dark:text-white
+                "
+              />
 
-            {processando && (
-              <div className="mt-3 flex items-center justify-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                <Loader2 size={17} className="animate-spin" />
-                Salvando lote...
-              </div>
-            )}
-          </div>
+              {processando && (
+                <div className="mt-3 flex items-center justify-center gap-2 text-sm font-black text-blue-700 dark:text-blue-300">
+                  <Loader2 size={17} className="animate-spin" />
+                  Salvando lote...
+                </div>
+              )}
+            </div>
+          </section>
 
-          <div className="rounded-2xl bg-gray-100 p-3 text-sm text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+          <section className="rounded-3xl bg-gray-100 p-4 text-sm text-gray-600 dark:bg-white/5 dark:text-gray-300">
             <div className="flex items-start gap-2">
               <CheckCircle2
-                size={18}
+                size={19}
                 className="mt-0.5 shrink-0 text-emerald-600"
               />
               <p>
                 Mesmo código com validade diferente vira outro card. Validade
-                mês/ano usa o último dia do mês.
+                mês/ano usa o último dia do mês automaticamente.
               </p>
             </div>
-          </div>
+          </section>
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+function MiniLoteInfo({ label, valor }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/15 p-2 text-center backdrop-blur-md">
+      <p className="truncate text-sm font-black">{valor}</p>
+      <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-100">
+        {label}
+      </p>
+    </div>
   );
 }
 
