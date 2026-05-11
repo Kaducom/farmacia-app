@@ -81,6 +81,45 @@ function Medicamentos() {
   }, []);
 
   useEffect(() => {
+  const overlayAberto =
+    abrirModal ||
+    abrirScanner ||
+    Boolean(loteScanner) ||
+    Boolean(preview) ||
+    Boolean(confirmar) ||
+    Boolean(inputValidadeRapida);
+
+  window.dispatchEvent(
+    new CustomEvent("app-overlay-change", {
+      detail: {
+        open: overlayAberto,
+      },
+    })
+  );
+
+  document.body.classList.toggle("app-overlay-open", overlayAberto);
+
+  return () => {
+    window.dispatchEvent(
+      new CustomEvent("app-overlay-change", {
+        detail: {
+          open: false,
+        },
+      })
+    );
+
+    document.body.classList.remove("app-overlay-open");
+  };
+}, [
+  abrirModal,
+  abrirScanner,
+  loteScanner,
+  preview,
+  confirmar,
+  inputValidadeRapida,
+]);
+
+  useEffect(() => {
   setCardsAbertos((prev) => {
     const proximos = { ...prev };
     const idsAtuais = new Set(medicamentos.map((m) => String(m.id)));

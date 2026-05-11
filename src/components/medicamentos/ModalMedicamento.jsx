@@ -241,12 +241,12 @@ function ModalMedicamento({
       {abrirModal && (
         <motion.div
           className="
-            fixed inset-0 z-[2147483647] flex items-center justify-center overflow-hidden
+            fixed inset-0 z-[2147483647] flex items-end justify-center overflow-hidden
             bg-black/70 px-3
-            pt-[calc(env(safe-area-inset-top)+5.25rem)]
-            pb-[calc(env(safe-area-inset-bottom)+7.75rem)]
+            pt-[calc(env(safe-area-inset-top)+0.75rem)]
+            pb-[calc(env(safe-area-inset-bottom)+0.75rem)]
             backdrop-blur-md
-            sm:p-4
+            sm:items-center sm:p-4
           "
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -261,10 +261,10 @@ function ModalMedicamento({
             transition={{ duration: 0.22 }}
             className="
               relative flex w-full max-w-2xl flex-col overflow-hidden
-              rounded-[2rem] border border-gray-200 bg-white text-gray-950 shadow-2xl
-              max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-15rem)]
+              rounded-t-[2rem] border border-gray-200 bg-white text-gray-950 shadow-2xl
+              max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)]
               dark:border-white/10 dark:bg-gray-950 dark:text-white
-              sm:max-h-[92vh]
+              sm:rounded-[2rem] sm:max-h-[92vh]
             "
           >
             <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-emerald-500/10 to-transparent" />
@@ -607,8 +607,7 @@ function ModalMedicamento({
             <div
               className="
                 relative z-20 shrink-0 border-t border-gray-200/80 bg-white/95
-                px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] pt-3
-                backdrop-blur-xl
+                p-4 backdrop-blur-xl
                 dark:border-white/10 dark:bg-gray-950/95
                 sm:p-5
               "

@@ -33,15 +33,35 @@ const Perfil = lazy(() => import("./pages/Perfil"));
 const Notificacoes = lazy(() => import("./pages/Notificacoes"));
 
 function App() {
-  const {
-    usuarioAtual,
-    loading,
-    isAdmin,
-  } = useAuth();
+  const { usuarioAtual, loading, isAdmin } = useAuth();
 
   const [pagina, setPagina] = useState(COMMON_START_PAGE);
+  const [overlayAberto, setOverlayAberto] = useState(false);
 
   const primeiraPaginaDefinida = useRef(false);
+
+  useEffect(() => {
+    function ouvirOverlay(e) {
+      const aberto = Boolean(e.detail?.open);
+
+      setOverlayAberto(aberto);
+      document.body.classList.toggle("app-overlay-open", aberto);
+    }
+
+    window.addEventListener("app-overlay-change", ouvirOverlay);
+
+    return () => {
+      window.removeEventListener("app-overlay-change", ouvirOverlay);
+      document.body.classList.remove("app-overlay-open");
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!usuarioAtual) {
+      setOverlayAberto(false);
+      document.body.classList.remove("app-overlay-open");
+    }
+  }, [usuarioAtual]);
 
   useEffect(() => {
     if (loading) return;
@@ -53,11 +73,7 @@ function App() {
     }
 
     if (!primeiraPaginaDefinida.current) {
-      setPagina(
-        isAdmin
-          ? ADMIN_START_PAGE
-          : COMMON_START_PAGE
-      );
+      setPagina(isAdmin ? ADMIN_START_PAGE : COMMON_START_PAGE);
 
       primeiraPaginaDefinida.current = true;
       return;
@@ -66,20 +82,10 @@ function App() {
     if (!isAdmin && !COMMON_ALLOWED_PAGES.includes(pagina)) {
       setPagina(COMMON_START_PAGE);
     }
-  }, [
-    loading,
-    usuarioAtual,
-    isAdmin,
-    pagina,
-  ]);
+  }, [loading, usuarioAtual, isAdmin, pagina]);
 
   if (loading) {
-    return (
-      <LoadingScreen
-        full
-        text="Carregando sessão..."
-      />
-    );
+    return <LoadingScreen full text="Carregando sessão..." />;
   }
 
   if (!usuarioAtual) {
@@ -89,35 +95,31 @@ function App() {
   const mostrarVoltar = MENU_PAGES.includes(pagina);
 
   function irPara(proximaPagina) {
-    if (
-      !isAdmin &&
-      !COMMON_ALLOWED_PAGES.includes(proximaPagina)
-    ) {
+    if (!isAdmin && !COMMON_ALLOWED_PAGES.includes(proximaPagina)) {
       setPagina(COMMON_START_PAGE);
       return;
     }
+
+    setOverlayAberto(false);
+    document.body.classList.remove("app-overlay-open");
 
     setPagina(proximaPagina);
   }
 
   function voltarPagina() {
+    setOverlayAberto(false);
+    document.body.classList.remove("app-overlay-open");
+
     if (MENU_PAGES.includes(pagina)) {
       setPagina("menu");
       return;
     }
 
-    setPagina(
-      isAdmin
-        ? ADMIN_START_PAGE
-        : COMMON_START_PAGE
-    );
+    setPagina(isAdmin ? ADMIN_START_PAGE : COMMON_START_PAGE);
   }
 
   function renderPagina() {
-    if (
-      !isAdmin &&
-      !COMMON_ALLOWED_PAGES.includes(pagina)
-    ) {
+    if (!isAdmin && !COMMON_ALLOWED_PAGES.includes(pagina)) {
       return <Receitas />;
     }
 
@@ -158,28 +160,56 @@ function App() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-gray-100 text-black transition-colors duration-300 dark:bg-[#0f172a] dark:text-white">
-      <AppHeader
-        title={PAGE_TITLES[pagina] || "Farmácia App"}
-        showBack={mostrarVoltar}
-        onBack={voltarPagina}
-      />
-
-      <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+7.5rem)]">
-        <Suspense
-          fallback={
-            <LoadingScreen text="Carregando página..." />
+    <div className="min-h-[100dvh] bg-gray-100 text-black transition-colors duration-300 dark:bg-[#0f172a] dark:text-white">
+      <div
+        className={`
+          transition-all duration-300 ease-out
+          ${
+            overlayAberto
+              ? "-translate-y-4 opacity-0 pointer-events-none"
+              : "translate-y-0 opacity-100"
           }
-        >
+        `}
+      >
+        <AppHeader
+          title={PAGE_TITLES[pagina] || "Farmácia App"}
+          showBack={mostrarVoltar}
+          onBack={voltarPagina}
+        />
+      </div>
+
+      <main
+        className={`
+          min-h-[100dvh] overflow-y-auto transition-all duration-300
+          ${
+            overlayAberto
+              ? "pb-4"
+              : "pb-[calc(env(safe-area-inset-bottom)+7.5rem)]"
+          }
+        `}
+      >
+        <Suspense fallback={<LoadingScreen text="Carregando página..." />}>
           {renderPagina()}
         </Suspense>
       </main>
 
-      <BottomNav
-        page={pagina}
-        isAdmin={isAdmin}
-        onNavigate={irPara}
-      />
+      <div
+        className={`
+          fixed inset-x-0 bottom-0 z-[80]
+          transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]
+          ${
+            overlayAberto
+              ? "translate-y-[145%] opacity-0 pointer-events-none"
+              : "translate-y-0 opacity-100"
+          }
+        `}
+      >
+        <BottomNav
+          page={pagina}
+          isAdmin={isAdmin}
+          onNavigate={irPara}
+        />
+      </div>
     </div>
   );
 }
