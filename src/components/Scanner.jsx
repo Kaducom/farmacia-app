@@ -85,11 +85,23 @@ function Scanner({
     mountedRef.current = true;
     fechandoRef.current = false;
 
+    window.dispatchEvent(
+      new CustomEvent("app-overlay-change", {
+        detail: { open: true },
+      })
+    );
+
     iniciar();
 
     return () => {
       mountedRef.current = false;
       pararScanner();
+
+      window.dispatchEvent(
+        new CustomEvent("app-overlay-change", {
+          detail: { open: false },
+        })
+      );
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -311,9 +323,7 @@ function Scanner({
           return;
         }
 
-        if (err && erroIgnoravel(err)) {
-          return;
-        }
+        if (err && erroIgnoravel(err)) return;
 
         if (err) {
           console.warn("Erro do leitor:", err);
@@ -386,8 +396,7 @@ function Scanner({
       }
 
       if (err?.name === "OverconstrainedError") {
-        msg =
-          "Essa câmera não aceitou as configurações. Tente trocar a câmera.";
+        msg = "Essa câmera não aceitou as configurações. Tente trocar a câmera.";
       }
 
       setSeguro(() => {
@@ -483,7 +492,7 @@ function Scanner({
 
         processingRef.current = false;
         bloquearCodigo(codigoLimpo);
-      }, 750);
+      }, 700);
     } catch (err) {
       console.error("Erro no onScan:", err);
 
@@ -667,12 +676,11 @@ function Scanner({
       exit={{ opacity: 0, scale: 0.995 }}
       transition={{ duration: 0.18 }}
       className="
-        fixed inset-0 z-[2147483647]
+        fixed inset-0 z-[99990]
         flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden
         bg-slate-950 text-white
       "
     >
-      {/* CÂMERA */}
       <div className="absolute inset-0">
         <video
           ref={videoRef}
@@ -685,10 +693,9 @@ function Scanner({
           `}
         />
 
-        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/15 to-black/90" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/10 to-black/90" />
       </div>
 
-      {/* TOPO */}
       <div
         className="
           relative z-20 shrink-0 px-4
@@ -698,7 +705,7 @@ function Scanner({
         <div
           className="
             flex items-center justify-between gap-3 rounded-[1.75rem]
-            border border-white/10 bg-white/10 p-3 shadow-2xl
+            border border-white/10 bg-slate-950/45 p-3 shadow-2xl
             backdrop-blur-xl
           "
         >
@@ -716,7 +723,7 @@ function Scanner({
               <h2 className="truncate text-lg font-black">Scanner</h2>
 
               <p className="truncate text-xs text-white/65">
-                Aponte para o código de barras
+                Mire no código e deixe o app trabalhar
               </p>
             </div>
           </div>
@@ -735,21 +742,6 @@ function Scanner({
         </div>
       </div>
 
-      {/* STATUS */}
-      <div className="relative z-10 shrink-0 px-4 pt-3">
-        <StatusScanner
-          iniciando={iniciando}
-          lendo={lendo}
-          lido={lido}
-          bloqueado={bloqueado}
-          emErro={emErro}
-          codigoLido={codigoLido}
-          codigoBloqueado={codigoBloqueado}
-          erro={erro}
-        />
-      </div>
-
-      {/* MIRA */}
       <div
         className="
           relative z-10 flex min-h-0 flex-1 items-center justify-center
@@ -758,8 +750,8 @@ function Scanner({
       >
         <div
           className="
-            relative h-[min(42dvh,330px)] w-full max-w-md
-            sm:h-[360px]
+            relative h-[min(48dvh,380px)] w-full max-w-md
+            sm:h-[420px]
           "
         >
           <div
@@ -767,9 +759,9 @@ function Scanner({
               absolute inset-0 rounded-[2.25rem] border-2 backdrop-blur-[1px]
               ${
                 lido
-                  ? "border-emerald-400 shadow-[0_0_48px_rgba(52,211,153,0.35)]"
+                  ? "border-emerald-400 shadow-[0_0_52px_rgba(52,211,153,0.45)]"
                   : bloqueado
-                  ? "border-emerald-300/70 shadow-[0_0_42px_rgba(52,211,153,0.22)]"
+                  ? "border-emerald-300/70 shadow-[0_0_42px_rgba(52,211,153,0.25)]"
                   : emErro
                   ? "border-red-400 shadow-[0_0_42px_rgba(248,113,113,0.25)]"
                   : "border-white/75 shadow-[0_0_42px_rgba(255,255,255,0.12)]"
@@ -784,8 +776,8 @@ function Scanner({
 
           {lendo && (
             <motion.div
-              initial={{ y: 18, opacity: 0.75 }}
-              animate={{ y: 240, opacity: 1 }}
+              initial={{ y: 22, opacity: 0.75 }}
+              animate={{ y: 280, opacity: 1 }}
               transition={{
                 duration: 1.25,
                 repeat: Infinity,
@@ -811,7 +803,6 @@ function Scanner({
         </div>
       </div>
 
-      {/* PAINEL INFERIOR */}
       <div
         className="
           relative z-20 shrink-0 px-4
@@ -820,13 +811,24 @@ function Scanner({
       >
         <div
           className="
-            max-h-[42dvh] overflow-y-auto overscroll-contain rounded-t-[2rem]
-            border border-white/10 bg-slate-950/72 p-3 shadow-2xl
+            max-h-[46dvh] overflow-y-auto overscroll-contain rounded-t-[2rem]
+            border border-white/10 bg-slate-950/78 p-3 shadow-2xl
             backdrop-blur-2xl
-            sm:mx-auto sm:max-h-[45dvh] sm:max-w-3xl sm:rounded-[2rem]
+            sm:mx-auto sm:max-h-[44dvh] sm:max-w-3xl sm:rounded-[2rem]
           "
         >
           <div className="space-y-3">
+            <StatusScanner
+              iniciando={iniciando}
+              lendo={lendo}
+              lido={lido}
+              bloqueado={bloqueado}
+              emErro={emErro}
+              codigoLido={codigoLido}
+              codigoBloqueado={codigoBloqueado}
+              erro={erro}
+            />
+
             {codigoBloqueado ? (
               <button
                 type="button"
@@ -862,7 +864,10 @@ function Scanner({
               </div>
             )}
 
-            <MiniPreviewScanner itens={itensPreview} onLimpar={onLimparPreview} />
+            <MiniPreviewScanner
+              itens={itensPreview}
+              onLimpar={onLimparPreview}
+            />
 
             <div className="grid grid-cols-4 gap-2">
               <BotaoControle
@@ -1033,7 +1038,7 @@ function StatusBox({ icon: Icon, titulo, texto, variant = "default", loading }) 
         />
       </div>
 
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-sm font-black">{titulo}</p>
         <p className="truncate text-xs opacity-75">{texto}</p>
       </div>
@@ -1072,7 +1077,7 @@ function MiniPreviewScanner({ itens = [], onLimpar }) {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-black">Itens escaneados</p>
             <p className="text-xs text-white/60">
-              Os produtos somados aparecem aqui.
+              Produtos somados aparecem aqui.
             </p>
           </div>
         </div>
