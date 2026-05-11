@@ -6,6 +6,8 @@ import {
   useState,
 } from "react";
 
+import { AnimatePresence, motion } from "framer-motion";
+
 import { useAuth } from "./context/AuthContext";
 
 import AppHeader from "./components/navigation/AppHeader";
@@ -161,22 +163,24 @@ function App() {
 
   return (
     <div className="min-h-[100dvh] bg-gray-100 text-black transition-colors duration-300 dark:bg-[#0f172a] dark:text-white">
-      <div
-        className={`
-          transition-all duration-300 ease-out
-          ${
-            overlayAberto
-              ? "-translate-y-4 opacity-0 pointer-events-none"
-              : "translate-y-0 opacity-100"
-          }
-        `}
-      >
-        <AppHeader
-          title={PAGE_TITLES[pagina] || "Farmácia App"}
-          showBack={mostrarVoltar}
-          onBack={voltarPagina}
-        />
-      </div>
+      <AnimatePresence mode="wait">
+        {!overlayAberto && (
+          <motion.div
+            key="app-header"
+            initial={{ opacity: 0, y: -24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -36 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="relative z-[90]"
+          >
+            <AppHeader
+              title={PAGE_TITLES[pagina] || "Farmácia App"}
+              showBack={mostrarVoltar}
+              onBack={voltarPagina}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <main
         className={`
