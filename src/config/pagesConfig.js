@@ -12,7 +12,6 @@ export const MENU_PAGES = [
   "baseProdutos",
   "mapeamentos",
   "backup",
-  "perfil",
   "notificacoes",
 ];
 
@@ -20,7 +19,7 @@ export const PAGE_TITLES = {
   medicamentos: "Medicamentos",
   receitas: "Receitas",
   posologia: "Posologia",
-  doutor: "Assistente",
+  doutor: "AMSI",
   menu: "Menu",
   baseProdutos: "Base de Produtos",
   mapeamentos: "Mapeamentos",

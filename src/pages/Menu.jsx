@@ -5,6 +5,8 @@ import {
   useState,
 } from "react";
 
+import { AnimatePresence, motion } from "framer-motion";
+
 import {
   AlertTriangle,
   Bell,
@@ -16,6 +18,7 @@ import {
   Copy,
   Crown,
   Download,
+  FileText,
   History,
   LayoutDashboard,
   Loader2,
@@ -23,6 +26,7 @@ import {
   Map,
   Moon,
   Package,
+  Pill,
   RefreshCcw,
   ScanBarcode,
   Search,
@@ -30,7 +34,9 @@ import {
   Shield,
   Skull,
   Sparkles,
+  Stethoscope,
   User,
+  UserRound,
   X,
 } from "lucide-react";
 
@@ -99,8 +105,7 @@ function Menu({ setPagina }) {
     return "Boa noite";
   }, []);
 
-  const primeiroNome =
-    usuarioAtual?.nome?.split(" ")?.[0] || "usuário";
+  const primeiroNome = usuarioAtual?.nome?.split(" ")?.[0] || "usuário";
 
   const adminsFiltrados = useMemo(() => {
     const termo = buscaAdmin.trim().toLowerCase();
@@ -137,7 +142,7 @@ function Menu({ setPagina }) {
     },
     {
       titulo: "Notificações",
-      descricao: "Alertas e avisos do app",
+      descricao: "Alertas, lembretes e avisos",
       icon: Bell,
       pagina: "notificacoes",
       destaque: "from-pink-600 to-rose-500",
@@ -148,6 +153,30 @@ function Menu({ setPagina }) {
       icon: Download,
       pagina: "backup",
       destaque: "from-green-700 to-lime-500",
+    },
+  ];
+
+  const ferramentasRapidas = [
+    {
+      titulo: "Receitas",
+      descricao: "Validade rápida",
+      icon: FileText,
+      pagina: "receitas",
+      destaque: "from-blue-700 to-indigo-600",
+    },
+    {
+      titulo: "Posologia",
+      descricao: "Gotas, doses e frascos",
+      icon: Stethoscope,
+      pagina: "posologia",
+      destaque: "from-violet-700 to-fuchsia-600",
+    },
+    {
+      titulo: "Perfil",
+      descricao: isVisitante ? "Modo visitante" : "Conta e tema",
+      icon: UserRound,
+      pagina: "perfil",
+      destaque: "from-emerald-700 to-green-500",
     },
   ];
 
@@ -167,10 +196,7 @@ function Menu({ setPagina }) {
   }, []);
 
   function mostrarToast(msg, tipo = "ok") {
-    setToast({
-      msg,
-      tipo,
-    });
+    setToast({ msg, tipo });
 
     if (navigator.vibrate) {
       navigator.vibrate(30);
@@ -224,15 +250,12 @@ function Menu({ setPagina }) {
     try {
       setCarregando(true);
 
-      const [
-        medicamentos,
-        produtosAprendidos,
-        mapeamentos,
-      ] = await Promise.all([
-        db.medicamentos.toArray(),
-        db.produtosCodigo.count(),
-        db.mapeamentos.count(),
-      ]);
+      const [medicamentos, produtosAprendidos, mapeamentos] =
+        await Promise.all([
+          db.medicamentos.toArray(),
+          db.produtosCodigo.count(),
+          db.mapeamentos.count(),
+        ]);
 
       const hoje = new Date();
 
@@ -250,18 +273,9 @@ function Menu({ setPagina }) {
 
         const dias = diferencaEmDias(validade, hoje);
 
-        const diasPreVencido = Number(
-          item.diasPre || item.diasPreVencido || 30
-        );
-
-        const diasRemover = Number(
-          item.diasRemover || 7
-        );
-
-        const limiteAlerta = Math.max(
-          diasPreVencido,
-          diasRemover
-        );
+        const diasPreVencido = Number(item.diasPre || item.diasPreVencido || 30);
+        const diasRemover = Number(item.diasRemover || 7);
+        const limiteAlerta = Math.max(diasPreVencido, diasRemover);
 
         if (dias < 0) {
           vencidos += 1;
@@ -308,10 +322,7 @@ function Menu({ setPagina }) {
           ...docSnap.data(),
         }))
         .sort((a, b) =>
-          String(a.nome || "").localeCompare(
-            String(b.nome || ""),
-            "pt-BR"
-          )
+          String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR")
         );
 
       setAdmins(lista);
@@ -332,9 +343,7 @@ function Menu({ setPagina }) {
     try {
       setLoadingBusca(true);
 
-      const res = await buscarUsuarioPorId(
-        buscaId.trim()
-      );
+      const res = await buscarUsuarioPorId(buscaId.trim());
 
       if (!res.ok) {
         mostrarToast(res.erro, "erro");
@@ -355,10 +364,7 @@ function Menu({ setPagina }) {
   async function alterarPermissao(tipo) {
     if (!usuarioEncontrado) return;
 
-    const res = await alterarTipoPorId(
-      usuarioEncontrado.publicId,
-      tipo
-    );
+    const res = await alterarTipoPorId(usuarioEncontrado.publicId, tipo);
 
     if (!res.ok) {
       mostrarToast(res.erro, "erro");
@@ -368,9 +374,7 @@ function Menu({ setPagina }) {
     setUsuarioEncontrado(res.usuario);
 
     mostrarToast(
-      tipo === "admin"
-        ? "Usuário promovido 👑"
-        : "Usuário rebaixado 👤",
+      tipo === "admin" ? "Usuário promovido 👑" : "Usuário rebaixado 👤",
       "ok"
     );
 
@@ -395,14 +399,11 @@ function Menu({ setPagina }) {
     <div className="relative min-h-screen overflow-hidden">
       <FundoBolhas variant="emerald" />
 
-      {toast && (
-        <Toast
-          toast={toast}
-          fechar={() => setToast(null)}
-        />
-      )}
+      <AnimatePresence>
+        {toast && <Toast toast={toast} fechar={() => setToast(null)} />}
+      </AnimatePresence>
 
-      <div className="relative z-10 mx-auto max-w-6xl space-y-5 p-4 pb-32 text-black dark:text-white">
+      <div className="relative z-10 mx-auto max-w-6xl space-y-5 p-4 pb-32 text-gray-950 dark:text-white">
         <MenuHero
           saudacao={saudacao}
           primeiroNome={primeiroNome}
@@ -412,27 +413,42 @@ function Menu({ setPagina }) {
           dashboard={dashboard}
           onPerfil={() => setPagina("perfil")}
           onLogout={logout}
-          onCopyId={() =>
-            copiarTexto(usuarioAtual?.publicId, "ID")
-          }
+          onCopyId={() => copiarTexto(usuarioAtual?.publicId, "ID")}
         />
+
+        {!isAdmin && (
+          <section className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
+            <SectionTitle
+              icon={Sparkles}
+              title={isVisitante ? "Uso rápido" : "Atalhos"}
+              description={
+                isVisitante
+                  ? "Ferramentas liberadas sem criar conta"
+                  : "Ferramentas principais da sua conta"
+              }
+            />
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {ferramentasRapidas.map((acao) => (
+                <ActionCard
+                  key={acao.pagina}
+                  {...acao}
+                  onClick={() => setPagina(acao.pagina)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
         {isAdmin && (
           <section className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
-            <div className="mb-4 flex items-end justify-between gap-3">
-              <div>
-                <p className="flex items-center gap-2 text-xl font-black">
-                  <Sparkles size={22} />
-                  Ferramentas Master
-                </p>
+            <SectionTitle
+              icon={Sparkles}
+              title="Ferramentas Master"
+              description="Recursos administrativos que não ficam no menu inferior"
+            />
 
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Recursos administrativos que não ficam no menu inferior
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {ferramentasAdmin.map((acao) => (
                 <ActionCard
                   key={acao.pagina}
@@ -447,16 +463,12 @@ function Menu({ setPagina }) {
         {isAdmin && (
           <section className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="flex items-center gap-2 text-xl font-black">
-                  <LayoutDashboard size={22} />
-                  Painel do estoque
-                </h2>
-
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Leitura rápida dos dados locais deste aparelho
-                </p>
-              </div>
+              <SectionTitle
+                icon={LayoutDashboard}
+                title="Painel do estoque"
+                description="Leitura rápida dos dados locais deste aparelho"
+                noMargin
+              />
 
               <button
                 type="button"
@@ -523,16 +535,11 @@ function Menu({ setPagina }) {
         {isAdmin && (
           <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
-              <div className="mb-4">
-                <h2 className="flex items-center gap-2 text-xl font-black">
-                  <Shield size={22} />
-                  Gerenciar acessos
-                </h2>
-
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Busque pelo ID público para editar o cargo de uma conta
-                </p>
-              </div>
+              <SectionTitle
+                icon={Shield}
+                title="Gerenciar acessos"
+                description="Busque pelo ID público para editar o cargo de uma conta"
+              />
 
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -550,7 +557,7 @@ function Menu({ setPagina }) {
                       }
                     }}
                     placeholder="Digite o ID do usuário"
-                    className="w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 font-semibold outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-gray-800 dark:bg-gray-950"
+                    className="w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 font-semibold outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-white/5"
                   />
                 </div>
 
@@ -560,7 +567,11 @@ function Menu({ setPagina }) {
                   disabled={loadingBusca}
                   className="rounded-2xl bg-emerald-700 px-5 font-bold text-white shadow-lg shadow-emerald-700/15 transition active:scale-95 disabled:opacity-60"
                 >
-                  {loadingBusca ? "..." : "Buscar"}
+                  {loadingBusca ? (
+                    <Loader2 size={20} className="animate-spin" />
+                  ) : (
+                    "Buscar"
+                  )}
                 </button>
               </div>
 
@@ -569,24 +580,10 @@ function Menu({ setPagina }) {
                   usuario={usuarioEncontrado}
                   onAdmin={() => alterarPermissao("admin")}
                   onComum={() => alterarPermissao("comum")}
-                  onCopyId={() =>
-                    copiarTexto(usuarioEncontrado.publicId, "ID")
-                  }
+                  onCopyId={() => copiarTexto(usuarioEncontrado.publicId, "ID")}
                 />
               ) : (
-                <div className="mt-4 rounded-3xl border border-dashed border-gray-300 bg-gray-50/80 p-5 text-center dark:border-gray-700 dark:bg-gray-900/60">
-                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-700 text-white">
-                    <Search size={22} />
-                  </div>
-
-                  <p className="font-black">
-                    Nenhum usuário selecionado
-                  </p>
-
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    Digite o ID público para abrir o cartão de permissão.
-                  </p>
-                </div>
+                <EmptySearch />
               )}
             </div>
 
@@ -603,28 +600,21 @@ function Menu({ setPagina }) {
         )}
 
         <section className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
-          <div className="mb-4">
-            <h2 className="flex items-center gap-2 text-xl font-black">
-              <Settings size={22} />
-              Preferências
-            </h2>
-
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Ajustes rápidos do visual e sessão
-            </p>
-          </div>
+          <SectionTitle
+            icon={Settings}
+            title="Preferências"
+            description="Ajustes rápidos do visual e sessão"
+          />
 
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="flex items-center justify-between rounded-3xl border border-gray-200 bg-gray-50/90 p-4 dark:border-gray-800 dark:bg-gray-900/70">
+            <div className="flex items-center justify-between rounded-3xl border border-gray-200 bg-gray-50/90 p-4 dark:border-white/10 dark:bg-white/5">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800 text-white dark:bg-white/10">
                   <Moon size={21} />
                 </div>
 
                 <div>
-                  <p className="font-black">
-                    Modo Escuro
-                  </p>
+                  <p className="font-black">Modo Escuro</p>
 
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {dark ? "Visual noturno ativo" : "Visual claro ativo"}
@@ -636,9 +626,7 @@ function Menu({ setPagina }) {
                 type="button"
                 onClick={toggleTheme}
                 className={`flex h-8 w-16 items-center rounded-full px-1 transition-all ${
-                  dark
-                    ? "justify-end bg-green-500"
-                    : "justify-start bg-gray-400"
+                  dark ? "justify-end bg-green-500" : "justify-start bg-gray-400"
                 }`}
                 aria-label="Alternar tema"
               >
@@ -671,6 +659,10 @@ function MenuHero({
   onLogout,
   onCopyId,
 }) {
+  const subtitulo = isVisitante
+    ? "Acesso rápido sem conta"
+    : usuarioAtual?.email || "Conta ativa";
+
   return (
     <section className="relative overflow-hidden rounded-[2.2rem] bg-gradient-to-br from-emerald-700 via-green-800 to-slate-950 p-5 text-white shadow-2xl shadow-emerald-950/30 md:p-6">
       <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-sm" />
@@ -678,7 +670,7 @@ function MenuHero({
       <div className="absolute right-28 top-24 h-10 w-10 rounded-full bg-white/10 blur-sm" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_35%)]" />
 
-      <div className="relative grid gap-5 lg:grid-cols-[1.25fr_0.75fr] lg:items-stretch">
+      <div className="relative grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-stretch">
         <div className="flex flex-col justify-between gap-6">
           <div className="flex items-start gap-4">
             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[1.7rem] border border-white/20 bg-white/15 shadow-xl backdrop-blur-md">
@@ -695,15 +687,11 @@ function MenuHero({
               </h1>
 
               <p className="mt-2 truncate text-sm text-emerald-100">
-                {isVisitante
-                  ? "Acesso local de visitante"
-                  : usuarioAtual?.email || "Conta ativa"}
+                {subtitulo}
               </p>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <Chip>
-                  {isVisitante ? "✨ Visitante" : "Conta ativa"}
-                </Chip>
+                <Chip>{isVisitante ? "✨ Visitante" : "Conta ativa"}</Chip>
 
                 {usuarioAtual?.publicId && !isVisitante && (
                   <button
@@ -715,11 +703,8 @@ function MenuHero({
                   </button>
                 )}
 
-                {isAdmin && (
-                  <Chip>
-                    Painel master
-                  </Chip>
-                )}
+                {isAdmin && <Chip>👑 Painel master</Chip>}
+                {!isAdmin && <Chip>Receitas + Posologia</Chip>}
               </div>
             </div>
           </div>
@@ -752,57 +737,60 @@ function MenuHero({
 
           <div className="grid grid-cols-2 gap-3">
             <HeroMiniStat
-              label="Itens"
-              value={isAdmin ? dashboard.totalMedicamentos : "OK"}
-              detail={isAdmin ? "estoque" : "uso"}
+              label={isAdmin ? "Itens" : "Receitas"}
+              value={isAdmin ? dashboard.totalMedicamentos : "Livre"}
+              detail={isAdmin ? "estoque" : "sem conta"}
             />
 
             <HeroMiniStat
-              label="Alertas"
-              value={isAdmin ? dashboard.proximos : "OK"}
-              detail={isAdmin ? "próximos" : "consulta"}
+              label={isAdmin ? "Alertas" : "Posologia"}
+              value={isAdmin ? dashboard.proximos : "Livre"}
+              detail={isAdmin ? "próximos" : "uso rápido"}
             />
           </div>
+
+          {!isAdmin && (
+            <p className="mt-3 rounded-2xl bg-black/15 p-3 text-xs font-semibold text-emerald-100/90">
+              Use as ferramentas principais sem burocracia. Para nuvem e permissões, crie uma conta.
+            </p>
+          )}
         </div>
       </div>
     </section>
   );
 }
 
-function HeroMiniStat({
-  label,
-  value,
-  detail,
-}) {
+function SectionTitle({ icon: Icon, title, description, noMargin = false }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/15 p-3">
-      <p className="text-xs font-bold text-emerald-100">
-        {label}
-      </p>
+    <div className={noMargin ? "" : "mb-4"}>
+      <h2 className="flex items-center gap-2 text-xl font-black">
+        <Icon size={22} />
+        {title}
+      </h2>
 
-      <p className="mt-1 text-2xl font-black">
-        {value}
-      </p>
-
-      <p className="text-xs text-emerald-100/80">
-        {detail}
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        {description}
       </p>
     </div>
   );
 }
 
-function ActionCard({
-  icon: Icon,
-  titulo,
-  descricao,
-  destaque,
-  onClick,
-}) {
+function HeroMiniStat({ label, value, detail }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/15 p-3">
+      <p className="text-xs font-bold text-emerald-100">{label}</p>
+      <p className="mt-1 text-2xl font-black">{value}</p>
+      <p className="text-xs text-emerald-100/80">{detail}</p>
+    </div>
+  );
+}
+
+function ActionCard({ icon: Icon, titulo, descricao, destaque, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group relative overflow-hidden rounded-[1.7rem] border border-gray-200 bg-gray-50 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl active:scale-[0.98] dark:border-white/10 dark:bg-gray-900/70"
+      className="group relative overflow-hidden rounded-[1.7rem] border border-gray-200 bg-gray-50 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl active:scale-[0.98] dark:border-white/10 dark:bg-white/5"
     >
       <div
         className={`absolute -right-10 -top-10 h-28 w-28 rounded-full bg-gradient-to-br ${destaque} opacity-20 blur-xl transition group-hover:opacity-35`}
@@ -822,10 +810,7 @@ function ActionCard({
       </div>
 
       <div className="relative mt-4">
-        <p className="text-lg font-black">
-          {titulo}
-        </p>
-
+        <p className="text-lg font-black">{titulo}</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           {descricao}
         </p>
@@ -852,7 +837,7 @@ function MetricPremium({
     ? "border-red-200 bg-red-50 dark:border-red-500/20 dark:bg-red-500/10"
     : aviso
     ? "border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10"
-    : "border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/70";
+    : "border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5";
 
   return (
     <div className={`rounded-2xl border p-4 ${bg}`}>
@@ -864,9 +849,7 @@ function MetricPremium({
         <Icon size={18} className={destaque} />
       </div>
 
-      <p className={`text-3xl font-black ${destaque}`}>
-        {valor}
-      </p>
+      <p className={`text-3xl font-black ${destaque}`}>{valor}</p>
 
       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
         {descricao}
@@ -875,19 +858,28 @@ function MetricPremium({
   );
 }
 
-function UsuarioEncontrado({
-  usuario,
-  onAdmin,
-  onComum,
-  onCopyId,
-}) {
+function EmptySearch() {
   return (
-    <div className="mt-4 rounded-3xl border border-gray-200 bg-gray-50/90 p-5 dark:border-gray-800 dark:bg-gray-900/70">
+    <div className="mt-4 rounded-3xl border border-dashed border-gray-300 bg-gray-50/80 p-5 text-center dark:border-white/10 dark:bg-white/5">
+      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-700 text-white">
+        <Search size={22} />
+      </div>
+
+      <p className="font-black">Nenhum usuário selecionado</p>
+
+      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        Digite o ID público para abrir o cartão de permissão.
+      </p>
+    </div>
+  );
+}
+
+function UsuarioEncontrado({ usuario, onAdmin, onComum, onCopyId }) {
+  return (
+    <div className="mt-4 rounded-3xl border border-gray-200 bg-gray-50/90 p-5 dark:border-white/10 dark:bg-white/5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-xl font-black">
-            {usuario.nome}
-          </p>
+          <p className="truncate text-xl font-black">{usuario.nome}</p>
 
           <p className="truncate text-sm text-gray-500 dark:text-gray-400">
             {usuario.email || "Email não informado"}
@@ -962,9 +954,7 @@ function AreaMaster({
             <Crown size={24} />
           </div>
 
-          <p className="text-2xl font-black">
-            Área Master
-          </p>
+          <p className="text-2xl font-black">Área Master</p>
 
           <p className="mt-1 text-sm text-emerald-100">
             {buscaAdmin.trim()
@@ -1035,10 +1025,7 @@ function AreaMaster({
   );
 }
 
-function AdminRow({
-  admin,
-  onCopyId,
-}) {
+function AdminRow({ admin, onCopyId }) {
   const nome = admin.nome || "Admin sem nome";
   const inicial = nome.trim().charAt(0).toUpperCase() || "A";
 
@@ -1051,9 +1038,7 @@ function AdminRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="truncate font-black">
-              {nome}
-            </p>
+            <p className="truncate font-black">{nome}</p>
 
             <span className="shrink-0 rounded-full bg-yellow-400 px-2 py-0.5 text-[10px] font-black text-black">
               Admin
@@ -1088,11 +1073,7 @@ function CargoBadge({ tipo }) {
     <span
       className={`
         rounded-full px-3 py-1 text-xs font-black
-        ${
-          admin
-            ? "bg-yellow-500 text-black"
-            : "bg-blue-600 text-white"
-        }
+        ${admin ? "bg-yellow-500 text-black" : "bg-blue-600 text-white"}
       `}
     >
       {admin ? "Admin" : "Comum"}
@@ -1100,18 +1081,12 @@ function CargoBadge({ tipo }) {
   );
 }
 
-function PreferenceCard({
-  icon: Icon,
-  titulo,
-  descricao,
-  onClick,
-  danger = false,
-}) {
+function PreferenceCard({ icon: Icon, titulo, descricao, onClick, danger = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-between rounded-3xl border border-gray-200 bg-gray-50/90 p-4 text-left transition hover:bg-gray-100 active:scale-[0.98] dark:border-gray-800 dark:bg-gray-900/70 dark:hover:bg-gray-900"
+      className="flex w-full items-center justify-between rounded-3xl border border-gray-200 bg-gray-50/90 p-4 text-left transition hover:bg-gray-100 active:scale-[0.98] dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
     >
       <div className="flex min-w-0 items-center gap-4">
         <div
@@ -1124,9 +1099,7 @@ function PreferenceCard({
         </div>
 
         <div className="min-w-0">
-          <p className="font-black">
-            {titulo}
-          </p>
+          <p className="font-black">{titulo}</p>
 
           <p className="truncate text-sm text-gray-500 dark:text-gray-400">
             {descricao}
@@ -1147,15 +1120,17 @@ function Chip({ children }) {
   );
 }
 
-function Toast({
-  toast,
-  fechar,
-}) {
+function Toast({ toast, fechar }) {
   const erro = toast.tipo === "erro";
   const info = toast.tipo === "info";
 
   return (
-    <div className="fixed left-1/2 top-5 z-[99999] w-[92%] max-w-sm -translate-x-1/2">
+    <motion.div
+      initial={{ opacity: 0, y: -14 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -14 }}
+      className="fixed left-1/2 top-5 z-[99999] w-[92%] max-w-sm -translate-x-1/2"
+    >
       <div
         className={`
           flex items-center gap-3 rounded-3xl border p-4 shadow-2xl backdrop-blur-xl
@@ -1170,23 +1145,13 @@ function Toast({
       >
         <div
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white ${
-            erro
-              ? "bg-red-500"
-              : info
-              ? "bg-blue-500"
-              : "bg-emerald-600"
+            erro ? "bg-red-500" : info ? "bg-blue-500" : "bg-emerald-600"
           }`}
         >
-          {erro ? (
-            <AlertTriangle size={20} />
-          ) : (
-            <CheckCircle2 size={20} />
-          )}
+          {erro ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
         </div>
 
-        <p className="flex-1 text-sm font-bold">
-          {toast.msg}
-        </p>
+        <p className="flex-1 text-sm font-bold">{toast.msg}</p>
 
         <button
           type="button"
@@ -1196,7 +1161,7 @@ function Toast({
           <X size={17} />
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

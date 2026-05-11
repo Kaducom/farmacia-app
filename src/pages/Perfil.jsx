@@ -1,7 +1,5 @@
-import {
-  useEffect,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 
 import {
   AlertTriangle,
@@ -14,8 +12,11 @@ import {
   Mail,
   Moon,
   Pencil,
+  ReceiptText,
   Save,
   Shield,
+  Sparkles,
+  Stethoscope,
   User,
   X,
 } from "lucide-react";
@@ -48,10 +49,7 @@ function Perfil() {
   }, [usuarioAtual?.nome]);
 
   function mostrarToast(msg, tipo = "ok") {
-    setToast({
-      msg,
-      tipo,
-    });
+    setToast({ msg, tipo });
 
     if (navigator.vibrate) {
       navigator.vibrate(25);
@@ -65,7 +63,7 @@ function Perfil() {
   async function salvarPerfil() {
     if (isVisitante) {
       mostrarToast(
-        "Visitante não salva perfil na nuvem. Crie uma conta para salvar.",
+        "Visitante usa Receitas e Posologia sem conta. Para salvar perfil na nuvem, crie uma conta.",
         "info"
       );
       return;
@@ -125,18 +123,19 @@ function Perfil() {
     mostrarToast(`ID pronto: ${id}`, "ok");
   }
 
+  const nomeExibido =
+    usuarioAtual?.nome ||
+    (isVisitante ? "Visitante" : usuarioAtual?.email || "Usuário");
+
   return (
     <div className="relative min-h-screen overflow-hidden">
       <FundoBolhas variant="emerald" />
 
-      {toast && (
-        <Toast
-          toast={toast}
-          fechar={() => setToast(null)}
-        />
-      )}
+      <AnimatePresence>
+        {toast && <Toast toast={toast} fechar={() => setToast(null)} />}
+      </AnimatePresence>
 
-      <div className="relative z-10 mx-auto max-w-4xl space-y-5 p-4 pb-32 text-black dark:text-white">
+      <div className="relative z-10 mx-auto max-w-5xl space-y-5 p-4 pb-32 text-gray-950 dark:text-white">
         <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-green-700 via-emerald-800 to-slate-950 p-6 text-white shadow-2xl shadow-emerald-950/30">
           <div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-white/10" />
           <div className="absolute -bottom-20 left-10 h-44 w-44 rounded-full bg-emerald-300/10" />
@@ -147,9 +146,12 @@ function Perfil() {
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="truncate text-3xl font-black">
-                {usuarioAtual?.nome || "Usuário"}
-              </p>
+              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-50">
+                <Sparkles size={13} />
+                {isVisitante ? "Uso rápido liberado" : "Conta ativa"}
+              </div>
+
+              <p className="truncate text-3xl font-black">{nomeExibido}</p>
 
               <p className="mt-1 truncate text-sm text-green-100">
                 {isVisitante
@@ -166,10 +168,12 @@ function Perfil() {
                     : "👤 Usuário"}
                 </Chip>
 
+                <Chip>{isVisitante ? "Sem nuvem" : "Firebase ativo"}</Chip>
+
                 <Chip>
                   {isVisitante
-                    ? "Sem nuvem"
-                    : "Firebase ativo"}
+                    ? "Receitas + Posologia"
+                    : "Perfil sincronizável"}
                 </Chip>
 
                 {!isVisitante && usuarioAtual?.publicId && (
@@ -181,7 +185,7 @@ function Perfil() {
             <button
               type="button"
               onClick={logout}
-              className="flex items-center justify-center gap-2 rounded-2xl border border-white/20 bg-red-500/20 px-5 py-3 font-bold backdrop-blur-sm transition active:scale-95"
+              className="flex items-center justify-center gap-2 rounded-2xl border border-white/20 bg-red-500/20 px-5 py-3 font-black backdrop-blur-sm transition active:scale-95"
             >
               <LogOut size={18} />
               Sair
@@ -189,7 +193,41 @@ function Perfil() {
           </div>
         </section>
 
-        <section className="space-y-4 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+        {isVisitante && (
+          <section className="rounded-[2rem] border border-blue-200 bg-blue-50/90 p-5 text-blue-800 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
+            <div className="flex items-start gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white">
+                <Sparkles size={24} />
+              </div>
+
+              <div>
+                <h2 className="text-xl font-black">Modo visitante</h2>
+
+                <p className="mt-1 text-sm">
+                  Ideal para usar na hora, sem criar conta. O visitante pode usar
+                  Receitas e Posologia normalmente. Para salvar perfil, nuvem,
+                  histórico compartilhado ou recursos avançados, basta criar uma conta.
+                </p>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <MiniAcesso
+                    icon={ReceiptText}
+                    titulo="Receitas"
+                    texto="Calcule validade de receita sem cadastro."
+                  />
+
+                  <MiniAcesso
+                    icon={Stethoscope}
+                    titulo="Posologia"
+                    texto="Calcule frascos, gotas e tratamento rápido."
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        <section className="space-y-4 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="flex items-center gap-2 text-xl font-black">
@@ -223,13 +261,13 @@ function Perfil() {
               value={nome}
               onChange={(e) => setNome(e.target.value)}
               disabled={!editando || isVisitante}
-              placeholder="Seu nome"
+              placeholder={isVisitante ? "Visitante" : "Seu nome"}
               className="
                 w-full rounded-2xl border border-gray-200 bg-gray-50
                 px-4 py-3 font-semibold outline-none
                 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20
                 disabled:opacity-70
-                dark:border-gray-800 dark:bg-gray-950
+                dark:border-white/10 dark:bg-white/5
               "
             />
           </div>
@@ -244,8 +282,8 @@ function Perfil() {
             }
           />
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            {editando && (
+          {editando && (
+            <div className="grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={salvarPerfil}
@@ -255,21 +293,19 @@ function Perfil() {
                 <Save size={19} />
                 {salvando ? "Salvando..." : "Salvar"}
               </button>
-            )}
 
-            {editando && (
               <button
                 type="button"
                 onClick={() => {
                   setNome(usuarioAtual?.nome || "");
                   setEditando(false);
                 }}
-                className="rounded-2xl border border-gray-200 bg-gray-100 py-3 font-black text-gray-700 transition active:scale-95 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                className="rounded-2xl border border-gray-200 bg-gray-100 py-3 font-black text-gray-700 transition active:scale-95 dark:border-white/10 dark:bg-white/10 dark:text-white"
               >
                 Cancelar
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           {isVisitante && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
@@ -279,7 +315,7 @@ function Perfil() {
           )}
         </section>
 
-        <section className="space-y-4 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+        <section className="space-y-4 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
           <div>
             <h2 className="flex items-center gap-2 text-xl font-black">
               <Shield size={22} />
@@ -298,12 +334,12 @@ function Perfil() {
               isAdmin
                 ? "Administrador"
                 : isVisitante
-                ? "Visitante"
+                ? "Visitante rápido"
                 : "Usuário comum"
             }
           />
 
-          <div className="rounded-2xl bg-gray-100/90 p-4 dark:bg-gray-800/70">
+          <div className="rounded-2xl bg-gray-100/90 p-4 dark:bg-white/5">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-700 text-white">
@@ -311,9 +347,7 @@ function Perfil() {
                 </div>
 
                 <div>
-                  <p className="font-bold">
-                    ID público
-                  </p>
+                  <p className="font-bold">ID público</p>
 
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     Usado para admin encontrar sua conta
@@ -323,34 +357,26 @@ function Perfil() {
             </div>
 
             <div className="flex gap-2">
-              <div className="flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-3 font-black dark:border-gray-700 dark:bg-gray-950">
+              <div className="flex-1 truncate rounded-2xl border border-gray-200 bg-white px-4 py-3 font-black dark:border-white/10 dark:bg-white/5">
                 {isVisitante
-                  ? "Visitante"
+                  ? "Visitante sem ID fixo"
                   : usuarioAtual?.publicId || "Sem ID"}
               </div>
 
               <button
                 type="button"
-                onClick={
-                  usuarioAtual?.publicId
-                    ? copiarId
-                    : gerarId
-                }
+                onClick={usuarioAtual?.publicId ? copiarId : gerarId}
                 disabled={isVisitante}
                 className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-700 text-white transition active:scale-95 disabled:opacity-60"
                 aria-label="Copiar ou gerar ID"
               >
-                {usuarioAtual?.publicId ? (
-                  <Copy size={19} />
-                ) : (
-                  <Save size={19} />
-                )}
+                {usuarioAtual?.publicId ? <Copy size={19} /> : <Save size={19} />}
               </button>
             </div>
           </div>
         </section>
 
-        <section className="space-y-4 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+        <section className="space-y-4 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
           <div>
             <h2 className="flex items-center gap-2 text-xl font-black">
               <Moon size={22} />
@@ -362,11 +388,9 @@ function Perfil() {
             </p>
           </div>
 
-          <div className="flex items-center justify-between rounded-2xl bg-gray-100/90 p-4 dark:bg-gray-800/70">
+          <div className="flex items-center justify-between rounded-2xl bg-gray-100/90 p-4 dark:bg-white/5">
             <div>
-              <p className="font-bold">
-                Modo Escuro
-              </p>
+              <p className="font-bold">Modo Escuro</p>
 
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Tema atual: {dark ? "escuro" : "claro"}
@@ -377,9 +401,7 @@ function Perfil() {
               type="button"
               onClick={toggleTheme}
               className={`flex h-7 w-14 items-center rounded-full px-1 transition-all ${
-                dark
-                  ? "justify-end bg-green-500"
-                  : "justify-start bg-gray-400"
+                dark ? "justify-end bg-green-500" : "justify-start bg-gray-400"
               }`}
             >
               <div className="h-5 w-5 rounded-full bg-white shadow-md" />
@@ -391,13 +413,9 @@ function Perfil() {
   );
 }
 
-function InfoRow({
-  icon: Icon,
-  label,
-  value,
-}) {
+function InfoRow({ icon: Icon, label, value }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl bg-gray-100/90 p-4 dark:bg-gray-800/70">
+    <div className="flex items-center gap-3 rounded-2xl bg-gray-100/90 p-4 dark:bg-white/5">
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-700 text-white">
         <Icon size={20} />
       </div>
@@ -407,10 +425,21 @@ function InfoRow({
           {label}
         </p>
 
-        <p className="truncate font-black">
-          {value}
-        </p>
+        <p className="truncate font-black">{value}</p>
       </div>
+    </div>
+  );
+}
+
+function MiniAcesso({ icon: Icon, titulo, texto }) {
+  return (
+    <div className="rounded-2xl bg-white/70 p-4 dark:bg-black/20">
+      <div className="mb-2 flex items-center gap-2">
+        <Icon size={18} />
+        <p className="font-black">{titulo}</p>
+      </div>
+
+      <p className="text-sm opacity-80">{texto}</p>
     </div>
   );
 }
@@ -423,15 +452,17 @@ function Chip({ children }) {
   );
 }
 
-function Toast({
-  toast,
-  fechar,
-}) {
+function Toast({ toast, fechar }) {
   const erro = toast.tipo === "erro";
   const info = toast.tipo === "info";
 
   return (
-    <div className="fixed left-1/2 top-5 z-[99999] w-[92%] max-w-sm -translate-x-1/2">
+    <motion.div
+      initial={{ opacity: 0, y: -14 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -14 }}
+      className="fixed left-1/2 top-5 z-[99999] w-[92%] max-w-sm -translate-x-1/2"
+    >
       <div
         className={`
           flex items-center gap-3 rounded-3xl border p-4 shadow-2xl backdrop-blur-xl
@@ -446,23 +477,13 @@ function Toast({
       >
         <div
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white ${
-            erro
-              ? "bg-red-500"
-              : info
-              ? "bg-blue-500"
-              : "bg-emerald-600"
+            erro ? "bg-red-500" : info ? "bg-blue-500" : "bg-emerald-600"
           }`}
         >
-          {erro ? (
-            <AlertTriangle size={20} />
-          ) : (
-            <CheckCircle2 size={20} />
-          )}
+          {erro ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
         </div>
 
-        <p className="flex-1 text-sm font-bold">
-          {toast.msg}
-        </p>
+        <p className="flex-1 text-sm font-bold">{toast.msg}</p>
 
         <button
           type="button"
@@ -472,7 +493,7 @@ function Toast({
           <X size={17} />
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

@@ -1,21 +1,33 @@
 import { useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import FundoBolhas from "../components/FundoBolhas";
 
 import {
   AlertTriangle,
   Bot,
   BookOpen,
+  Brain,
   CheckCircle2,
   ClipboardList,
+  Copy,
+  Gamepad2,
+  GraduationCap,
   HelpCircle,
+  LibraryBig,
   Lightbulb,
   Pill,
+  RefreshCcw,
   RotateCcw,
   Search,
+  Send,
   ShieldAlert,
   ShoppingBasket,
   Sparkles,
   Stethoscope,
+  Target,
+  Trophy,
+  X,
+  XCircle,
 } from "lucide-react";
 
 const baseClinica = [
@@ -142,6 +154,9 @@ const baseClinica = [
       "calafrio",
       "fadiga",
       "nariz escorrendo",
+      "nariz entupido",
+      "adulto gripado",
+      "adulto com gripe",
     ],
     resumo:
       "Resfriado tende a ser mais local e gradual. Gripe costuma ter início súbito, febre, dores no corpo e fadiga intensa.",
@@ -150,6 +165,7 @@ const baseClinica = [
       "Quando começaram?",
       "Teve febre acima de 37,8°C?",
       "Tem dor no corpo, calafrios ou fadiga intensa?",
+      "É criança, gestante, idoso, hipertenso, diabético ou usa medicamento contínuo?",
     ],
     sinaisAlerta: [
       "Febre alta persistente",
@@ -532,13 +548,75 @@ const sinaisGlobais = [
   "confusao mental",
   "inchaço na garganta",
   "inchaco na garganta",
+  "gestante",
+  "bebe",
+  "bebê",
+  "criança pequena",
+  "crianca pequena",
 ];
 
+function gerarQuiz() {
+  const perguntasSintomas = baseClinica.map((item, index) => {
+    const erradas = baseClinica
+      .filter((outro) => outro.id !== item.id)
+      .slice(index % 3, index % 3 + 3)
+      .map((outro) => outro.titulo);
+
+    const opcoes = embaralhar([item.titulo, ...erradas]).slice(0, 4);
+
+    return {
+      id: `sintoma-${item.id}`,
+      tipo: "Identificação",
+      pergunta: `Cliente relata: "${item.sintomas.slice(0, 3).join(", ")}". Qual situação combina melhor?`,
+      resposta: item.titulo,
+      opcoes,
+      explicacao: item.resumo,
+    };
+  });
+
+  const perguntasAlerta = baseClinica.map((item, index) => {
+    const resposta = item.sinaisAlerta[0];
+    const distratores = [
+      "Beber água",
+      "Coriza clara isolada",
+      "Leve coceira sem piora",
+      "Sintoma leve há poucas horas",
+      "Ambiente seco",
+    ];
+
+    const opcoes = embaralhar([
+      resposta,
+      distratores[index % distratores.length],
+      distratores[(index + 1) % distratores.length],
+      distratores[(index + 2) % distratores.length],
+    ]);
+
+    return {
+      id: `alerta-${item.id}`,
+      tipo: "Segurança",
+      pergunta: `Em ${item.titulo}, qual item é sinal de alerta para encaminhar?`,
+      resposta,
+      opcoes,
+      explicacao: `Sinais de alerta: ${item.sinaisAlerta.join(", ")}.`,
+    };
+  });
+
+  return embaralhar([...perguntasSintomas, ...perguntasAlerta]);
+}
+
 function Doutor() {
+  const [modo, setModo] = useState("amsi");
   const [texto, setTexto] = useState("");
   const [resultado, setResultado] = useState(null);
   const [erro, setErro] = useState("");
   const [aba, setAba] = useState("resumo");
+  const [toast, setToast] = useState(null);
+
+  const [quiz, setQuiz] = useState(() => gerarQuiz());
+  const [quizIndex, setQuizIndex] = useState(0);
+  const [respostaSelecionada, setRespostaSelecionada] = useState("");
+  const [quizRespondido, setQuizRespondido] = useState(false);
+  const [acertos, setAcertos] = useState(0);
 
   const condicoesFiltradas = useMemo(() => {
     const t = normalizar(texto);
@@ -554,6 +632,16 @@ function Doutor() {
       .sort((a, b) => b.score - a.score);
   }, [texto]);
 
+  const perguntaAtual = quiz[quizIndex];
+
+  function mostrarToast(msg, tipo = "ok") {
+    setToast({ msg, tipo });
+
+    if (navigator.vibrate) navigator.vibrate(25);
+
+    setTimeout(() => setToast(null), 2600);
+  }
+
   function analisar() {
     setErro("");
     setAba("resumo");
@@ -564,7 +652,6 @@ function Doutor() {
     }
 
     const t = normalizar(texto);
-
     const alertas = sinaisGlobais.filter((s) => t.includes(normalizar(s)));
 
     if (alertas.length > 0) {
@@ -572,7 +659,7 @@ function Doutor() {
         nivel: "grave",
         titulo: "Sinal de alerta detectado",
         mensagem:
-          "Não seguir com recomendação de produto. Orientar atendimento médico urgente.",
+          "Não seguir com recomendação de produto. Orientar atendimento médico urgente ou avaliação farmacêutica responsável.",
         alertas,
         condicoes: condicoesFiltradas.slice(0, 3),
       });
@@ -595,7 +682,7 @@ function Doutor() {
       nivel: "ok",
       titulo: "Possíveis situações encontradas",
       mensagem:
-        "Use a anamnese, confira sinais de alerta e depois avalie orientações/indicações.",
+        "Use anamnese, confira sinais de alerta e avalie opções de balcão conforme perfil do cliente, bula e orientação profissional.",
       alertas: [],
       condicoes: condicoesFiltradas.slice(0, 3),
     });
@@ -607,11 +694,12 @@ function Doutor() {
       nivel: "ok",
       titulo: "Modo estudo aberto",
       mensagem:
-        "Use esse card para estudar anamnese, indicações, posologia, orientações e vendas adicionais.",
+        "Use esse card para estudar anamnese, opções de balcão, posologia, orientações e vendas adicionais.",
       alertas: [],
       condicoes: [item],
     });
     setAba("resumo");
+    setModo("amsi");
   }
 
   function limpar() {
@@ -621,158 +709,237 @@ function Doutor() {
     setAba("resumo");
   }
 
+  async function copiarOrientacao() {
+    const condicao = resultado?.condicoes?.[0];
+
+    if (!condicao) {
+      mostrarToast("Abra uma situação antes de copiar 😅", "erro");
+      return;
+    }
+
+    const textoCopiar = montarOrientacao(condicao);
+
+    try {
+      await navigator.clipboard.writeText(textoCopiar);
+      mostrarToast("Orientação copiada 📋", "ok");
+    } catch {
+      mostrarToast("Não consegui copiar automaticamente 😕", "erro");
+    }
+  }
+
+  function responderQuiz(opcao) {
+    if (quizRespondido) return;
+
+    setRespostaSelecionada(opcao);
+    setQuizRespondido(true);
+
+    if (opcao === perguntaAtual.resposta) {
+      setAcertos((prev) => prev + 1);
+      mostrarToast("Acertou, chef 🧠", "ok");
+    } else {
+      mostrarToast("Quase! Olha a explicação 👀", "erro");
+    }
+  }
+
+  function proximaPergunta() {
+    if (quizIndex >= quiz.length - 1) {
+      reiniciarQuiz();
+      return;
+    }
+
+    setQuizIndex((prev) => prev + 1);
+    setRespostaSelecionada("");
+    setQuizRespondido(false);
+  }
+
+  function reiniciarQuiz() {
+    setQuiz(gerarQuiz());
+    setQuizIndex(0);
+    setRespostaSelecionada("");
+    setQuizRespondido(false);
+    setAcertos(0);
+  }
+
   const condicaoPrincipal = resultado?.condicoes?.[0];
+  const progressoQuiz = quiz.length ? Math.round(((quizIndex + 1) / quiz.length) * 100) : 0;
 
   return (
     <div className="relative min-h-screen overflow-hidden">
       <FundoBolhas variant="rose" />
 
-      <div className="relative z-10 mx-auto max-w-6xl p-4 pb-28 text-gray-950 dark:text-white">
-        <div className="mb-5 overflow-hidden rounded-[2rem] bg-gradient-to-br from-cyan-700 via-blue-800 to-slate-950 p-6 text-white shadow-2xl shadow-cyan-950/25">
-          <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 shadow-xl backdrop-blur-md">
-              <Bot size={30} />
-            </div>
+      <AnimatePresence>
+        {toast && <Toast toast={toast} fechar={() => setToast(null)} />}
+      </AnimatePresence>
 
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.25em] text-cyan-100/70">
-                Assistente de balcão
-              </p>
+      <div className="relative z-10 mx-auto max-w-6xl p-4 pb-32 text-gray-950 dark:text-white">
+        <HeaderAmsi
+          modo={modo}
+          setModo={setModo}
+          totalCasos={baseClinica.length}
+          acertos={acertos}
+          quizIndex={quizIndex}
+        />
 
-              <h1 className="mt-1 text-3xl font-black tracking-tight">
-                Doutor Farmacêutico
-              </h1>
-
-              <p className="mt-2 max-w-3xl text-sm text-cyan-100">
-                Triagem, estudo, anamnese e apoio para orientação farmacêutica.
-                Segurança primeiro, venda depois.
-              </p>
-            </div>
+        <div className="mt-5 rounded-3xl border border-amber-200 bg-amber-50/90 p-4 text-amber-800 shadow-lg shadow-black/5 backdrop-blur-xl dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+          <div className="flex gap-3">
+            <AlertTriangle size={22} className="shrink-0" />
+            <p className="text-sm">
+              A AMSI é apoio de estudo e balcão. Não substitui avaliação profissional, prescrição, protocolos internos, bula ou encaminhamento quando houver sinal de alerta.
+            </p>
           </div>
         </div>
 
-        <div className="mb-5 flex gap-3 rounded-3xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-800 shadow-lg shadow-black/5 backdrop-blur-xl dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
-          <AlertTriangle size={22} className="shrink-0" />
-          <p>
-            Use como apoio. Não substitui avaliação profissional, prescrição,
-            protocolos internos ou encaminhamento quando houver sinal de alerta.
-          </p>
-        </div>
+        {modo === "amsi" && (
+          <div className="mt-5 grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+            <section className="rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
+              <label className="mb-2 flex items-center gap-2 text-sm font-black text-gray-700 dark:text-gray-300">
+                <ClipboardList size={17} className="text-cyan-600" />
+                Pergunte ou descreva o relato
+              </label>
 
-        {erro && (
-          <div className="mb-4 flex items-center gap-2 rounded-2xl bg-red-50 p-4 text-sm font-bold text-red-600 shadow dark:bg-red-500/10 dark:text-red-300">
-            <AlertTriangle size={18} />
-            {erro}
-          </div>
-        )}
+              <textarea
+                rows={5}
+                value={texto}
+                onChange={(e) => {
+                  setTexto(e.target.value);
+                  setResultado(null);
+                  setErro("");
+                }}
+                placeholder="Ex: qual medicamento é ideal para gripe em adulto? / tosse cheia com catarro / coceira na pele..."
+                className="w-full resize-none rounded-3xl border border-transparent bg-gray-100 p-4 text-gray-950 outline-none transition placeholder:text-gray-400 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/15 dark:bg-white/5 dark:text-white"
+              />
 
-        <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
-            <label className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-300">
-              <ClipboardList size={17} className="text-cyan-600" />
-              Relato do cliente
-            </label>
-
-            <textarea
-              rows={5}
-              value={texto}
-              onChange={(e) => {
-                setTexto(e.target.value);
-                setResultado(null);
-                setErro("");
-              }}
-              placeholder="Digite: tosse cheia com catarro, coceira na pele, herpes labial, sinusite..."
-              className="w-full resize-none rounded-3xl border border-transparent bg-gray-100 p-4 text-gray-950 outline-none transition placeholder:text-gray-400 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/15 dark:bg-gray-950 dark:text-white"
-            />
-
-            <div className="mt-4 flex flex-col gap-3 md:flex-row">
-              <button
-                type="button"
-                onClick={analisar}
-                className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-cyan-600 font-black text-white shadow-lg shadow-cyan-600/20 transition hover:bg-cyan-700 active:scale-95"
-              >
-                <Search size={18} />
-                Analisar
-              </button>
-
-              <button
-                type="button"
-                onClick={limpar}
-                className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl border border-gray-300 bg-white font-black text-gray-700 transition hover:bg-gray-100 active:scale-95 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200"
-              >
-                <RotateCcw size={18} />
-                Limpar
-              </button>
-            </div>
-
-            <div className="mt-5">
-              <p className="mb-2 text-sm font-black text-gray-600 dark:text-gray-300">
-                Situações rápidas para estudar
-              </p>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                {baseClinica.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => analisarRapido(item)}
-                    className="rounded-2xl border border-gray-200 bg-gray-50 p-3 text-left transition hover:scale-[1.01] active:scale-95 dark:border-gray-800 dark:bg-gray-950"
+              <AnimatePresence>
+                {erro && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    className="mt-3 flex items-center gap-2 rounded-2xl bg-red-50 p-4 text-sm font-bold text-red-600 dark:bg-red-500/10 dark:text-red-300"
                   >
-                    <p className="font-black">{item.titulo}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {item.grupo}
-                    </p>
-                  </button>
-                ))}
+                    <AlertTriangle size={18} />
+                    {erro}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={analisar}
+                  className="flex h-[52px] items-center justify-center gap-2 rounded-2xl bg-cyan-600 font-black text-white shadow-lg shadow-cyan-600/20 transition hover:bg-cyan-700 active:scale-95 md:col-span-2"
+                >
+                  <Send size={18} />
+                  Analisar com AMSI
+                </button>
+
+                <button
+                  type="button"
+                  onClick={limpar}
+                  className="flex h-[52px] items-center justify-center gap-2 rounded-2xl border border-gray-300 bg-white font-black text-gray-700 transition hover:bg-gray-100 active:scale-95 dark:border-white/10 dark:bg-white/10 dark:text-gray-200"
+                >
+                  <RotateCcw size={18} />
+                  Limpar
+                </button>
               </div>
-            </div>
-          </div>
 
-          <div className="space-y-5">
-            {!resultado && (
-              <CardVazio />
-            )}
+              <div className="mt-5">
+                <p className="mb-2 text-sm font-black text-gray-600 dark:text-gray-300">
+                  Situações rápidas
+                </p>
 
-            {resultado && (
-              <PainelResultado resultado={resultado} />
-            )}
-
-            {condicaoPrincipal && (
-              <div className="rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
-                <div className="mb-4 flex flex-wrap gap-2">
-                  {[
-                    ["resumo", "Resumo"],
-                    ["anamnese", "Anamnese"],
-                    ["indicacoes", "Indicações"],
-                    ["orientacoes", "Orientações"],
-                    ["estudo", "Estudo"],
-                  ].map(([id, label]) => (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {baseClinica.map((item) => (
                     <button
-                      key={id}
+                      key={item.id}
                       type="button"
-                      onClick={() => setAba(id)}
-                      className={`rounded-full px-4 py-2 text-xs font-black transition active:scale-95 ${
-                        aba === id
-                          ? "bg-cyan-600 text-white"
-                          : "bg-gray-100 text-gray-600 dark:bg-gray-950 dark:text-gray-300"
-                      }`}
+                      onClick={() => analisarRapido(item)}
+                      className="rounded-2xl border border-gray-200 bg-gray-50 p-3 text-left transition hover:scale-[1.01] active:scale-95 dark:border-white/10 dark:bg-white/5"
                     >
-                      {label}
+                      <p className="font-black">{item.titulo}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {item.grupo}
+                      </p>
                     </button>
                   ))}
                 </div>
-
-                <ConteudoCondicao condicao={condicaoPrincipal} aba={aba} />
               </div>
-            )}
-          </div>
-        </div>
+            </section>
 
-        {resultado?.nivel === "ok" && resultado.condicoes?.length > 1 && (
-          <div className="mt-5 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
-            <h2 className="mb-3 text-lg font-black">
-              Outras possibilidades encontradas
-            </h2>
+            <aside className="space-y-5">
+              {!resultado && <CardVazio />}
+
+              {resultado && <PainelResultado resultado={resultado} />}
+
+              {condicaoPrincipal && (
+                <div className="rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {[
+                      ["resumo", "Resumo"],
+                      ["anamnese", "Anamnese"],
+                      ["indicacoes", "Opções"],
+                      ["orientacoes", "Orientações"],
+                      ["estudo", "Estudo"],
+                    ].map(([id, label]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setAba(id)}
+                        className={`rounded-full px-4 py-2 text-xs font-black transition active:scale-95 ${
+                          aba === id
+                            ? "bg-cyan-600 text-white"
+                            : "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <ConteudoCondicao condicao={condicaoPrincipal} aba={aba} />
+
+                  <button
+                    type="button"
+                    onClick={copiarOrientacao}
+                    className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-600 font-black text-white shadow-lg shadow-cyan-600/20 transition active:scale-95"
+                  >
+                    <Copy size={18} />
+                    Copiar orientação
+                  </button>
+                </div>
+              )}
+            </aside>
+          </div>
+        )}
+
+        {modo === "quiz" && (
+          <QuizAmsi
+            pergunta={perguntaAtual}
+            quizIndex={quizIndex}
+            total={quiz.length}
+            progresso={progressoQuiz}
+            acertos={acertos}
+            respondido={quizRespondido}
+            selecionada={respostaSelecionada}
+            responder={responderQuiz}
+            proxima={proximaPergunta}
+            reiniciar={reiniciarQuiz}
+          />
+        )}
+
+        {modo === "biblioteca" && (
+          <BibliotecaAmsi
+            itens={baseClinica}
+            pesquisar={texto}
+            setPesquisar={setTexto}
+            filtrados={condicoesFiltradas}
+            abrir={analisarRapido}
+          />
+        )}
+
+        {resultado?.nivel === "ok" && resultado.condicoes?.length > 1 && modo === "amsi" && (
+          <div className="mt-5 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
+            <h2 className="mb-3 text-lg font-black">Outras possibilidades encontradas</h2>
 
             <div className="grid gap-3 md:grid-cols-2">
               {resultado.condicoes.slice(1).map((item) => (
@@ -780,7 +947,7 @@ function Doutor() {
                   key={item.id}
                   type="button"
                   onClick={() => analisarRapido(item)}
-                  className="rounded-3xl border border-gray-200 bg-gray-50 p-4 text-left transition hover:scale-[1.01] dark:border-gray-800 dark:bg-gray-950"
+                  className="rounded-3xl border border-gray-200 bg-gray-50 p-4 text-left transition hover:scale-[1.01] dark:border-white/10 dark:bg-white/5"
                 >
                   <p className="font-black">{item.titulo}</p>
                   <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -796,6 +963,87 @@ function Doutor() {
   );
 }
 
+function HeaderAmsi({ modo, setModo, totalCasos, acertos, quizIndex }) {
+  return (
+    <div className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/90 shadow-2xl shadow-black/5 backdrop-blur-2xl dark:border-white/10 dark:bg-gray-950/75">
+      <div className="relative overflow-hidden bg-gradient-to-br from-cyan-700 via-blue-800 to-slate-950 p-6 text-white">
+        <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10" />
+        <div className="absolute -bottom-16 left-8 h-40 w-40 rounded-full bg-cyan-300/10" />
+
+        <div className="relative flex items-start gap-4">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl border border-white/20 bg-white/15 shadow-xl backdrop-blur-md">
+            <Brain size={34} />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-cyan-50">
+              <Sparkles size={13} />
+              AMSI
+            </div>
+
+            <h1 className="text-3xl font-black tracking-tight">
+              Assistente + Quiz
+            </h1>
+
+            <p className="mt-2 max-w-3xl text-sm text-cyan-100">
+              Busque situações, estude medicamentos e treine decisões de balcão com segurança primeiro.
+            </p>
+          </div>
+        </div>
+
+        <div className="relative mt-6 grid grid-cols-3 gap-2 sm:gap-3">
+          <ResumoTopo label="Casos" valor={totalCasos} />
+          <ResumoTopo label="Quiz" valor={`${acertos}/${quizIndex}`} />
+          <ResumoTopo label="Modo" valor={modo === "amsi" ? "AMSI" : modo === "quiz" ? "Quiz" : "Base"} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 p-2">
+        <ModoBotao
+          ativo={modo === "amsi"}
+          onClick={() => setModo("amsi")}
+          icon={Bot}
+          label="AMSI"
+        />
+
+        <ModoBotao
+          ativo={modo === "quiz"}
+          onClick={() => setModo("quiz")}
+          icon={Gamepad2}
+          label="Quiz"
+        />
+
+        <ModoBotao
+          ativo={modo === "biblioteca"}
+          onClick={() => setModo("biblioteca")}
+          icon={LibraryBig}
+          label="Base"
+        />
+      </div>
+    </div>
+  );
+}
+
+function ModoBotao({ ativo, onClick, icon: Icon, label }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`
+        flex h-12 items-center justify-center gap-2 rounded-2xl font-black transition active:scale-95
+        ${
+          ativo
+            ? "bg-cyan-600 text-white shadow-lg shadow-cyan-600/20"
+            : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/10"
+        }
+      `}
+    >
+      <Icon size={18} />
+      {label}
+    </button>
+  );
+}
+
 function PainelResultado({ resultado }) {
   const grave = resultado.nivel === "grave";
   const indefinido = resultado.nivel === "indefinido";
@@ -806,7 +1054,7 @@ function PainelResultado({ resultado }) {
         grave
           ? "border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
           : indefinido
-          ? "border-gray-200 bg-white/90 text-gray-700 dark:border-gray-800 dark:bg-gray-900/90 dark:text-gray-300"
+          ? "border-gray-200 bg-white/90 text-gray-700 dark:border-white/10 dark:bg-gray-950/75 dark:text-gray-300"
           : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
       }`}
     >
@@ -816,9 +1064,7 @@ function PainelResultado({ resultado }) {
         </div>
 
         <div>
-          <p className="text-xs font-black uppercase opacity-70">
-            Resultado
-          </p>
+          <p className="text-xs font-black uppercase opacity-70">Resultado</p>
           <h2 className="text-xl font-black">{resultado.titulo}</h2>
         </div>
       </div>
@@ -868,8 +1114,8 @@ function ConteudoCondicao({ condicao, aba }) {
   if (aba === "indicacoes") {
     return (
       <div className="space-y-4">
-        <Secao titulo="Classes/indicações" icon={Pill} itens={condicao.indicacoes} />
-        <Secao titulo="Posologias e observações" icon={ClipboardList} itens={condicao.posologia} />
+        <Secao titulo="Opções/classes de balcão" icon={Pill} itens={condicao.indicacoes} />
+        <Secao titulo="Posologias de referência" icon={ClipboardList} itens={condicao.posologia} />
       </div>
     );
   }
@@ -878,7 +1124,7 @@ function ConteudoCondicao({ condicao, aba }) {
     return (
       <div className="space-y-4">
         <Secao titulo="Orientações farmacêuticas" icon={Lightbulb} itens={condicao.orientacoes} />
-        <Secao titulo="Vendas adicionais" icon={ShoppingBasket} itens={condicao.vendas} />
+        <Secao titulo="Venda complementar" icon={ShoppingBasket} itens={condicao.vendas} />
       </div>
     );
   }
@@ -893,9 +1139,7 @@ function ConteudoCondicao({ condicao, aba }) {
           </div>
 
           <p className="text-sm">
-            Primeiro identifique o padrão dos sintomas. Depois faça a anamnese,
-            procure sinais de alerta, diferencie quadros parecidos e só então
-            pense em orientação ou produto de suporte.
+            Identifique o padrão dos sintomas, faça anamnese, procure sinais de alerta e só depois avalie opções de suporte conforme perfil do cliente e bula.
           </p>
         </div>
 
@@ -907,7 +1151,7 @@ function ConteudoCondicao({ condicao, aba }) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl bg-gray-50 p-4 dark:bg-gray-950">
+      <div className="rounded-3xl bg-gray-50 p-4 dark:bg-white/5">
         <p className="text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
           {condicao.grupo}
         </p>
@@ -919,7 +1163,184 @@ function ConteudoCondicao({ condicao, aba }) {
         </p>
       </div>
 
-      <Secao titulo="Sinais de alerta" icon={ShieldAlert} itens={condicao.sinaisAlerta} />
+      <Secao titulo="Antes de indicar, descarte sinais de alerta" icon={ShieldAlert} itens={condicao.sinaisAlerta} />
+    </div>
+  );
+}
+
+function QuizAmsi({
+  pergunta,
+  quizIndex,
+  total,
+  progresso,
+  acertos,
+  respondido,
+  selecionada,
+  responder,
+  proxima,
+  reiniciar,
+}) {
+  if (!pergunta) return null;
+
+  return (
+    <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_0.85fr]">
+      <section className="rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-cyan-600 dark:text-cyan-300">
+              {pergunta.tipo}
+            </p>
+
+            <h2 className="mt-1 text-xl font-black">
+              Pergunta {quizIndex + 1} de {total}
+            </h2>
+          </div>
+
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-600 text-white">
+            <Gamepad2 size={23} />
+          </div>
+        </div>
+
+        <div className="mb-5 h-3 overflow-hidden rounded-full bg-gray-100 dark:bg-white/10">
+          <div
+            className="h-full rounded-full bg-cyan-600 transition-all"
+            style={{ width: `${progresso}%` }}
+          />
+        </div>
+
+        <div className="rounded-3xl bg-gray-50 p-4 dark:bg-white/5">
+          <p className="text-lg font-black">{pergunta.pergunta}</p>
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          {pergunta.opcoes.map((opcao) => {
+            const correta = opcao === pergunta.resposta;
+            const marcada = opcao === selecionada;
+
+            return (
+              <button
+                key={opcao}
+                type="button"
+                onClick={() => responder(opcao)}
+                disabled={respondido}
+                className={`
+                  rounded-2xl border p-4 text-left font-black transition active:scale-[0.98]
+                  ${
+                    respondido && correta
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
+                      : respondido && marcada && !correta
+                      ? "border-red-300 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
+                      : "border-gray-200 bg-gray-50 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+                  }
+                `}
+              >
+                {opcao}
+              </button>
+            );
+          })}
+        </div>
+
+        {respondido && (
+          <div className="mt-5 rounded-3xl bg-cyan-50 p-4 text-cyan-800 dark:bg-cyan-500/10 dark:text-cyan-200">
+            <p className="font-black">Explicação</p>
+            <p className="mt-1 text-sm">{pergunta.explicacao}</p>
+          </div>
+        )}
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={proxima}
+            className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-cyan-600 font-black text-white shadow-lg shadow-cyan-600/20 transition active:scale-95"
+          >
+            <Target size={18} />
+            Próxima
+          </button>
+
+          <button
+            type="button"
+            onClick={reiniciar}
+            className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-gray-100 font-black text-gray-700 transition active:scale-95 dark:bg-white/10 dark:text-gray-200"
+          >
+            <RefreshCcw size={18} />
+            Reiniciar
+          </button>
+        </div>
+      </section>
+
+      <aside className="rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
+        <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-cyan-600 text-white shadow-lg shadow-cyan-600/20">
+          <Trophy size={30} />
+        </div>
+
+        <h2 className="mt-4 text-xl font-black">Placar AMSI</h2>
+
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <MiniPlacar label="Acertos" valor={acertos} />
+          <MiniPlacar label="Pergunta" valor={quizIndex + 1} />
+          <MiniPlacar label="Total" valor={total} />
+          <MiniPlacar label="Progresso" valor={`${progresso}%`} />
+        </div>
+
+        <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+          A ideia é brincar e aprender: errar aqui é barato, acertar no balcão é ouro.
+        </p>
+      </aside>
+    </div>
+  );
+}
+
+function BibliotecaAmsi({ pesquisar, setPesquisar, filtrados, abrir }) {
+  return (
+    <div className="mt-5 rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-xl font-black">
+            <LibraryBig size={22} />
+            Biblioteca AMSI
+          </h2>
+
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Pesquise sintomas, situações ou temas para estudar.
+          </p>
+        </div>
+
+        <span className="rounded-full bg-cyan-100 px-3 py-1 text-xs font-black text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300">
+          {filtrados.length}
+        </span>
+      </div>
+
+      <div className="relative mb-5">
+        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+
+        <input
+          value={pesquisar}
+          onChange={(e) => setPesquisar(e.target.value)}
+          placeholder="Buscar: gripe, tosse, alergia, herpes..."
+          className="h-13 h-[52px] w-full rounded-2xl border border-gray-200 bg-gray-100 pl-12 pr-4 font-bold outline-none focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/15 dark:border-white/10 dark:bg-white/5"
+        />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        {filtrados.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => abrir(item)}
+            className="rounded-3xl border border-gray-200 bg-gray-50 p-4 text-left transition hover:scale-[1.01] active:scale-95 dark:border-white/10 dark:bg-white/5"
+          >
+            <p className="text-xs font-black uppercase tracking-wide text-cyan-600 dark:text-cyan-300">
+              {item.grupo}
+            </p>
+
+            <h3 className="mt-1 text-lg font-black">{item.titulo}</h3>
+
+            <p className="mt-2 line-clamp-3 text-sm text-gray-500 dark:text-gray-400">
+              {item.resumo}
+            </p>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -939,7 +1360,7 @@ function Secao({ titulo, icon: Icon, itens }) {
         {itens.map((item, i) => (
           <div
             key={`${item}-${i}`}
-            className="flex gap-2 rounded-2xl bg-gray-50 p-3 text-sm dark:bg-gray-950"
+            className="flex gap-2 rounded-2xl bg-gray-50 p-3 text-sm dark:bg-white/5"
           >
             <CheckCircle2 size={17} className="mt-0.5 shrink-0 text-cyan-500" />
             <span>{item}</span>
@@ -952,19 +1373,77 @@ function Secao({ titulo, icon: Icon, itens }) {
 
 function CardVazio() {
   return (
-    <div className="rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-gray-800 dark:bg-gray-900/90">
+    <div className="rounded-[2rem] border border-gray-200 bg-white/90 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
       <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-cyan-600 text-white shadow-lg shadow-cyan-600/20">
         <Sparkles size={30} />
       </div>
 
-      <h2 className="mt-4 text-xl font-black">
-        Pronto para estudar ou atender
-      </h2>
+      <h2 className="mt-4 text-xl font-black">Pronto para estudar ou atender</h2>
 
       <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-        Digite o relato do cliente ou escolha uma situação rápida para abrir o modo estudo.
+        Digite uma pergunta, descreva o relato do cliente ou escolha uma situação rápida.
       </p>
     </div>
+  );
+}
+
+function MiniPlacar({ label, valor }) {
+  return (
+    <div className="rounded-2xl bg-gray-100 p-4 text-center dark:bg-white/5">
+      <p className="text-2xl font-black">{valor}</p>
+      <p className="text-xs font-bold text-gray-500 dark:text-gray-400">{label}</p>
+    </div>
+  );
+}
+
+function ResumoTopo({ label, valor }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/15 p-3 text-center backdrop-blur-sm">
+      <p className="truncate text-lg font-black">{valor}</p>
+      <p className="text-xs text-cyan-100">{label}</p>
+    </div>
+  );
+}
+
+function Toast({ toast, fechar }) {
+  const erro = toast.tipo === "erro";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -14 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -14 }}
+      className="fixed left-1/2 top-5 z-[99999] w-[92%] max-w-sm -translate-x-1/2"
+    >
+      <div
+        className={`
+          flex items-center gap-3 rounded-3xl border p-4 shadow-2xl backdrop-blur-xl
+          ${
+            erro
+              ? "border-red-300 bg-red-50/95 text-red-700 dark:border-red-500/20 dark:bg-red-500/15 dark:text-red-300"
+              : "border-emerald-300 bg-emerald-50/95 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/15 dark:text-emerald-300"
+          }
+        `}
+      >
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white ${
+            erro ? "bg-red-500" : "bg-emerald-600"
+          }`}
+        >
+          {erro ? <XCircle size={20} /> : <CheckCircle2 size={20} />}
+        </div>
+
+        <p className="flex-1 text-sm font-bold">{toast.msg}</p>
+
+        <button
+          type="button"
+          onClick={fechar}
+          className="flex h-9 w-9 items-center justify-center rounded-xl bg-black/5 transition active:scale-95 dark:bg-white/10"
+        >
+          <X size={17} />
+        </button>
+      </div>
+    </motion.div>
   );
 }
 
@@ -978,7 +1457,38 @@ function calcularScore(texto, item) {
   if (texto.includes(normalizar(item.titulo))) score += 5;
   if (texto.includes(normalizar(item.grupo))) score += 1;
 
+  const palavras = normalizar(item.titulo).split(/\s+/);
+
+  palavras.forEach((palavra) => {
+    if (palavra.length > 3 && texto.includes(palavra)) score += 1;
+  });
+
   return score;
+}
+
+function montarOrientacao(condicao) {
+  return [
+    `AMSI - ${condicao.titulo}`,
+    "",
+    `Resumo: ${condicao.resumo}`,
+    "",
+    "Perguntas importantes:",
+    ...condicao.anamnese.map((item) => `- ${item}`),
+    "",
+    "Sinais de alerta:",
+    ...condicao.sinaisAlerta.map((item) => `- ${item}`),
+    "",
+    "Opções/classes de balcão:",
+    ...condicao.indicacoes.map((item) => `- ${item}`),
+    "",
+    "Posologias de referência:",
+    ...condicao.posologia.map((item) => `- ${item}`),
+    "",
+    "Orientações:",
+    ...condicao.orientacoes.map((item) => `- ${item}`),
+    "",
+    "Observação: usar como apoio. Conferir perfil do cliente, contraindicações, bula e orientação profissional.",
+  ].join("\n");
 }
 
 function normalizar(texto) {
@@ -986,6 +1496,13 @@ function normalizar(texto) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function embaralhar(lista) {
+  return [...lista]
+    .map((valor) => ({ valor, ordem: Math.random() }))
+    .sort((a, b) => a.ordem - b.ordem)
+    .map((item) => item.valor);
 }
 
 export default Doutor;
