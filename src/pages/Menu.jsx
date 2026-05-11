@@ -13,12 +13,9 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronRight,
-  Cloud,
-  CloudOff,
+  Copy,
   Crown,
   Download,
-  FileText,
-  HardDrive,
   History,
   LayoutDashboard,
   Loader2,
@@ -26,7 +23,6 @@ import {
   Map,
   Moon,
   Package,
-  Pill,
   RefreshCcw,
   ScanBarcode,
   Search,
@@ -34,16 +30,21 @@ import {
   Shield,
   Skull,
   Sparkles,
-  Stethoscope,
-  Syringe,
   User,
-  Wrench,
   X,
 } from "lucide-react";
+
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
 
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import FundoBolhas from "../components/FundoBolhas";
+import { firestore } from "../firebase";
 import { db } from "../db";
 
 const dashboardInicial = {
@@ -78,20 +79,82 @@ function Menu({ setPagina }) {
   const [usuarioEncontrado, setUsuarioEncontrado] = useState(null);
   const [loadingBusca, setLoadingBusca] = useState(false);
 
-  const saudacao = useMemo(() => {
-    const hora = new Date().getHours();
+  const [admins, setAdmins] = useState([]);
+  const [buscaAdmin, setBuscaAdmin] = useState("");
+  const [carregandoAdmins, setCarregandoAdmins] = useState(false);
 
-    if (hora < 12) return "Bom dia";
-    if (hora < 18) return "Boa tarde";
+  const saudacao = useMemo(() => {
+    const agora = new Date();
+    const hora = agora.getHours();
+    const minuto = agora.getMinutes();
+
+    if ((hora >= 5 && hora < 12) || (hora === 12 && minuto === 0)) {
+      return "Bom dia";
+    }
+
+    if ((hora === 12 && minuto >= 1) || (hora > 12 && hora < 18)) {
+      return "Boa tarde";
+    }
+
     return "Boa noite";
   }, []);
 
   const primeiroNome =
     usuarioAtual?.nome?.split(" ")?.[0] || "usuário";
 
+  const adminsFiltrados = useMemo(() => {
+    const termo = buscaAdmin.trim().toLowerCase();
+
+    if (!termo) return admins;
+
+    return admins.filter((admin) => {
+      const nome = String(admin.nome || "").toLowerCase();
+      const email = String(admin.email || "").toLowerCase();
+      const publicId = String(admin.publicId || "").toLowerCase();
+
+      return (
+        nome.includes(termo) ||
+        email.includes(termo) ||
+        publicId.includes(termo)
+      );
+    });
+  }, [admins, buscaAdmin]);
+
+  const ferramentasAdmin = [
+    {
+      titulo: "Base Produtos",
+      descricao: "Produtos aprendidos pelo scanner",
+      icon: ScanBarcode,
+      pagina: "baseProdutos",
+      destaque: "from-orange-600 to-amber-500",
+    },
+    {
+      titulo: "Mapeamentos",
+      descricao: "Histórico das contagens",
+      icon: Map,
+      pagina: "mapeamentos",
+      destaque: "from-slate-700 to-slate-500",
+    },
+    {
+      titulo: "Notificações",
+      descricao: "Alertas e avisos do app",
+      icon: Bell,
+      pagina: "notificacoes",
+      destaque: "from-pink-600 to-rose-500",
+    },
+    {
+      titulo: "Backup",
+      descricao: "Exportar e restaurar dados",
+      icon: Download,
+      pagina: "backup",
+      destaque: "from-green-700 to-lime-500",
+    },
+  ];
+
   useEffect(() => {
     if (isAdmin) {
       carregarDashboard();
+      carregarAdmins();
     }
   }, [isAdmin]);
 
@@ -182,6 +245,7 @@ function Menu({ setPagina }) {
 
       medicamentos.forEach((item) => {
         const validade = normalizarData(item.validade);
+
         if (!validade) return;
 
         const dias = diferencaEmDias(validade, hoje);
@@ -222,6 +286,40 @@ function Menu({ setPagina }) {
       mostrarToast("Erro ao carregar dashboard 😕", "erro");
     } finally {
       setCarregando(false);
+    }
+  }
+
+  async function carregarAdmins() {
+    if (!isAdmin) return;
+
+    try {
+      setCarregandoAdmins(true);
+
+      const q = query(
+        collection(firestore, "usuarios"),
+        where("tipo", "==", "admin")
+      );
+
+      const snap = await getDocs(q);
+
+      const lista = snap.docs
+        .map((docSnap) => ({
+          uid: docSnap.id,
+          ...docSnap.data(),
+        }))
+        .sort((a, b) =>
+          String(a.nome || "").localeCompare(
+            String(b.nome || ""),
+            "pt-BR"
+          )
+        );
+
+      setAdmins(lista);
+    } catch (err) {
+      console.error(err);
+      mostrarToast("Não consegui carregar os admins 😕", "erro");
+    } finally {
+      setCarregandoAdmins(false);
     }
   }
 
@@ -275,76 +373,23 @@ function Menu({ setPagina }) {
         : "Usuário rebaixado 👤",
       "ok"
     );
+
+    carregarAdmins();
   }
 
-  const acoesPrincipais = [
-    {
-      titulo: "Receitas",
-      descricao: "Consultar validade",
-      icon: FileText,
-      pagina: "receitas",
-      destaque: "from-blue-600 to-cyan-500",
-    },
-    {
-      titulo: "Posologia",
-      descricao: "Calcular tratamento",
-      icon: Syringe,
-      pagina: "posologia",
-      destaque: "from-emerald-600 to-green-500",
-    },
-    {
-      titulo: "Perfil",
-      descricao: "Conta e ID público",
-      icon: User,
-      pagina: "perfil",
-      destaque: "from-violet-600 to-fuchsia-500",
-    },
-  ];
+  async function copiarTexto(texto, label = "Texto") {
+    if (!texto) {
+      mostrarToast("Nada para copiar 😅", "erro");
+      return;
+    }
 
-  const acoesAdmin = [
-    {
-      titulo: "Medicamentos",
-      descricao: "Controle do estoque",
-      icon: Pill,
-      pagina: "medicamentos",
-      destaque: "from-emerald-700 to-teal-500",
-    },
-    {
-      titulo: "Doutor",
-      descricao: "Estudo e balcão",
-      icon: Stethoscope,
-      pagina: "doutor",
-      destaque: "from-indigo-700 to-blue-500",
-    },
-    {
-      titulo: "Base Produtos",
-      descricao: "Scanner aprendido",
-      icon: ScanBarcode,
-      pagina: "baseProdutos",
-      destaque: "from-orange-600 to-amber-500",
-    },
-    {
-      titulo: "Mapeamentos",
-      descricao: "Histórico salvo",
-      icon: Map,
-      pagina: "mapeamentos",
-      destaque: "from-slate-700 to-slate-500",
-    },
-    {
-      titulo: "Notificações",
-      descricao: "Alertas do app",
-      icon: Bell,
-      pagina: "notificacoes",
-      destaque: "from-pink-600 to-rose-500",
-    },
-    {
-      titulo: "Backup",
-      descricao: "Exportar dados",
-      icon: Download,
-      pagina: "backup",
-      destaque: "from-green-700 to-lime-500",
-    },
-  ];
+    try {
+      await navigator.clipboard.writeText(texto);
+      mostrarToast(`${label} copiado 📋`, "ok");
+    } catch {
+      mostrarToast("Não foi possível copiar", "erro");
+    }
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -367,74 +412,37 @@ function Menu({ setPagina }) {
           dashboard={dashboard}
           onPerfil={() => setPagina("perfil")}
           onLogout={logout}
+          onCopyId={() =>
+            copiarTexto(usuarioAtual?.publicId, "ID")
+          }
         />
 
-        <section className="grid gap-4 md:grid-cols-3">
-          <StatusPremium
-            icon={isVisitante ? CloudOff : Cloud}
-            titulo="Acesso"
-            valor={isVisitante ? "Visitante" : "Firebase"}
-            descricao={
-              isVisitante
-                ? "Modo local de teste"
-                : "Login real ativo"
-            }
-            status={isVisitante ? "Local" : "Online"}
-            variante={isVisitante ? "amber" : "emerald"}
-          />
+        {isAdmin && (
+          <section className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-2 text-xl font-black">
+                  <Sparkles size={22} />
+                  Ferramentas Master
+                </p>
 
-          <StatusPremium
-            icon={HardDrive}
-            titulo="Banco local"
-            valor="IndexedDB"
-            descricao="Dados rápidos no aparelho"
-            status="Ativo"
-            variante="blue"
-          />
-
-          <StatusPremium
-            icon={Wrench}
-            titulo="Próxima fase"
-            valor="Sync"
-            descricao="Estoque integrado à nuvem"
-            status="Planejado"
-            variante="purple"
-          />
-        </section>
-
-        <section className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
-          <div className="mb-4 flex items-end justify-between gap-3">
-            <div>
-              <p className="flex items-center gap-2 text-xl font-black">
-                <Sparkles size={22} />
-                Atalhos premium
-              </p>
-
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                As ferramentas mais usadas em um toque
-              </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Recursos administrativos que não ficam no menu inferior
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {acoesPrincipais.map((acao) => (
-              <ActionCard
-                key={acao.pagina}
-                {...acao}
-                onClick={() => setPagina(acao.pagina)}
-              />
-            ))}
-
-            {isAdmin &&
-              acoesAdmin.map((acao) => (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {ferramentasAdmin.map((acao) => (
                 <ActionCard
                   key={acao.pagina}
                   {...acao}
                   onClick={() => setPagina(acao.pagina)}
                 />
               ))}
-          </div>
-        </section>
+            </div>
+          </section>
+        )}
 
         {isAdmin && (
           <section className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
@@ -513,16 +521,16 @@ function Menu({ setPagina }) {
         )}
 
         {isAdmin && (
-          <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+          <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
               <div className="mb-4">
                 <h2 className="flex items-center gap-2 text-xl font-black">
                   <Shield size={22} />
-                  Central de acessos
+                  Gerenciar acessos
                 </h2>
 
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Promova ou rebaixe usuários usando o ID público
+                  Busque pelo ID público para editar o cargo de uma conta
                 </p>
               </div>
 
@@ -561,6 +569,9 @@ function Menu({ setPagina }) {
                   usuario={usuarioEncontrado}
                   onAdmin={() => alterarPermissao("admin")}
                   onComum={() => alterarPermissao("comum")}
+                  onCopyId={() =>
+                    copiarTexto(usuarioEncontrado.publicId, "ID")
+                  }
                 />
               ) : (
                 <div className="mt-4 rounded-3xl border border-dashed border-gray-300 bg-gray-50/80 p-5 text-center dark:border-gray-700 dark:bg-gray-900/60">
@@ -579,46 +590,15 @@ function Menu({ setPagina }) {
               )}
             </div>
 
-            <div className="rounded-[2rem] border border-emerald-200 bg-gradient-to-br from-emerald-700 via-green-800 to-slate-950 p-5 text-white shadow-2xl shadow-emerald-950/20">
-              <div className="flex h-full flex-col justify-between gap-6">
-                <div>
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
-                    <Crown size={24} />
-                  </div>
-
-                  <p className="text-2xl font-black">
-                    Área Master
-                  </p>
-
-                  <p className="mt-2 text-sm text-emerald-100">
-                    Seu painel de comando para permissões, estoque, scanner,
-                    backup e evolução para nuvem.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <MiniAdminStat
-                    label="Acesso"
-                    value="Total"
-                  />
-
-                  <MiniAdminStat
-                    label="Perfil"
-                    value="Admin"
-                  />
-
-                  <MiniAdminStat
-                    label="Dados"
-                    value="Local"
-                  />
-
-                  <MiniAdminStat
-                    label="Sync"
-                    value="Próx."
-                  />
-                </div>
-              </div>
-            </div>
+            <AreaMaster
+              admins={adminsFiltrados}
+              totalAdmins={admins.length}
+              buscaAdmin={buscaAdmin}
+              setBuscaAdmin={setBuscaAdmin}
+              carregandoAdmins={carregandoAdmins}
+              onRefresh={carregarAdmins}
+              onCopyId={(id) => copiarTexto(id, "ID")}
+            />
           </section>
         )}
 
@@ -630,18 +610,11 @@ function Menu({ setPagina }) {
             </h2>
 
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Ajustes rápidos da conta e do visual
+              Ajustes rápidos do visual e sessão
             </p>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <PreferenceCard
-              icon={User}
-              titulo="Perfil"
-              descricao="Ver dados, ID público e conta"
-              onClick={() => setPagina("perfil")}
-            />
-
             <div className="flex items-center justify-between rounded-3xl border border-gray-200 bg-gray-50/90 p-4 dark:border-gray-800 dark:bg-gray-900/70">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800 text-white dark:bg-white/10">
@@ -673,20 +646,6 @@ function Menu({ setPagina }) {
               </button>
             </div>
 
-            {isAdmin && (
-              <PreferenceCard
-                icon={Shield}
-                titulo="Privacidade local"
-                descricao="Status atual da nuvem e banco local"
-                onClick={() =>
-                  mostrarToast(
-                    "Login já está na nuvem. Dados do estoque ainda serão migrados 🛡️",
-                    "info"
-                  )
-                }
-              />
-            )}
-
             <PreferenceCard
               icon={LogOut}
               titulo="Sair"
@@ -696,11 +655,6 @@ function Menu({ setPagina }) {
             />
           </div>
         </section>
-
-        <FooterStatus
-          isAdmin={isAdmin}
-          isVisitante={isVisitante}
-        />
       </div>
     </div>
   );
@@ -715,6 +669,7 @@ function MenuHero({
   dashboard,
   onPerfil,
   onLogout,
+  onCopyId,
 }) {
   return (
     <section className="relative overflow-hidden rounded-[2.2rem] bg-gradient-to-br from-emerald-700 via-green-800 to-slate-950 p-5 text-white shadow-2xl shadow-emerald-950/30 md:p-6">
@@ -723,15 +678,11 @@ function MenuHero({
       <div className="absolute right-28 top-24 h-10 w-10 rounded-full bg-white/10 blur-sm" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_35%)]" />
 
-      <div className="relative grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-stretch">
+      <div className="relative grid gap-5 lg:grid-cols-[1.25fr_0.75fr] lg:items-stretch">
         <div className="flex flex-col justify-between gap-6">
           <div className="flex items-start gap-4">
             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[1.7rem] border border-white/20 bg-white/15 shadow-xl backdrop-blur-md">
-              {isAdmin ? (
-                <Crown size={39} />
-              ) : (
-                <User size={39} />
-              )}
+              <User size={39} />
             </div>
 
             <div className="min-w-0">
@@ -746,32 +697,28 @@ function MenuHero({
               <p className="mt-2 truncate text-sm text-emerald-100">
                 {isVisitante
                   ? "Acesso local de visitante"
-                  : usuarioAtual?.email || "Conta Firebase"}
+                  : usuarioAtual?.email || "Conta ativa"}
               </p>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <Chip>
-                  {isAdmin
-                    ? "👑 Admin Master"
-                    : isVisitante
-                    ? "✨ Visitante"
-                    : "👤 Usuário"}
-                </Chip>
-
-                <Chip>
-                  {isAdmin
-                    ? "Acesso completo"
-                    : "Receitas + Posologia"}
-                </Chip>
-
-                <Chip>
-                  {isVisitante
-                    ? "Sem nuvem"
-                    : "Firebase ativo"}
+                  {isVisitante ? "✨ Visitante" : "Conta ativa"}
                 </Chip>
 
                 {usuarioAtual?.publicId && !isVisitante && (
-                  <Chip>ID: {usuarioAtual.publicId}</Chip>
+                  <button
+                    type="button"
+                    onClick={onCopyId}
+                    className="rounded-full border border-white/10 bg-white/15 px-3 py-1 text-xs font-bold backdrop-blur-sm transition active:scale-95"
+                  >
+                    ID: {usuarioAtual.publicId}
+                  </button>
+                )}
+
+                {isAdmin && (
+                  <Chip>
+                    Painel master
+                  </Chip>
                 )}
               </div>
             </div>
@@ -806,32 +753,14 @@ function MenuHero({
           <div className="grid grid-cols-2 gap-3">
             <HeroMiniStat
               label="Itens"
-              value={isAdmin ? dashboard.totalMedicamentos : "Uso"}
-              detail={isAdmin ? "estoque" : "básico"}
+              value={isAdmin ? dashboard.totalMedicamentos : "OK"}
+              detail={isAdmin ? "estoque" : "uso"}
             />
 
             <HeroMiniStat
               label="Alertas"
               value={isAdmin ? dashboard.proximos : "OK"}
               detail={isAdmin ? "próximos" : "consulta"}
-            />
-
-            <HeroMiniStat
-              label="Perfil"
-              value={
-                isAdmin
-                  ? "Admin"
-                  : isVisitante
-                  ? "Local"
-                  : "Comum"
-              }
-              detail="acesso"
-            />
-
-            <HeroMiniStat
-              label="Nuvem"
-              value={isVisitante ? "Off" : "On"}
-              detail="status"
             />
           </div>
         </div>
@@ -905,57 +834,6 @@ function ActionCard({
   );
 }
 
-function StatusPremium({
-  icon: Icon,
-  titulo,
-  valor,
-  descricao,
-  status,
-  variante = "emerald",
-}) {
-  const estilos = {
-    emerald:
-      "border-emerald-200 bg-emerald-50/90 text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-100",
-    amber:
-      "border-amber-200 bg-amber-50/90 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-100",
-    blue:
-      "border-blue-200 bg-blue-50/90 text-blue-900 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-100",
-    purple:
-      "border-violet-200 bg-violet-50/90 text-violet-900 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-100",
-  };
-
-  return (
-    <div
-      className={`
-        rounded-[1.7rem] border p-4 shadow-xl shadow-black/5 backdrop-blur-xl
-        ${estilos[variante]}
-      `}
-    >
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/65 shadow-sm dark:bg-white/10">
-          <Icon size={23} />
-        </div>
-
-        <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-black dark:bg-white/10">
-          {status}
-        </span>
-      </div>
-
-      <p className="text-sm font-black opacity-80">
-        {titulo}
-      </p>
-
-      <p className="mt-1 text-2xl font-black">
-        {valor}
-      </p>
-
-      <p className="mt-1 text-xs opacity-75">
-        {descricao}
-      </p>
-    </div>
-  );
-}
-
 function MetricPremium({
   icon: Icon,
   titulo,
@@ -1001,6 +879,7 @@ function UsuarioEncontrado({
   usuario,
   onAdmin,
   onComum,
+  onCopyId,
 }) {
   return (
     <div className="mt-4 rounded-3xl border border-gray-200 bg-gray-50/90 p-5 dark:border-gray-800 dark:bg-gray-900/70">
@@ -1014,23 +893,17 @@ function UsuarioEncontrado({
             {usuario.email || "Email não informado"}
           </p>
 
-          <p className="mt-1 text-sm font-bold text-gray-500 dark:text-gray-400">
+          <button
+            type="button"
+            onClick={onCopyId}
+            className="mt-1 flex items-center gap-2 text-sm font-bold text-gray-500 transition hover:text-emerald-600 dark:text-gray-400 dark:hover:text-emerald-300"
+          >
             ID: {usuario.publicId}
-          </p>
+            <Copy size={14} />
+          </button>
         </div>
 
-        <span
-          className={`
-            rounded-full px-3 py-1 text-xs font-black
-            ${
-              usuario.tipo === "admin"
-                ? "bg-yellow-500 text-black"
-                : "bg-blue-600 text-white"
-            }
-          `}
-        >
-          {usuario.tipo === "admin" ? "Admin" : "Comum"}
-        </span>
+        <CargoBadge tipo={usuario.tipo} />
       </div>
 
       {(usuario.permissaoAtualizadaPor || usuario.criadoPor) && (
@@ -1072,6 +945,161 @@ function UsuarioEncontrado({
   );
 }
 
+function AreaMaster({
+  admins,
+  totalAdmins,
+  buscaAdmin,
+  setBuscaAdmin,
+  carregandoAdmins,
+  onRefresh,
+  onCopyId,
+}) {
+  return (
+    <div className="rounded-[2rem] border border-emerald-200 bg-gradient-to-br from-emerald-700 via-green-800 to-slate-950 p-5 text-white shadow-2xl shadow-emerald-950/20">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
+            <Crown size={24} />
+          </div>
+
+          <p className="text-2xl font-black">
+            Área Master
+          </p>
+
+          <p className="mt-1 text-sm text-emerald-100">
+            {buscaAdmin.trim()
+              ? `${admins.length} de ${totalAdmins} admins`
+              : totalAdmins === 1
+              ? "1 administrador ativo"
+              : `${totalAdmins} administradores ativos`}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 transition active:scale-95"
+          aria-label="Atualizar admins"
+        >
+          {carregandoAdmins ? (
+            <Loader2 size={21} className="animate-spin" />
+          ) : (
+            <RefreshCcw size={21} />
+          )}
+        </button>
+      </div>
+
+      <div className="relative mb-4">
+        <Search
+          size={18}
+          className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-100/70"
+        />
+
+        <input
+          value={buscaAdmin}
+          onChange={(e) => setBuscaAdmin(e.target.value)}
+          placeholder="Buscar por nome, email ou ID"
+          className="
+            w-full rounded-2xl border border-white/10 bg-black/20
+            py-3 pl-11 pr-4 font-semibold text-white outline-none
+            placeholder:text-emerald-100/50
+            focus:border-emerald-300/50 focus:ring-4 focus:ring-emerald-300/10
+          "
+        />
+      </div>
+
+      <div className="max-h-[350px] space-y-2 overflow-y-auto pr-1">
+        {admins.length === 0 && !carregandoAdmins && (
+          <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-emerald-100">
+            {buscaAdmin.trim()
+              ? "Nenhum admin encontrado nessa busca."
+              : "Nenhum admin encontrado ainda."}
+          </div>
+        )}
+
+        {carregandoAdmins && (
+          <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-emerald-100">
+            Carregando administradores...
+          </div>
+        )}
+
+        {admins.map((admin) => (
+          <AdminRow
+            key={admin.uid || admin.publicId}
+            admin={admin}
+            onCopyId={() => onCopyId(admin.publicId)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdminRow({
+  admin,
+  onCopyId,
+}) {
+  const nome = admin.nome || "Admin sem nome";
+  const inicial = nome.trim().charAt(0).toUpperCase() || "A";
+
+  return (
+    <div className="group rounded-2xl border border-white/10 bg-white/10 px-3 py-3 backdrop-blur-sm transition hover:bg-white/15">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-lg font-black text-emerald-800 shadow-md">
+          {inicial}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate font-black">
+              {nome}
+            </p>
+
+            <span className="shrink-0 rounded-full bg-yellow-400 px-2 py-0.5 text-[10px] font-black text-black">
+              Admin
+            </span>
+          </div>
+
+          <p className="truncate text-xs text-emerald-100/80">
+            {admin.email || "Email não informado"}
+          </p>
+
+          <button
+            type="button"
+            onClick={onCopyId}
+            className="mt-1 flex max-w-full items-center gap-1 text-xs font-bold text-emerald-100/90 transition hover:text-white active:scale-95"
+          >
+            <span className="truncate">
+              ID: {admin.publicId || "sem ID"}
+            </span>
+
+            <Copy size={12} className="shrink-0" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CargoBadge({ tipo }) {
+  const admin = tipo === "admin";
+
+  return (
+    <span
+      className={`
+        rounded-full px-3 py-1 text-xs font-black
+        ${
+          admin
+            ? "bg-yellow-500 text-black"
+            : "bg-blue-600 text-white"
+        }
+      `}
+    >
+      {admin ? "Admin" : "Comum"}
+    </span>
+  );
+}
+
 function PreferenceCard({
   icon: Icon,
   titulo,
@@ -1108,60 +1136,6 @@ function PreferenceCard({
 
       <ChevronRight size={18} className="text-gray-400" />
     </button>
-  );
-}
-
-function MiniAdminStat({
-  label,
-  value,
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur-sm">
-      <p className="text-xs text-emerald-100">
-        {label}
-      </p>
-
-      <p className="mt-1 text-lg font-black">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function FooterStatus({
-  isAdmin,
-  isVisitante,
-}) {
-  return (
-    <div className="rounded-[2rem] border border-emerald-200 bg-emerald-50/90 p-5 text-emerald-800 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
-      <div className="flex gap-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white">
-          {isVisitante ? (
-            <CloudOff size={22} />
-          ) : (
-            <Cloud size={22} />
-          )}
-        </div>
-
-        <div>
-          <p className="font-black">
-            {isAdmin
-              ? "Modo premium admin ativo"
-              : isVisitante
-              ? "Modo visitante ativo"
-              : "Conta de usuário ativa"}
-          </p>
-
-          <p className="mt-1 text-sm">
-            {isAdmin
-              ? "Login real funcionando. Próximo passo: vincular medicamentos, receitas e base de produtos ao Firestore."
-              : isVisitante
-              ? "Você está testando o app sem conta. Para salvar perfil na nuvem, crie uma conta na tela de login."
-              : "Você tem acesso às áreas liberadas para uso básico do app."}
-          </p>
-        </div>
-      </div>
-    </div>
   );
 }
 

@@ -8,6 +8,7 @@ import {
   Barcode,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   ImageIcon,
   Loader2,
@@ -49,6 +50,7 @@ function Medicamentos() {
   const [toasts, setToasts] = useState([]);
 
   const [fabOpen, setFabOpen] = useState(false);
+  const [cardsAbertos, setCardsAbertos] = useState({});
 
   const [abrirScanner, setAbrirScanner] = useState(false);
   const [scannerKey, setScannerKey] = useState(0);
@@ -77,6 +79,29 @@ function Medicamentos() {
       Notification.requestPermission();
     }
   }, []);
+
+  useEffect(() => {
+  setCardsAbertos((prev) => {
+    const proximos = { ...prev };
+    const idsAtuais = new Set(medicamentos.map((m) => String(m.id)));
+
+    medicamentos.forEach((m) => {
+      const id = String(m.id);
+
+      if (proximos[id] === undefined && deveAbrirAutomaticamente(m)) {
+        proximos[id] = true;
+      }
+    });
+
+    Object.keys(proximos).forEach((id) => {
+      if (!idsAtuais.has(id)) {
+        delete proximos[id];
+      }
+    });
+
+    return proximos;
+  });
+}, [medicamentos]);
 
   // =============================
   // 📦 BANCO DE DADOS
@@ -543,6 +568,43 @@ function Medicamentos() {
     return dataFormatada.toLocaleDateString("pt-BR");
   }
 
+  function calcularDiasAte(data) {
+  const dataFinal = parseDataSegura(data);
+
+  if (!dataFinal || Number.isNaN(dataFinal.getTime())) {
+    return null;
+  }
+
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  const alvo = new Date(dataFinal);
+  alvo.setHours(0, 0, 0, 0);
+
+  return Math.ceil((alvo - hoje) / (1000 * 60 * 60 * 24));
+}
+
+function deveAbrirAutomaticamente(med) {
+  const status = calcularStatus(med);
+
+  if (["vencido", "remover", "pre"].includes(status)) {
+    return true;
+  }
+
+  const { validade, remover, pre } = calcularDatas(med);
+  const proximaData = pre || remover || validade;
+  const dias = calcularDiasAte(proximaData);
+
+  return dias !== null && dias <= 30;
+}
+
+function alternarCardMedicamento(id) {
+  setCardsAbertos((prev) => ({
+    ...prev,
+    [String(id)]: !prev[String(id)],
+  }));
+}
+
   // =============================
   // 🔍 LISTA / FILTRO
   // =============================
@@ -983,34 +1045,35 @@ return (
         )}
       </AnimatePresence>
 
-      {/* LISTA */}
-      {lista.length > 0 && (
-        <motion.div
-          layout
-          className="mt-4 space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0"
-        >
-          {lista.map((m) => (
-            <CardMedicamento
-              key={m.id}
-              m={m}
-              calcularStatus={calcularStatus}
-              calcularDatas={calcularDatas}
-              formatarData={formatarData}
-              setPreview={setPreview}
-              setConfirmar={setConfirmar}
-              setEditando={setEditando}
-              setNome={setNome}
-              setValidade={setValidade}
-              setImagem={setImagem}
-              setDiasPre={setDiasPre}
-              setDiasRemover={setDiasRemover}
-              setQuantidade={setQuantidade}
-              setAbrirModal={setAbrirModal}
-              setFabOpen={setFabOpen}
-            />
-          ))}
-        </motion.div>
-      )}
+{/* LISTA */}
+{lista.length > 0 && (
+  <motion.div layout className="mt-4 space-y-3">
+    {lista.map((m) => (
+      <CardMedicamentoSanfonado
+        key={m.id}
+        m={m}
+        aberto={
+          cardsAbertos[String(m.id)] ?? deveAbrirAutomaticamente(m)
+        }
+        onToggle={() => alternarCardMedicamento(m.id)}
+        calcularStatus={calcularStatus}
+        calcularDatas={calcularDatas}
+        formatarData={formatarData}
+        setPreview={setPreview}
+        setConfirmar={setConfirmar}
+        setEditando={setEditando}
+        setNome={setNome}
+        setValidade={setValidade}
+        setImagem={setImagem}
+        setDiasPre={setDiasPre}
+        setDiasRemover={setDiasRemover}
+        setQuantidade={setQuantidade}
+        setAbrirModal={setAbrirModal}
+        setFabOpen={setFabOpen}
+      />
+    ))}
+  </motion.div>
+)}
 
       {/* FAB */}
       <FabMedicamentos
@@ -1294,6 +1357,266 @@ return (
      </div>
   </div>
 );
+}
+
+// =============================
+// 💊 CARD SANFONADO MEDICAMENTO
+// =============================
+
+function CardMedicamentoSanfonado({
+  m,
+  aberto,
+  onToggle,
+  calcularStatus,
+  calcularDatas,
+  formatarData,
+  setPreview,
+  setConfirmar,
+  setEditando,
+  setNome,
+  setValidade,
+  setImagem,
+  setDiasPre,
+  setDiasRemover,
+  setQuantidade,
+  setAbrirModal,
+  setFabOpen,
+}) {
+  const status = calcularStatus(m);
+  const datas = calcularDatas(m);
+
+  const configStatus = {
+    vencido: {
+      titulo: "Vencido",
+      descricao: "Retirar imediatamente",
+      card:
+        "border-red-200 bg-red-50/90 dark:border-red-500/20 dark:bg-red-500/10",
+      badge: "bg-red-600 text-white",
+      icon: "bg-red-600 text-white",
+      texto: "text-red-700 dark:text-red-300",
+    },
+    remover: {
+      titulo: "Remover",
+      descricao: "Hora de tirar da prateleira",
+      card:
+        "border-orange-200 bg-orange-50/90 dark:border-orange-500/20 dark:bg-orange-500/10",
+      badge: "bg-orange-600 text-white",
+      icon: "bg-orange-600 text-white",
+      texto: "text-orange-700 dark:text-orange-300",
+    },
+    pre: {
+      titulo: "Pré-vencimento",
+      descricao: "Atenção para desconto/ação",
+      card:
+        "border-amber-200 bg-amber-50/90 dark:border-amber-500/20 dark:bg-amber-500/10",
+      badge: "bg-amber-500 text-white",
+      icon: "bg-amber-500 text-white",
+      texto: "text-amber-700 dark:text-amber-300",
+    },
+    ok: {
+      titulo: "Normal",
+      descricao: "Estoque em ordem",
+      card:
+        "border-emerald-200 bg-white/90 dark:border-emerald-500/20 dark:bg-gray-900/80",
+      badge: "bg-emerald-600 text-white",
+      icon: "bg-emerald-600 text-white",
+      texto: "text-emerald-700 dark:text-emerald-300",
+    },
+  };
+
+  const config = configStatus[status] || configStatus.ok;
+
+  function obterDataPrincipal() {
+    if (status === "vencido") {
+      return {
+        label: "Venceu em",
+        valor: datas.validade ? formatarData(datas.validade) : "Sem data",
+      };
+    }
+
+    if (status === "remover") {
+      return {
+        label: "Validade",
+        valor: datas.validade ? formatarData(datas.validade) : "Sem data",
+      };
+    }
+
+    if (status === "pre") {
+      return {
+        label: "Retirar em",
+        valor: datas.remover ? formatarData(datas.remover) : "Sem data",
+      };
+    }
+
+    if (datas.pre) {
+      return {
+        label: "Pré em",
+        valor: formatarData(datas.pre),
+      };
+    }
+
+    return {
+      label: "Retirar em",
+      valor: datas.remover ? formatarData(datas.remover) : "Sem data",
+    };
+  }
+
+  const dataPrincipal = obterDataPrincipal();
+
+  return (
+    <motion.div
+      layout
+      className={`
+        overflow-hidden rounded-3xl border shadow-xl backdrop-blur-xl transition
+        ${config.card}
+      `}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className="
+          flex w-full items-center gap-3 p-3 text-left transition
+          active:scale-[0.99] sm:p-4
+        "
+      >
+        <div
+          className="
+            flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl
+            bg-gray-100 shadow-inner dark:bg-gray-800
+          "
+        >
+          {m.imagem ? (
+            <img
+              src={m.imagem}
+              alt={m.nome || "Medicamento"}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <Pill size={28} className={config.texto} />
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`
+                rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wide
+                ${config.badge}
+              `}
+            >
+              {config.titulo}
+            </span>
+
+            <span className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-black text-gray-600 dark:bg-white/10 dark:text-gray-300">
+              x{Number(m.quantidade || 1)}
+            </span>
+          </div>
+
+          <p className="mt-2 truncate text-base font-black text-gray-950 dark:text-white">
+            {m.nome || "Medicamento sem nome"}
+          </p>
+
+          <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+            {dataPrincipal.label}:{" "}
+            <strong className={config.texto}>{dataPrincipal.valor}</strong>
+          </p>
+
+          {m.codigo && (
+            <p className="mt-1 truncate text-[11px] text-gray-400">
+              Código: {m.codigo}
+            </p>
+          )}
+        </div>
+
+        <div className="flex shrink-0 flex-col items-center gap-2">
+          <div
+            className={`
+              flex h-10 w-10 items-center justify-center rounded-2xl shadow-lg
+              ${config.icon}
+            `}
+          >
+            <ChevronDown
+              size={22}
+              className={`transition-transform duration-200 ${
+                aberto ? "rotate-180" : ""
+              }`}
+            />
+          </div>
+
+          <span className="hidden text-[10px] font-bold uppercase text-gray-400 sm:block">
+            {aberto ? "Fechar" : "Abrir"}
+          </span>
+        </div>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {aberto && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22 }}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-black/5 p-3 pt-0 dark:border-white/10 sm:p-4 sm:pt-0">
+              <div className="mb-3 grid grid-cols-3 gap-2">
+                <MiniDataCard
+                  label="Pré"
+                  valor={datas.pre ? formatarData(datas.pre) : "Sem pré"}
+                />
+
+                <MiniDataCard
+                  label="Retirar"
+                  valor={datas.remover ? formatarData(datas.remover) : "Sem data"}
+                />
+
+                <MiniDataCard
+                  label="Validade"
+                  valor={
+                    datas.validade ? formatarData(datas.validade) : "Sem data"
+                  }
+                />
+              </div>
+
+              <div className="rounded-3xl bg-white/70 p-2 shadow-inner dark:bg-black/10">
+                <CardMedicamento
+                  m={m}
+                  calcularStatus={calcularStatus}
+                  calcularDatas={calcularDatas}
+                  formatarData={formatarData}
+                  setPreview={setPreview}
+                  setConfirmar={setConfirmar}
+                  setEditando={setEditando}
+                  setNome={setNome}
+                  setValidade={setValidade}
+                  setImagem={setImagem}
+                  setDiasPre={setDiasPre}
+                  setDiasRemover={setDiasRemover}
+                  setQuantidade={setQuantidade}
+                  setAbrirModal={setAbrirModal}
+                  setFabOpen={setFabOpen}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function MiniDataCard({ label, valor }) {
+  return (
+    <div className="rounded-2xl bg-white/80 p-3 text-center shadow-sm dark:bg-white/10">
+      <p className="text-[10px] font-black uppercase tracking-wide text-gray-400">
+        {label}
+      </p>
+
+      <p className="mt-1 truncate text-xs font-black text-gray-800 dark:text-gray-100">
+        {valor}
+      </p>
+    </div>
+  );
 }
 
 // =============================

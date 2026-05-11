@@ -1,17 +1,19 @@
-import { motion, useMotionValue, animate } from "framer-motion";
+import { motion } from "framer-motion";
 
 import {
-  Pill,
+  Barcode,
   CalendarDays,
-  TriangleAlert,
-  Trash2,
-  Pencil,
-  Package,
   CheckCircle2,
   Clock3,
+  Eye,
+  ImageIcon,
+  Package,
+  Pencil,
+  Pill,
+  Trash2,
+  TriangleAlert,
   AlertTriangle,
   XCircle,
-  ImageIcon,
 } from "lucide-react";
 
 function CardMedicamento({
@@ -33,64 +35,63 @@ function CardMedicamento({
   setAbrirModal,
   setFabOpen,
 }) {
-  const x = useMotionValue(0);
-
   const status = calcularStatus(m);
   const { validade, remover, pre } = calcularDatas(m);
 
   const statusMap = {
     vencido: {
       label: "Vencido",
+      descricao: "Retirar imediatamente",
       icon: XCircle,
-      classes:
+      badge:
         "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
-      iconBg: "bg-red-600",
+      iconBox: "bg-red-600 text-white",
+      border: "border-red-200 dark:border-red-500/20",
+      soft: "bg-red-50 dark:bg-red-500/10",
     },
 
     remover: {
       label: "Remover",
+      descricao: "Tirar da prateleira",
       icon: AlertTriangle,
-      classes:
+      badge:
         "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
-      iconBg: "bg-orange-600",
+      iconBox: "bg-orange-600 text-white",
+      border: "border-orange-200 dark:border-orange-500/20",
+      soft: "bg-orange-50 dark:bg-orange-500/10",
     },
 
     pre: {
       label: "Pré-vencimento",
+      descricao: "Atenção para ação",
       icon: Clock3,
-      classes:
-        "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-300",
-      iconBg: "bg-yellow-500",
+      badge:
+        "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+      iconBox: "bg-amber-500 text-white",
+      border: "border-amber-200 dark:border-amber-500/20",
+      soft: "bg-amber-50 dark:bg-amber-500/10",
     },
 
     ok: {
       label: "Em dia",
+      descricao: "Estoque tranquilo",
       icon: CheckCircle2,
-      classes:
+      badge:
         "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
-      iconBg: "bg-emerald-700",
+      iconBox: "bg-emerald-700 text-white",
+      border: "border-emerald-200 dark:border-emerald-500/20",
+      soft: "bg-emerald-50 dark:bg-emerald-500/10",
     },
   };
 
   const statusInfo = statusMap[status] || statusMap.ok;
   const StatusIcon = statusInfo.icon;
 
-  function resetSwipe() {
-    animate(x, 0, {
-      type: "spring",
-      stiffness: 420,
-      damping: 34,
-    });
-  }
-
   function abrirConfirmacao() {
     setConfirmar(m);
-    resetSwipe();
   }
 
   function abrirEdicao() {
-    resetSwipe();
-
     setEditando(m);
     setNome(m.nome || "");
     setValidade(m.validade || "");
@@ -106,195 +107,204 @@ function CardMedicamento({
     setFabOpen(false);
   }
 
+  function calcularDiasAte(data) {
+    if (!data) return null;
+
+    const alvo = new Date(data);
+
+    if (Number.isNaN(alvo.getTime())) {
+      return null;
+    }
+
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    alvo.setHours(0, 0, 0, 0);
+
+    return Math.ceil((alvo - hoje) / (1000 * 60 * 60 * 24));
+  }
+
+  function textoDistancia(data) {
+    const dias = calcularDiasAte(data);
+
+    if (dias === null) return "Sem cálculo";
+    if (dias === 0) return "Hoje";
+    if (dias === 1) return "Amanhã";
+    if (dias === -1) return "Ontem";
+    if (dias < 0) return `${Math.abs(dias)} dias atrás`;
+
+    return `Em ${dias} dias`;
+  }
+
   return (
-    <div className="relative">
-      {/* AÇÃO FUNDO DO SWIPE */}
-      <div
-        className="
-          absolute inset-0 flex items-center justify-start rounded-3xl
-          bg-red-600 px-5 text-white shadow-xl
-        "
-      >
-        <div className="flex items-center gap-2 font-semibold">
-          <Trash2 size={20} />
-          Excluir
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+      className={`
+        overflow-hidden rounded-3xl border bg-white/85 p-4 shadow-sm backdrop-blur-xl
+        dark:bg-gray-950/45
+        ${statusInfo.border}
+      `}
+    >
+      {/* TOPO */}
+      <div className="flex items-start gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            if (m.imagem) {
+              setPreview(m.imagem);
+            }
+          }}
+          className={`
+            relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden
+            rounded-2xl shadow-inner transition active:scale-95
+            ${m.imagem ? "bg-gray-100 dark:bg-gray-800" : statusInfo.iconBox}
+          `}
+        >
+          {m.imagem ? (
+            <>
+              <img
+                src={m.imagem}
+                alt={m.nome || "Imagem do medicamento"}
+                className="h-full w-full object-cover"
+              />
+
+              <div className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition hover:bg-black/35 hover:opacity-100">
+                <Eye size={20} />
+              </div>
+            </>
+          ) : (
+            <ImageIcon size={27} />
+          )}
+        </button>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge statusInfo={statusInfo} StatusIcon={StatusIcon} />
+
+            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+              <Package size={13} />
+              x{Number(m.quantidade || 1)}
+            </span>
+          </div>
+
+          <h2 className="mt-2 break-words text-lg font-black leading-tight text-gray-950 dark:text-white">
+            {m.nome || "Medicamento sem nome"}
+          </h2>
+
+          <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+            {statusInfo.descricao}
+          </p>
+
+          {m.codigo && (
+            <p className="mt-2 flex items-center gap-1 truncate text-xs text-gray-400">
+              <Barcode size={14} />
+              {m.codigo}
+            </p>
+          )}
         </div>
       </div>
 
-      <motion.div
-        drag="x"
-        dragConstraints={{ left: 0, right: 120 }}
-        dragElastic={0.04}
-        dragMomentum={false}
-        style={{ x }}
-        whileTap={{ scale: 0.99 }}
-        whileHover={{ y: -2 }}
-        whileDrag={{ scale: 0.985 }}
-        onDragEnd={(e, info) => {
-          if (info.offset.x > 95) {
-            animate(x, 120, {
-              type: "spring",
-              stiffness: 300,
-              damping: 26,
-            });
+      {/* LINHA DO TEMPO */}
+      <div className={`mt-4 rounded-3xl p-4 ${statusInfo.soft}`}>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-black text-gray-950 dark:text-white">
+              Linha do tempo
+            </p>
 
-            setTimeout(() => {
-              abrirConfirmacao();
-            }, 120);
-
-            return;
-          }
-
-          resetSwipe();
-        }}
-        className="
-          relative overflow-hidden rounded-3xl border border-gray-200 bg-white
-          shadow-xl shadow-black/5 touch-pan-y will-change-transform
-          dark:border-gray-800 dark:bg-gray-900
-        "
-      >
-{/* IMAGEM */}
-{m.imagem ? (
-  <div className="relative">
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        setPreview(m.imagem);
-      }}
-      className="block h-48 w-full overflow-hidden text-left"
-    >
-      <img
-        src={m.imagem}
-        alt={m.nome || "Imagem do medicamento"}
-        className="h-full w-full object-cover transition duration-300 hover:scale-105"
-      />
-    </button>
-
-    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
-
-    <div className="pointer-events-none absolute right-4 top-4">
-      <StatusBadge statusInfo={statusInfo} StatusIcon={StatusIcon} />
-    </div>
-  </div>
-) : (
-  <div
-    className="
-      flex h-24 items-center justify-between bg-gradient-to-br
-      from-emerald-700 to-emerald-900 px-5 text-white
-    "
-  >
-    <div>
-      <p className="text-xs font-medium text-white/70">
-        Medicamento
-      </p>
-      <p className="text-lg font-bold">Sem imagem</p>
-    </div>
-
-    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
-      <ImageIcon size={28} />
-    </div>
-  </div>
-)}
-
-        {/* BODY */}
-        <div className="space-y-4 p-5">
-          {/* HEADER */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start gap-3">
-                <div
-                  className={`
-                    flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
-                    text-white shadow-lg ${statusInfo.iconBg}
-                  `}
-                >
-                  <Pill size={20} />
-                </div>
-
-                <div className="min-w-0">
-                  <h2 className="break-words text-lg font-bold leading-tight text-gray-950 dark:text-white">
-                    {m.nome}
-                  </h2>
-
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Medicamento cadastrado
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div
-              className="
-                flex shrink-0 items-center gap-1.5 rounded-2xl bg-blue-500 px-3 py-1.5
-                text-xs font-bold text-white shadow-lg shadow-blue-500/20
-              "
-            >
-              <Package size={14} />
-              x{m.quantidade || 1}
-            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Datas importantes deste lote
+            </p>
           </div>
 
-          {/* STATUS SEM IMAGEM */}
-          {!m.imagem && (
-            <StatusBadge statusInfo={statusInfo} StatusIcon={StatusIcon} />
-          )}
-
-          {/* DATAS */}
-          <div className="space-y-3 pt-1">
-            <InfoLinha
-              icon={CalendarDays}
-              label="Validade"
-              valor={formatarData(validade)}
-              variant="success"
-            />
-
-            <InfoLinha
-              icon={Trash2}
-              label="Remover em"
-              valor={formatarData(remover)}
-              variant="danger"
-            />
-
-            {pre && (
-              <InfoLinha
-                icon={TriangleAlert}
-                label="Pré-vencimento"
-                valor={formatarData(pre)}
-                variant="warning"
-              />
-            )}
-          </div>
-
-          {/* AÇÕES */}
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={abrirEdicao}
-              className="
-                flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl
-                bg-blue-600 font-semibold text-white shadow-lg shadow-blue-600/20
-                transition hover:bg-blue-700 active:scale-95
-              "
-            >
-              <Pencil size={18} />
-              Editar
-            </button>
-
-            <button
-              onClick={abrirConfirmacao}
-              className="
-                flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl
-                bg-red-600 font-semibold text-white shadow-lg shadow-red-600/20
-                transition hover:bg-red-700 active:scale-95
-              "
-            >
-              <Trash2 size={18} />
-              Excluir
-            </button>
+          <div className={`rounded-2xl p-2 ${statusInfo.iconBox}`}>
+            <CalendarDays size={19} />
           </div>
         </div>
-      </motion.div>
-    </div>
+
+        <div className="space-y-3">
+          <TimelineItem
+            icon={TriangleAlert}
+            label="Pré-vencimento"
+            data={pre}
+            valor={pre ? formatarData(pre) : "Não configurado"}
+            detalhe={pre ? textoDistancia(pre) : "Sem etapa de pré"}
+            variant="warning"
+            apagado={!pre}
+          />
+
+          <TimelineItem
+            icon={Trash2}
+            label="Retirar da prateleira"
+            data={remover}
+            valor={remover ? formatarData(remover) : "Sem data"}
+            detalhe={remover ? textoDistancia(remover) : "Sem cálculo"}
+            variant="danger"
+          />
+
+          <TimelineItem
+            icon={CalendarDays}
+            label="Validade final"
+            data={validade}
+            valor={validade ? formatarData(validade) : "Sem data"}
+            detalhe={validade ? textoDistancia(validade) : "Sem cálculo"}
+            variant="success"
+          />
+        </div>
+      </div>
+
+      {/* AÇÕES */}
+      <div
+        className={`
+          mt-4 grid gap-2
+          ${m.imagem ? "grid-cols-3" : "grid-cols-2"}
+        `}
+      >
+        {m.imagem && (
+          <button
+            type="button"
+            onClick={() => setPreview(m.imagem)}
+            className="
+              flex h-12 items-center justify-center gap-2 rounded-2xl
+              bg-gray-100 text-sm font-black text-gray-700 transition active:scale-95
+              dark:bg-white/10 dark:text-gray-200
+            "
+          >
+            <Eye size={17} />
+            Ver
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={abrirEdicao}
+          className="
+            flex h-12 items-center justify-center gap-2 rounded-2xl
+            bg-blue-600 text-sm font-black text-white shadow-lg shadow-blue-600/20
+            transition active:scale-95
+          "
+        >
+          <Pencil size={17} />
+          Editar
+        </button>
+
+        <button
+          type="button"
+          onClick={abrirConfirmacao}
+          className="
+            flex h-12 items-center justify-center gap-2 rounded-2xl
+            bg-red-600 text-sm font-black text-white shadow-lg shadow-red-600/20
+            transition active:scale-95
+          "
+        >
+          <Trash2 size={17} />
+          Excluir
+        </button>
+      </div>
+    </motion.div>
   );
 }
 
@@ -302,30 +312,40 @@ function StatusBadge({ statusInfo, StatusIcon }) {
   return (
     <div
       className={`
-        inline-flex items-center gap-2 rounded-full px-3 py-1.5
-        text-xs font-bold shadow-sm backdrop-blur-md
-        ${statusInfo.classes}
+        inline-flex items-center gap-1.5 rounded-full px-2.5 py-1
+        text-xs font-black shadow-sm backdrop-blur-md
+        ${statusInfo.badge}
       `}
     >
-      <StatusIcon size={15} />
+      <StatusIcon size={14} />
       {statusInfo.label}
     </div>
   );
 }
 
-function InfoLinha({ icon: Icon, label, valor, variant = "success" }) {
+function TimelineItem({
+  icon: Icon,
+  label,
+  valor,
+  detalhe,
+  variant = "success",
+  apagado = false,
+}) {
   const variants = {
     success: {
       icon: "bg-emerald-700 text-white",
-      card: "bg-emerald-50 dark:bg-emerald-500/10",
+      dot: "bg-emerald-600",
+      text: "text-emerald-700 dark:text-emerald-300",
     },
     danger: {
       icon: "bg-red-600 text-white",
-      card: "bg-red-50 dark:bg-red-500/10",
+      dot: "bg-red-600",
+      text: "text-red-700 dark:text-red-300",
     },
     warning: {
-      icon: "bg-yellow-500 text-white",
-      card: "bg-yellow-50 dark:bg-yellow-500/10",
+      icon: "bg-amber-500 text-white",
+      dot: "bg-amber-500",
+      text: "text-amber-700 dark:text-amber-300",
     },
   };
 
@@ -334,26 +354,35 @@ function InfoLinha({ icon: Icon, label, valor, variant = "success" }) {
   return (
     <div
       className={`
-        flex items-center justify-between gap-3 rounded-2xl px-4 py-3
-        ${styles.card}
+        flex items-center gap-3 rounded-2xl bg-white/80 p-3 shadow-sm
+        dark:bg-black/10
+        ${apagado ? "opacity-60" : ""}
       `}
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <div
-          className={`
-            flex h-10 w-10 shrink-0 items-center justify-center rounded-xl
-            ${styles.icon}
-          `}
-        >
-          <Icon size={18} />
-        </div>
+      <div
+        className={`
+          flex h-10 w-10 shrink-0 items-center justify-center rounded-xl
+          ${styles.icon}
+        `}
+      >
+        <Icon size={18} />
+      </div>
 
-        <div className="min-w-0">
-          <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
+          {label}
+        </p>
 
-          <p className="truncate font-semibold text-gray-950 dark:text-white">
-            {valor}
-          </p>
+        <p className="truncate text-sm font-black text-gray-950 dark:text-white">
+          {valor}
+        </p>
+      </div>
+
+      <div className="shrink-0 text-right">
+        <p className={`text-xs font-black ${styles.text}`}>{detalhe}</p>
+
+        <div className="mt-1 flex justify-end">
+          <span className={`h-2 w-2 rounded-full ${styles.dot}`} />
         </div>
       </div>
     </div>
