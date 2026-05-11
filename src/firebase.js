@@ -18,27 +18,15 @@ const firebaseConfig = {
   measurementId: "G-40P7VC1134",
 };
 
-
-// 🔥 app principal
 const app = initializeApp(firebaseConfig);
 
-
-// 🔥 app secundário
 const secondaryApp = initializeApp(
   firebaseConfig,
   "Secondary"
 );
 
-
-// 🔥 auth principal
 export const auth = getAuth(app);
 
+export const secondaryAuth = getAuth(secondaryApp);
 
-// 🔥 auth secundário
-export const secondaryAuth =
-  getAuth(secondaryApp);
-
-
-// 🔥 firestore
-export const firestore =
-  getFirestore(app);
+export const firestore = getFirestore(app);

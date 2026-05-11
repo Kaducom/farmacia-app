@@ -1,27 +1,55 @@
-function TabButton({
-  icon: Icon,
-  label,
-  active,
-  onClick,
-}) {
+import { motion } from "framer-motion";
+
+function TabButton({ icon: Icon, label, active, onClick }) {
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
+      whileTap={{ scale: 0.92 }}
       className={`
-        flex min-w-[58px] flex-col items-center justify-center gap-1
-        rounded-2xl px-3 py-2
-        text-xs font-bold transition active:scale-95
+        relative flex min-w-[64px] flex-col items-center justify-center gap-1
+        rounded-2xl px-2.5 py-2 text-[11px] font-black
+        transition
         ${
           active
-            ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-            : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+            ? "text-white"
+            : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/10"
         }
       `}
     >
-      <Icon size={21} />
-      {label}
-    </button>
+      {active && (
+        <motion.div
+          layoutId="bottom-nav-active-bg"
+          transition={{
+            type: "spring",
+            stiffness: 420,
+            damping: 34,
+          }}
+          className="
+            absolute inset-0 rounded-2xl
+            bg-gradient-to-br from-emerald-600 via-emerald-700 to-slate-950
+            shadow-lg shadow-emerald-700/25
+          "
+        />
+      )}
+
+      <span
+        className={`
+          relative flex h-8 w-8 items-center justify-center rounded-xl transition
+          ${
+            active
+              ? "bg-white/15 text-white"
+              : "bg-transparent text-inherit"
+          }
+        `}
+      >
+        <Icon size={20} strokeWidth={active ? 2.8 : 2.35} />
+      </span>
+
+      <span className="relative max-w-[70px] truncate leading-none">
+        {label}
+      </span>
+    </motion.button>
   );
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { db } from "../db";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import ToastStack from "../components/ToastStack";
 import Scanner from "../components/Scanner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -25,12 +26,23 @@ import BuscaMedicamentos from "../components/medicamentos/BuscaMedicamentos";
 import FabMedicamentos from "../components/medicamentos/FabMedicamentos";
 import ModalMedicamento from "../components/medicamentos/ModalMedicamento";
 import FundoBolhas from "../components/FundoBolhas";
+import { firestore } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 
 // =============================
 // 💊 COMPONENTE PRINCIPAL
 // =============================
 
+const COLECAO_PRODUTOS_GLOBAIS = "produtosCodigo";
+const LIMITE_IMAGEM_GLOBAL = 650000;
+
+function idDocumentoProduto(codigo) {
+  return String(codigo || "").trim().replaceAll("/", "_");
+}
+
 function Medicamentos() {
+  const { usuarioAtual, isVisitante } = useAuth();
+
   const [medicamentos, setMedicamentos] = useState([]);
 
   const [imagem, setImagem] = useState(null);
@@ -317,26 +329,33 @@ function Medicamentos() {
     }
   }
 
-  async function salvarProdutoNaBase(produto) {
-    const codigo = String(produto.codigo || "").trim();
+  function montarDadosProdutoBase(produto) {
+    const codigo = String(produto?.codigo || "").trim();
 
-    if (!codigo) return;
+    if (!codigo) return null;
+
+    return {
+      codigo,
+      nome: String(produto?.nome || "").trim(),
+      imagem: produto?.imagem || null,
+      diasRemover: Number(produto?.diasRemover || 7),
+      diasPreVencido: produto?.diasPreVencido
+        ? Number(produto.diasPreVencido)
+        : null,
+      criadoEm: produto?.criadoEm || new Date().toISOString(),
+      atualizadoEmLocal: new Date().toISOString(),
+    };
+  }
+
+  async function salvarProdutoLocalNaBase(produto) {
+    const dados = montarDadosProdutoBase(produto);
+
+    if (!dados) return null;
 
     const existente = await db.produtosCodigo
       .where("codigo")
-      .equals(codigo)
+      .equals(dados.codigo)
       .first();
-
-    const dados = {
-      codigo,
-      nome: produto.nome || "",
-      imagem: produto.imagem || null,
-      diasRemover: Number(produto.diasRemover) || 7,
-      diasPreVencido: produto.diasPreVencido
-        ? Number(produto.diasPreVencido)
-        : null,
-      criadoEm: produto.criadoEm || new Date().toISOString(),
-    };
 
     if (existente) {
       await db.produtosCodigo.update(existente.id, {
@@ -345,12 +364,121 @@ function Medicamentos() {
         diasRemover: dados.diasRemover || existente.diasRemover || 7,
         diasPreVencido:
           dados.diasPreVencido ?? existente.diasPreVencido ?? null,
+        origemBase: produto?.origemBase || existente.origemBase || "local",
+        sincronizadoEm: produto?.sincronizadoEm || existente.sincronizadoEm || null,
+        atualizadoEmLocal: dados.atualizadoEmLocal,
       });
 
-      return;
+      return {
+        ...existente,
+        ...dados,
+      };
     }
 
-    await db.produtosCodigo.add(dados);
+    await db.produtosCodigo.add({
+      ...dados,
+      origemBase: produto?.origemBase || "local",
+      sincronizadoEm: produto?.sincronizadoEm || null,
+    });
+
+    return dados;
+  }
+
+  async function buscarProdutoGlobal(codigo) {
+    const codigoTexto = String(codigo || "").trim();
+
+    if (!codigoTexto) return null;
+
+    try {
+      const ref = doc(firestore, COLECAO_PRODUTOS_GLOBAIS, idDocumentoProduto(codigoTexto));
+      const snap = await getDoc(ref);
+
+      if (!snap.exists()) return null;
+
+      const dados = snap.data() || {};
+
+      return {
+        codigo: String(dados.codigo || codigoTexto),
+        nome: dados.nome || "",
+        imagem: dados.imagem || null,
+        diasRemover: Number(dados.diasRemover || 7),
+        diasPreVencido: dados.diasPreVencido
+          ? Number(dados.diasPreVencido)
+          : null,
+        origemBase: "global",
+        sincronizadoEm: new Date().toISOString(),
+      };
+    } catch (err) {
+      console.warn("Não consegui buscar produto global:", err);
+      return null;
+    }
+  }
+
+  async function salvarProdutoGlobal(produto) {
+    const dados = montarDadosProdutoBase(produto);
+
+    if (!dados || !dados.nome) return false;
+
+    if (isVisitante) {
+      return false;
+    }
+
+    try {
+      const ref = doc(firestore, COLECAO_PRODUTOS_GLOBAIS, idDocumentoProduto(dados.codigo));
+      const snap = await getDoc(ref);
+
+      const imagemPodeSubir =
+        dados.imagem && String(dados.imagem).length <= LIMITE_IMAGEM_GLOBAL;
+
+      const payload = {
+        codigo: dados.codigo,
+        diasRemover: dados.diasRemover || 7,
+        diasPreVencido: dados.diasPreVencido ?? null,
+        atualizadoEm: serverTimestamp(),
+        atualizadoPor: usuarioAtual?.uid || null,
+        atualizadoPorNome: usuarioAtual?.nome || usuarioAtual?.email || "Usuário",
+      };
+
+      if (dados.nome) {
+        payload.nome = dados.nome;
+      }
+
+      if (imagemPodeSubir) {
+        payload.imagem = dados.imagem;
+      }
+
+      if (!snap.exists()) {
+        payload.criadoEm = serverTimestamp();
+        payload.criadoPor = usuarioAtual?.uid || null;
+        payload.criadoPorNome = usuarioAtual?.nome || usuarioAtual?.email || "Usuário";
+      }
+
+      await setDoc(ref, payload, { merge: true });
+
+      if (dados.imagem && !imagemPodeSubir) {
+        console.warn(
+          "Imagem grande demais para Firestore. Produto global salvo sem imagem."
+        );
+      }
+
+      return true;
+    } catch (err) {
+      console.warn("Produto salvo localmente, mas não sincronizou na nuvem:", err);
+      return false;
+    }
+  }
+
+  async function salvarProdutoNaBase(produto) {
+    const salvoLocal = await salvarProdutoLocalNaBase(produto);
+
+    if (!salvoLocal) return null;
+
+    const sincronizouGlobal = await salvarProdutoGlobal(salvoLocal);
+
+    return {
+      ...salvoLocal,
+      sincronizouGlobal,
+    };
   }
 
   async function remover(id) {
@@ -727,7 +855,20 @@ function alternarCardMedicamento(id) {
         .first();
     }
 
-    return produtoLocal || null;
+    if (produtoLocal) {
+      return {
+        ...produtoLocal,
+        origemBase: produtoLocal.origemBase || "local",
+      };
+    }
+
+    const produtoGlobal = await buscarProdutoGlobal(codigoTexto);
+
+    if (!produtoGlobal) return null;
+
+    await salvarProdutoLocalNaBase(produtoGlobal);
+
+    return produtoGlobal;
   }
 
   async function buscarLotesPorCodigo(codigo) {
@@ -785,6 +926,8 @@ function alternarCardMedicamento(id) {
       ]);
 
       if (lotes.length > 0 || produtoLocal) {
+        const origemBase = produtoLocal?.origemBase || "estoque";
+
         const produtoBase = {
           codigo: codigoLimpo,
           nome: produtoLocal?.nome || lotes[0]?.nome || "",
@@ -792,17 +935,25 @@ function alternarCardMedicamento(id) {
           diasRemover: produtoLocal?.diasRemover || lotes[0]?.diasRemover || 7,
           diasPreVencido:
             produtoLocal?.diasPreVencido || lotes[0]?.diasPreVencido || "",
+          origemBase,
         };
 
         setLoteScanner({
           codigo: codigoLimpo,
           produto: produtoBase,
           lotes,
-          origem: lotes.length > 0 ? "estoque" : "base",
+          origem:
+            lotes.length > 0
+              ? "estoque"
+              : origemBase === "global"
+              ? "nuvem"
+              : "base",
         });
 
         if (lotes.length > 0) {
           addToast("Produto encontrado. Escolha a validade ⚡", "ok");
+        } else if (origemBase === "global") {
+          addToast("Produto puxado da nuvem. Informe a validade ☁️", "ok");
         } else {
           addToast("Produto reconhecido. Informe a validade ⚡", "ok");
         }
@@ -825,7 +976,12 @@ function alternarCardMedicamento(id) {
       setDiasRemover(7);
       setDiasPre(2);
 
-      addToast("Novo produto. Cadastre uma vez e eu aprendo 🧠", "aviso");
+      addToast(
+        isVisitante
+          ? "Novo produto. Visitante salva só neste aparelho 🧠"
+          : "Novo produto. Cadastre uma vez e eu compartilho na nuvem 🧠☁️",
+        "aviso"
+      );
 
       fecharScannerSeguro();
 
