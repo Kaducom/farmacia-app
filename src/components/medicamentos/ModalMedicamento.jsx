@@ -1,22 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import ToastStack from "../ToastStack";
 
 import {
-  ImagePlus,
-  Pill,
-  Package,
+  Camera,
   CalendarDays,
-  TriangleAlert,
-  Save,
-  X,
-  Trash2,
-  Sparkles,
   Clock3,
-  ShieldCheck,
+  ImagePlus,
+  Images,
   Info,
+  Loader2,
   Minus,
+  Package,
+  Pill,
   Plus,
+  Save,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  TriangleAlert,
+  X,
 } from "lucide-react";
 
 function ModalMedicamento({
@@ -49,89 +53,44 @@ function ModalMedicamento({
   toasts,
   removerToast,
 }) {
+  const cameraInputRef = useRef(null);
+  const galeriaInputRef = useRef(null);
+
   const [erros, setErros] = useState({});
+  const [salvando, setSalvando] = useState(false);
 
-  // corrigir_modal_medicamento: trava segura do scroll
+  const progresso = useMemo(() => {
+    let pontos = 0;
+
+    if (nome.trim()) pontos += 25;
+    if (Number(quantidade || 0) > 0) pontos += 20;
+    if (validarData(validade)) pontos += 30;
+    if (diasRemover !== "" && Number(diasRemover) >= 0) pontos += 15;
+    if (imagem) pontos += 10;
+
+    return Math.min(100, pontos);
+  }, [nome, quantidade, validade, diasRemover, imagem]);
+
   useEffect(() => {
-    function soltarTravasPerdidas() {
-      const main = document.querySelector("main");
-
-      if (main?.dataset?.modalMedicamentoLock === "true") {
-        main.style.overflow = "";
-        main.style.touchAction = "";
-        main.style.overscrollBehavior = "";
-        main.removeAttribute("data-modal-medicamento-lock");
-      }
-
-      if (document.body?.dataset?.modalMedicamentoLock === "true") {
-        document.body.style.overflow = "";
-        document.body.removeAttribute("data-modal-medicamento-lock");
-      }
-
-      if (document.documentElement?.dataset?.modalMedicamentoLock === "true") {
-        document.documentElement.style.overflow = "";
-        document.documentElement.removeAttribute("data-modal-medicamento-lock");
-      }
-    }
-
     if (!abrirModal) {
+      destravarResquiciosDoModal();
+
       window.dispatchEvent(
         new CustomEvent("app-overlay-change", {
-          detail: {
-            open: false,
-          },
+          detail: { open: false },
         })
       );
 
-      setTimeout(soltarTravasPerdidas, 80);
       return;
     }
 
+    destravarResquiciosDoModal();
+
     window.dispatchEvent(
       new CustomEvent("app-overlay-change", {
-        detail: {
-          open: true,
-        },
+        detail: { open: true },
       })
     );
-
-    const main = document.querySelector("main");
-    const body = document.body;
-    const html = document.documentElement;
-
-    const scrollMain = main?.scrollTop || 0;
-
-    const anterior = {
-      bodyOverflow: body.style.overflow,
-      htmlOverflow: html.style.overflow,
-      mainOverflow: main?.style.overflow || "",
-      mainTouchAction: main?.style.touchAction || "",
-      mainOverscroll: main?.style.overscrollBehavior || "",
-    };
-
-    body.dataset.modalMedicamentoLock = "true";
-    html.dataset.modalMedicamentoLock = "true";
-
-    body.style.overflow = "hidden";
-    html.style.overflow = "hidden";
-
-    if (main) {
-      main.dataset.modalMedicamentoLock = "true";
-      main.style.overflow = "hidden";
-      main.style.touchAction = "none";
-      main.style.overscrollBehavior = "contain";
-    }
-
-    function bloquearScrollFundo(e) {
-      const areaModal = e.target?.closest?.("[data-modal-scroll='true']");
-
-      if (areaModal) {
-        return;
-      }
-
-      e.preventDefault();
-      e.stopPropagation();
-    }
 
     function fecharComEsc(e) {
       if (e.key === "Escape") {
@@ -139,183 +98,56 @@ function ModalMedicamento({
       }
     }
 
-    document.addEventListener("wheel", bloquearScrollFundo, {
-      passive: false,
-      capture: true,
-    });
-
-    document.addEventListener("touchmove", bloquearScrollFundo, {
-      passive: false,
-      capture: true,
-    });
-
     window.addEventListener("keydown", fecharComEsc);
 
     return () => {
-      document.removeEventListener("wheel", bloquearScrollFundo, true);
-      document.removeEventListener("touchmove", bloquearScrollFundo, true);
       window.removeEventListener("keydown", fecharComEsc);
 
-      body.style.overflow = anterior.bodyOverflow;
-      html.style.overflow = anterior.htmlOverflow;
-
-      body.removeAttribute("data-modal-medicamento-lock");
-      html.removeAttribute("data-modal-medicamento-lock");
-
-      if (main) {
-        main.style.overflow = anterior.mainOverflow;
-        main.style.touchAction = anterior.mainTouchAction;
-        main.style.overscrollBehavior = anterior.mainOverscroll;
-        main.scrollTop = scrollMain;
-        main.removeAttribute("data-modal-medicamento-lock");
-      }
-
       window.dispatchEvent(
         new CustomEvent("app-overlay-change", {
-          detail: {
-            open: false,
-          },
+          detail: { open: false },
         })
       );
 
-      setTimeout(soltarTravasPerdidas, 120);
-    };
-  }, [abrirModal]);
-
-
-  useEffect(() => {
-    function liberarTravaPerdida() {
-      const main = document.querySelector("main");
-
-      if (main?.dataset?.modalMedicamentoLock === "true") {
-        main.style.overflow = "";
-        main.style.touchAction = "";
-        main.style.overscrollBehavior = "";
-        main.removeAttribute("data-modal-medicamento-lock");
-      }
-
-      if (document.body?.dataset?.modalMedicamentoLock === "true") {
-        document.body.style.overflow = "";
-        document.body.removeAttribute("data-modal-medicamento-lock");
-      }
-
-      if (document.documentElement?.dataset?.modalMedicamentoLock === "true") {
-        document.documentElement.style.overflow = "";
-        document.documentElement.removeAttribute("data-modal-medicamento-lock");
-      }
-    }
-
-    if (!abrirModal) {
-      window.dispatchEvent(
-        new CustomEvent("app-overlay-change", {
-          detail: {
-            open: false,
-          },
-        })
-      );
-
-      setTimeout(liberarTravaPerdida, 80);
-      return;
-    }
-
-    window.dispatchEvent(
-      new CustomEvent("app-overlay-change", {
-        detail: {
-          open: true,
-        },
-      })
-    );
-
-    const main = document.querySelector("main");
-    const body = document.body;
-    const html = document.documentElement;
-
-    const scrollWindow = window.scrollY;
-    const scrollMain = main?.scrollTop || 0;
-
-    const anterior = {
-      bodyOverflow: body.style.overflow,
-      htmlOverflow: html.style.overflow,
-      mainOverflow: main?.style.overflow || "",
-      mainTouchAction: main?.style.touchAction || "",
-      mainOverscroll: main?.style.overscrollBehavior || "",
-    };
-
-    body.dataset.modalMedicamentoLock = "true";
-    html.dataset.modalMedicamentoLock = "true";
-    body.style.overflow = "hidden";
-    html.style.overflow = "hidden";
-
-    if (main) {
-      main.dataset.modalMedicamentoLock = "true";
-      main.style.overflow = "hidden";
-      main.style.touchAction = "none";
-      main.style.overscrollBehavior = "contain";
-    }
-
-    function bloquearScrollFundo(e) {
-      const areaModal = e.target?.closest?.("[data-modal-scroll='true']");
-
-      if (areaModal) {
-        return;
-      }
-
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    function fecharComEsc(e) {
-      if (e.key === "Escape") {
-        fecharModal();
-      }
-    }
-
-    document.addEventListener("wheel", bloquearScrollFundo, {
-      passive: false,
-      capture: true,
-    });
-
-    document.addEventListener("touchmove", bloquearScrollFundo, {
-      passive: false,
-      capture: true,
-    });
-
-    window.addEventListener("keydown", fecharComEsc);
-
-    return () => {
-      document.removeEventListener("wheel", bloquearScrollFundo, true);
-      document.removeEventListener("touchmove", bloquearScrollFundo, true);
-      window.removeEventListener("keydown", fecharComEsc);
-
-      body.style.overflow = anterior.bodyOverflow;
-      html.style.overflow = anterior.htmlOverflow;
-
-      body.removeAttribute("data-modal-medicamento-lock");
-      html.removeAttribute("data-modal-medicamento-lock");
-
-      if (main) {
-        main.style.overflow = anterior.mainOverflow;
-        main.style.touchAction = anterior.mainTouchAction;
-        main.style.overscrollBehavior = anterior.mainOverscroll;
-        main.scrollTop = scrollMain;
-        main.removeAttribute("data-modal-medicamento-lock");
-      }
-
-      window.scrollTo(0, scrollWindow);
-
-      window.dispatchEvent(
-        new CustomEvent("app-overlay-change", {
-          detail: {
-            open: false,
-          },
-        })
-      );
-
-      setTimeout(liberarTravaPerdida, 120);
+      setTimeout(destravarResquiciosDoModal, 60);
+      setTimeout(destravarResquiciosDoModal, 250);
     };
   }, [abrirModal]);
 
   if (!abrirModal) return null;
+
+  function destravarResquiciosDoModal() {
+    const main = document.querySelector("main");
+
+    document.body.style.overflow = "";
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
+    document.body.style.width = "";
+    document.body.style.touchAction = "";
+    document.body.style.overscrollBehavior = "";
+    document.body.removeAttribute("data-modal-medicamento-open");
+    document.body.removeAttribute("data-modal-medicamento-lock");
+    document.body.classList.remove("app-modal-open");
+    document.body.classList.remove("modal-open");
+
+    document.documentElement.style.overflow = "";
+    document.documentElement.style.position = "";
+    document.documentElement.style.touchAction = "";
+    document.documentElement.style.overscrollBehavior = "";
+    document.documentElement.removeAttribute("data-modal-medicamento-open");
+    document.documentElement.removeAttribute("data-modal-medicamento-lock");
+
+    if (main) {
+      main.style.overflow = "";
+      main.style.position = "";
+      main.style.touchAction = "";
+      main.style.overscrollBehavior = "";
+      main.removeAttribute("data-modal-medicamento-open");
+      main.removeAttribute("data-modal-medicamento-lock");
+    }
+  }
 
   function limparErro(campo) {
     setErros((prev) => {
@@ -409,7 +241,7 @@ function ModalMedicamento({
 
   const preview = validarData(validade) ? gerarPreviewDatas() : null;
 
-  function handleSalvar() {
+  async function handleSalvar() {
     const novosErros = {};
 
     if (!nome.trim()) {
@@ -439,13 +271,29 @@ function ModalMedicamento({
       return;
     }
 
-    setErros({});
-    salvar();
+    try {
+      setSalvando(true);
+      setErros({});
+      await Promise.resolve(salvar());
+    } finally {
+      setSalvando(false);
+      setTimeout(destravarResquiciosDoModal, 80);
+    }
   }
 
   function fecharModal() {
     setErros({});
+    setSalvando(false);
     setAbrirModal(false);
+
+    window.dispatchEvent(
+      new CustomEvent("app-overlay-change", {
+        detail: { open: false },
+      })
+    );
+
+    setTimeout(destravarResquiciosDoModal, 60);
+    setTimeout(destravarResquiciosDoModal, 250);
   }
 
   function alterarQuantidade(delta) {
@@ -456,428 +304,540 @@ function ModalMedicamento({
     setQuantidade(proximo);
   }
 
-  function impedirBolhaDoModal(e) {
-    e.stopPropagation();
+  function abrirCamera() {
+    cameraInputRef.current?.click();
   }
 
-  return (
+  function abrirGaleria() {
+    galeriaInputRef.current?.click();
+  }
+
+  function limparInputArquivo(e) {
+    e.currentTarget.value = "";
+  }
+
+  const modal = (
     <AnimatePresence>
-      {abrirModal && (
+      <motion.div
+        className="
+          fixed inset-0 z-[2147483647] h-[100dvh] overflow-hidden
+          bg-slate-950 text-white
+        "
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.18),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.14),transparent_34%)]" />
+
         <motion.div
+          data-modal-medicamento="true"
+          initial={{ opacity: 0, y: 18, scale: 0.985 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 18, scale: 0.985 }}
+          transition={{ duration: 0.22 }}
           className="
-            fixed inset-0 z-[2147483647] flex h-[100dvh] items-end justify-center
-            overflow-hidden bg-black/70 px-3
-            pb-[calc(env(safe-area-inset-bottom)+0.9rem)]
-            pt-[calc(env(safe-area-inset-top)+0.9rem)]
-            backdrop-blur-md
-            sm:items-center sm:p-4
+            relative mx-auto flex h-[100dvh] w-full flex-col overflow-hidden
+            bg-white text-gray-950
+            dark:bg-gray-950 dark:text-white
+            sm:my-4 sm:h-[calc(100dvh-2rem)] sm:max-w-3xl
+            sm:rounded-[2rem] sm:border sm:border-white/10 sm:shadow-2xl
           "
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={fecharModal}
         >
-          <motion.div
-            data-modal-medicamento="true"
-            onClick={(e) => e.stopPropagation()}
-            initial={{ opacity: 0, y: 34, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 34, scale: 0.97 }}
-            transition={{ duration: 0.22 }}
-            className="
-              relative flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.8rem)]
-              w-full max-w-2xl flex-col overflow-hidden rounded-[2rem]
-              border border-gray-200 bg-white text-gray-950 shadow-2xl
-              dark:border-white/10 dark:bg-gray-950 dark:text-white
-              sm:max-h-[92dvh]
-            "
-          >
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-emerald-500/10 to-transparent" />
-            <div className="pointer-events-none absolute -right-20 top-10 h-48 w-48 rounded-full bg-emerald-500/10 blur-3xl" />
-            <div className="pointer-events-none absolute -left-20 bottom-20 h-48 w-48 rounded-full bg-blue-500/10 blur-3xl" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-gradient-to-b from-emerald-500/10 to-transparent" />
 
-            <div className="absolute left-1/2 top-3 z-50 w-[92%] max-w-sm -translate-x-1/2">
-              <ToastStack notificacoes={toasts} remover={removerToast} />
-            </div>
+          <div className="absolute left-1/2 top-3 z-50 w-[92%] max-w-sm -translate-x-1/2">
+            <ToastStack notificacoes={toasts} remover={removerToast} />
+          </div>
 
-            {/* HEADER */}
-            <div className="relative shrink-0 border-b border-gray-200/80 bg-white/95 p-4 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/95 sm:p-5">
-              <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-gray-300 dark:bg-gray-700 sm:hidden" />
+          {/* HEADER */}
+          <div className="relative shrink-0 border-b border-gray-200/80 bg-white/95 px-4 pb-4 pt-[calc(env(safe-area-inset-top)+0.9rem)] backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/95 sm:p-5">
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-gray-300 dark:bg-gray-700 sm:hidden" />
 
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div
-                    className="
-                      flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl
-                      bg-gradient-to-br from-emerald-600 to-emerald-900 text-white
-                      shadow-lg shadow-emerald-700/20
-                    "
-                  >
-                    <Pill size={25} />
-                  </div>
-
-                  <div className="min-w-0">
-                    <div
-                      className="
-                        mb-1 inline-flex items-center gap-1.5 rounded-full
-                        bg-emerald-100 px-2.5 py-1 text-[11px] font-black
-                        text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300
-                      "
-                    >
-                      <Sparkles size={13} />
-                      {editando ? "Modo edição" : "Novo cadastro"}
-                    </div>
-
-                    <h2 className="truncate text-xl font-black tracking-tight">
-                      {editando ? "Editar medicamento" : "Novo medicamento"}
-                    </h2>
-
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      Estoque, validade, remoção e pré-vencimento.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={fecharModal}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div
                   className="
-                    flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
-                    bg-gray-100 text-gray-600 transition hover:bg-gray-200 active:scale-95
-                    dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15
+                    flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-2xl
+                    bg-gradient-to-br from-emerald-500 to-emerald-900 text-white
+                    shadow-lg shadow-emerald-700/25
                   "
                 >
-                  <X size={22} />
-                </button>
+                  <Pill size={26} />
+                </div>
+
+                <div className="min-w-0">
+                  <div
+                    className="
+                      mb-1 inline-flex items-center gap-1.5 rounded-full
+                      bg-emerald-100 px-2.5 py-1 text-[11px] font-black
+                      text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300
+                    "
+                  >
+                    <Sparkles size={13} />
+                    {editando ? "Modo edição" : "Novo cadastro"}
+                  </div>
+
+                  <h2 className="truncate text-xl font-black tracking-tight">
+                    {editando ? "Editar medicamento" : "Novo medicamento"}
+                  </h2>
+
+                  <p className="mt-1 line-clamp-2 text-sm text-gray-500 dark:text-gray-400">
+                    Estoque, validade, alertas e imagem do produto.
+                  </p>
+                </div>
               </div>
+
+              <button
+                type="button"
+                onClick={fecharModal}
+                className="
+                  flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
+                  bg-gray-100 text-gray-600 transition hover:bg-gray-200 active:scale-95
+                  dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15
+                "
+                aria-label="Fechar modal"
+              >
+                <X size={22} />
+              </button>
             </div>
 
-            {/* BODY */}
-            <div
-              data-modal-scroll="true"
-              onWheel={impedirBolhaDoModal}
-              onTouchMove={impedirBolhaDoModal}
-              className="
-                relative min-h-0 flex-1 overflow-y-auto overscroll-contain
-                p-4 sm:p-5
-              "
-            >
-              <div className="space-y-4 pb-4">
-                {erros.geral && <AvisoErro texto={erros.geral} />}
+            <div className="mt-4">
+              <div className="mb-1 flex items-center justify-between text-[11px] font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                <span>Cadastro</span>
+                <span>{progresso}%</span>
+              </div>
 
-                {/* IMAGEM */}
-                <section className="rounded-3xl border border-gray-200 bg-gray-50/80 p-4 dark:border-white/10 dark:bg-white/5">
-                  <LabelArea icon={ImagePlus} label="Foto do produto" optional />
+              <div className="h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
+                <motion.div
+                  initial={false}
+                  animate={{ width: `${progresso}%` }}
+                  transition={{ duration: 0.25 }}
+                  className="h-full rounded-full bg-emerald-600"
+                />
+              </div>
+            </div>
+          </div>
 
-                  {!imagem ? (
-                    <label
-                      className="
-                        group mt-3 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-3xl
-                        border-2 border-dashed border-emerald-500/35 bg-white p-6 text-center
-                        transition hover:border-emerald-500 hover:bg-emerald-50
-                        dark:bg-gray-950/50 dark:hover:bg-emerald-500/10
-                        sm:p-8
-                      "
-                    >
-                      <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20 transition group-active:scale-95">
+          {/* BODY */}
+          <div
+            data-modal-scroll="true"
+            className="
+              relative min-h-0 flex-1 overflow-y-auto overscroll-contain
+              px-4 py-4 sm:px-5
+            "
+          >
+            <div className="mx-auto max-w-2xl space-y-4 pb-5">
+              {erros.geral && <AvisoErro texto={erros.geral} />}
+
+              {/* FOTO */}
+              <section className="rounded-3xl border border-gray-200 bg-gray-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+                <LabelArea icon={ImagePlus} label="Foto do produto" optional />
+
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onClick={limparInputArquivo}
+                  onChange={handleImagem}
+                />
+
+                <input
+                  ref={galeriaInputRef}
+                  type="file"
+                  accept="image/png, image/jpeg, image/webp, image/*"
+                  className="hidden"
+                  onClick={limparInputArquivo}
+                  onChange={handleImagem}
+                />
+
+                {!imagem ? (
+                  <div className="mt-3 rounded-3xl border-2 border-dashed border-emerald-500/35 bg-white p-4 dark:bg-gray-950/50">
+                    <div className="flex flex-col items-center gap-3 p-3 text-center">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20">
                         <ImagePlus size={30} />
                       </div>
 
                       <div>
                         <p className="font-black">Adicionar imagem</p>
                         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                          Opcional, mas deixa o estoque mais visual.
-                        </p>
-                      </div>
-
-                      <input
-                        type="file"
-                        accept="image/png, image/jpeg, image/webp"
-                        className="hidden"
-                        onChange={handleImagem}
-                      />
-                    </label>
-                  ) : (
-                    <div className="relative mt-3 overflow-hidden rounded-3xl border border-gray-200 shadow-xl dark:border-white/10">
-                      <img
-                        src={imagem}
-                        alt="Preview do medicamento"
-                        className="h-52 w-full object-cover sm:h-64"
-                      />
-
-                      <div className="absolute inset-0 flex items-end justify-center gap-3 bg-gradient-to-t from-black/75 via-black/15 to-transparent p-4">
-                        <label className="flex cursor-pointer items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-black text-gray-900 shadow-lg transition active:scale-95">
-                          <ImagePlus size={16} />
-                          Trocar
-                          <input
-                            type="file"
-                            accept="image/png, image/jpeg, image/webp"
-                            className="hidden"
-                            onChange={handleImagem}
-                          />
-                        </label>
-
-                        <button
-                          type="button"
-                          onClick={() => setImagem(null)}
-                          className="flex items-center gap-2 rounded-2xl bg-red-600 px-4 py-2.5 text-sm font-black text-white shadow-lg transition active:scale-95"
-                        >
-                          <Trash2 size={16} />
-                          Remover
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </section>
-
-                {/* DADOS PRINCIPAIS */}
-                <section className="rounded-3xl border border-gray-200 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                      <Pill size={19} />
-                    </div>
-
-                    <div>
-                      <h3 className="font-black">Dados principais</h3>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Nome e quantidade do lote.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <section>
-                      <LabelArea icon={Pill} label="Nome do medicamento" />
-
-                      <InputBase
-                        value={nome}
-                        onChange={(e) => {
-                          limparErro("nome");
-                          setNome(e.target.value);
-                        }}
-                        placeholder="Ex: Dipirona 500mg"
-                        maxLength={80}
-                        erro={erros.nome}
-                      />
-
-                      <Dica texto={`${nome.length}/80 caracteres`} />
-
-                      {erros.nome && <MensagemErro texto={erros.nome} />}
-                    </section>
-
-                    <section>
-                      <LabelArea icon={Package} label="Quantidade" />
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => alterarQuantidade(-1)}
-                          className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl bg-gray-100 text-gray-700 transition active:scale-95 dark:bg-white/10 dark:text-gray-200"
-                        >
-                          <Minus size={19} />
-                        </button>
-
-                        <InputBase
-                          type="number"
-                          value={quantidade}
-                          onChange={(e) => {
-                            limparErro("quantidade");
-                            const valor = e.target.value.replace(/\D/g, "");
-                            setQuantidade(valor);
-                          }}
-                          placeholder="1"
-                          inputMode="numeric"
-                          erro={erros.quantidade}
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() => alterarQuantidade(1)}
-                          className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20 transition active:scale-95"
-                        >
-                          <Plus size={19} />
-                        </button>
-                      </div>
-
-                      <Dica texto="Quantidade disponível no estoque." />
-
-                      {erros.quantidade && (
-                        <MensagemErro texto={erros.quantidade} />
-                      )}
-                    </section>
-                  </div>
-                </section>
-
-                {/* VALIDADE */}
-                <section className="rounded-3xl border border-gray-200 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
-                      <CalendarDays size={19} />
-                    </div>
-
-                    <div>
-                      <h3 className="font-black">Validade e alertas</h3>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        O app calcula quando avisar e quando retirar.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <section className="sm:col-span-2">
-                      <LabelArea icon={CalendarDays} label="Data de validade" />
-
-                      <InputBase
-                        value={validade}
-                        onChange={(e) => {
-                          limparErro("validade");
-                          setValidade(formatarValidade(e.target.value));
-                        }}
-                        placeholder="0427 ou 25/12/2026"
-                        inputMode="numeric"
-                        maxLength={10}
-                        erro={
-                          erros.validade ||
-                          (validade && validade.length >= 4 && !validarData(validade))
-                        }
-                      />
-
-                      <Dica texto="Digite 0427 para 04/2027 ou 25122026 para 25/12/2026." />
-
-                      {validade &&
-                        validade.length >= 4 &&
-                        !validarData(validade) &&
-                        !erros.validade && <MensagemErro texto="Data inválida." />}
-
-                      {erros.validade && <MensagemErro texto={erros.validade} />}
-                    </section>
-
-                    <Campo
-                      icon={Trash2}
-                      label="Dias para remover"
-                      type="number"
-                      value={diasRemover}
-                      onChange={(valor) => {
-                        limparErro("diasRemover");
-                        setDiasRemover(valor);
-                      }}
-                      min={0}
-                      max={365}
-                      descricao="Ex: 7 dias antes da validade."
-                      erro={erros.diasRemover}
-                    />
-
-                    <Campo
-                      icon={TriangleAlert}
-                      label="Pré-vencimento"
-                      type="number"
-                      value={diasPre}
-                      onChange={(valor) => {
-                        limparErro("diasPre");
-                        setDiasPre(valor);
-                      }}
-                      min={0}
-                      max={365}
-                      optional
-                      descricao="Aviso antes da data de remoção."
-                      erro={erros.diasPre}
-                    />
-                  </div>
-                </section>
-
-                {/* PREVIEW */}
-                {preview && (
-                  <motion.section
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="
-                      rounded-3xl border border-emerald-200 bg-emerald-50 p-4
-                      dark:border-emerald-500/20 dark:bg-emerald-500/10
-                    "
-                  >
-                    <div className="mb-3 flex items-center gap-2">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-700 text-white">
-                        <ShieldCheck size={19} />
-                      </div>
-
-                      <div>
-                        <h3 className="font-black">Preview automático</h3>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Linha do tempo calculada pelo app.
+                          Tire uma foto agora ou escolha uma imagem da galeria.
                         </p>
                       </div>
                     </div>
 
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <PreviewLinha
-                        icon={Clock3}
-                        label="Pré"
-                        valor={
-                          preview.pre
-                            ? preview.pre.toLocaleDateString("pt-BR")
-                            : "Sem pré"
-                        }
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <BotaoImagem
+                        icon={Camera}
+                        titulo="Tirar foto"
+                        texto="Câmera"
+                        onClick={abrirCamera}
+                        destaque
                       />
 
-                      <PreviewLinha
-                        icon={Trash2}
-                        label="Retirar"
-                        valor={preview.remover.toLocaleDateString("pt-BR")}
-                      />
-
-                      <PreviewLinha
-                        icon={CalendarDays}
-                        label="Validade"
-                        valor={preview.validade.toLocaleDateString("pt-BR")}
+                      <BotaoImagem
+                        icon={Images}
+                        titulo="Galeria"
+                        texto="Fotos"
+                        onClick={abrirGaleria}
                       />
                     </div>
-                  </motion.section>
+                  </div>
+                ) : (
+                  <div className="relative mt-3 overflow-hidden rounded-3xl border border-gray-200 shadow-xl dark:border-white/10">
+                    <img
+                      src={imagem}
+                      alt="Preview do medicamento"
+                      className="h-56 w-full object-cover sm:h-72"
+                    />
+
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/78 via-black/15 to-transparent" />
+
+                    <div className="absolute bottom-4 left-4 right-4 grid grid-cols-3 gap-2">
+                      <BotaoImagemOverlay
+                        icon={Camera}
+                        label="Foto"
+                        onClick={abrirCamera}
+                      />
+
+                      <BotaoImagemOverlay
+                        icon={Images}
+                        label="Galeria"
+                        onClick={abrirGaleria}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setImagem(null)}
+                        className="
+                          flex h-11 items-center justify-center gap-1.5 rounded-2xl
+                          bg-red-600 px-3 text-xs font-black text-white shadow-lg
+                          transition active:scale-95
+                        "
+                      >
+                        <Trash2 size={16} />
+                        Remover
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </div>
+              </section>
+
+              {/* DADOS PRINCIPAIS */}
+              <section className="rounded-3xl border border-gray-200 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5">
+                <SecaoTitulo
+                  icon={Pill}
+                  titulo="Dados principais"
+                  texto="Nome e quantidade do lote."
+                />
+
+                <div className="mt-4 space-y-4">
+                  <section>
+                    <LabelArea icon={Pill} label="Nome do medicamento" />
+
+                    <InputBase
+                      value={nome}
+                      onChange={(e) => {
+                        limparErro("nome");
+                        setNome(e.target.value);
+                      }}
+                      placeholder="Ex: Dipirona 500mg"
+                      maxLength={80}
+                      erro={erros.nome}
+                    />
+
+                    <Dica texto={`${nome.length}/80 caracteres`} />
+
+                    {erros.nome && <MensagemErro texto={erros.nome} />}
+                  </section>
+
+                  <section>
+                    <LabelArea icon={Package} label="Quantidade" />
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => alterarQuantidade(-1)}
+                        className="
+                          flex h-[52px] w-[52px] shrink-0 items-center justify-center
+                          rounded-2xl bg-gray-100 text-gray-700 transition active:scale-95
+                          dark:bg-white/10 dark:text-gray-200
+                        "
+                      >
+                        <Minus size={19} />
+                      </button>
+
+                      <InputBase
+                        type="number"
+                        value={quantidade}
+                        onChange={(e) => {
+                          limparErro("quantidade");
+                          setQuantidade(e.target.value.replace(/\D/g, ""));
+                        }}
+                        placeholder="1"
+                        inputMode="numeric"
+                        erro={erros.quantidade}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => alterarQuantidade(1)}
+                        className="
+                          flex h-[52px] w-[52px] shrink-0 items-center justify-center
+                          rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20
+                          transition active:scale-95
+                        "
+                      >
+                        <Plus size={19} />
+                      </button>
+                    </div>
+
+                    <Dica texto="Quantidade disponível no estoque." />
+
+                    {erros.quantidade && (
+                      <MensagemErro texto={erros.quantidade} />
+                    )}
+                  </section>
+                </div>
+              </section>
+
+              {/* VALIDADE */}
+              <section className="rounded-3xl border border-gray-200 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5">
+                <SecaoTitulo
+                  icon={CalendarDays}
+                  titulo="Validade e alertas"
+                  texto="Digite rápido e o app calcula a linha do tempo."
+                  azul
+                />
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <section className="sm:col-span-2">
+                    <LabelArea icon={CalendarDays} label="Data de validade" />
+
+                    <InputBase
+                      value={validade}
+                      onChange={(e) => {
+                        limparErro("validade");
+                        setValidade(formatarValidade(e.target.value));
+                      }}
+                      placeholder="0427 ou 25/12/2026"
+                      inputMode="numeric"
+                      maxLength={10}
+                      erro={
+                        erros.validade ||
+                        (validade &&
+                          validade.length >= 4 &&
+                          !validarData(validade))
+                      }
+                    />
+
+                    <Dica texto="0427 vira 04/2027. 25122026 vira 25/12/2026." />
+
+                    {validade &&
+                      validade.length >= 4 &&
+                      !validarData(validade) &&
+                      !erros.validade && <MensagemErro texto="Data inválida." />}
+
+                    {erros.validade && <MensagemErro texto={erros.validade} />}
+                  </section>
+
+                  <Campo
+                    icon={Trash2}
+                    label="Dias para remover"
+                    type="number"
+                    value={diasRemover}
+                    onChange={(valor) => {
+                      limparErro("diasRemover");
+                      setDiasRemover(valor);
+                    }}
+                    min={0}
+                    max={365}
+                    descricao="Ex: 7 ou 30 dias antes."
+                    erro={erros.diasRemover}
+                    atalhos={[7, 15, 30, 60]}
+                  />
+
+                  <Campo
+                    icon={TriangleAlert}
+                    label="Pré-vencimento"
+                    type="number"
+                    value={diasPre}
+                    onChange={(valor) => {
+                      limparErro("diasPre");
+                      setDiasPre(valor);
+                    }}
+                    min={0}
+                    max={365}
+                    optional
+                    descricao="Aviso antes da data de remoção."
+                    erro={erros.diasPre}
+                    atalhos={[7, 15, 30, 60]}
+                  />
+                </div>
+              </section>
+
+              {/* PREVIEW */}
+              {preview && (
+                <motion.section
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="
+                    rounded-3xl border border-emerald-200 bg-emerald-50 p-4
+                    dark:border-emerald-500/20 dark:bg-emerald-500/10
+                  "
+                >
+                  <SecaoTitulo
+                    icon={ShieldCheck}
+                    titulo="Preview automático"
+                    texto="Linha do tempo calculada pelo app."
+                  />
+
+                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                    <PreviewLinha
+                      icon={Clock3}
+                      label="Pré"
+                      valor={
+                        preview.pre
+                          ? preview.pre.toLocaleDateString("pt-BR")
+                          : "Sem pré"
+                      }
+                    />
+
+                    <PreviewLinha
+                      icon={Trash2}
+                      label="Retirar"
+                      valor={preview.remover.toLocaleDateString("pt-BR")}
+                    />
+
+                    <PreviewLinha
+                      icon={CalendarDays}
+                      label="Validade"
+                      valor={preview.validade.toLocaleDateString("pt-BR")}
+                    />
+                  </div>
+                </motion.section>
+              )}
             </div>
+          </div>
 
-            {/* FOOTER */}
-            <div
-              className="
-                relative z-20 shrink-0 border-t border-gray-200/80 bg-white/95
-                p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur-xl
-                dark:border-white/10 dark:bg-gray-950/95
-                sm:p-5
-              "
-            >
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={fecharModal}
-                  className="
-                    flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl
-                    border border-gray-300 bg-white font-black text-gray-700 transition
-                    hover:bg-gray-100 active:scale-95
-                    dark:border-white/10 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/15
-                  "
-                >
-                  <X size={18} />
-                  Cancelar
-                </button>
+          {/* FOOTER */}
+          <div
+            className="
+              shrink-0 border-t border-gray-200/80 bg-white/95 p-4
+              pb-[calc(env(safe-area-inset-bottom)+0.9rem)]
+              backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/95 sm:p-5
+            "
+          >
+            <div className="mx-auto grid max-w-2xl grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={fecharModal}
+                disabled={salvando}
+                className="
+                  flex h-[52px] items-center justify-center gap-2 rounded-2xl
+                  border border-gray-300 bg-white font-black text-gray-700 transition
+                  hover:bg-gray-100 active:scale-95 disabled:opacity-60
+                  dark:border-white/10 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/15
+                "
+              >
+                <X size={18} />
+                Cancelar
+              </button>
 
-                <button
-                  type="button"
-                  onClick={handleSalvar}
-                  className="
-                    flex h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl
-                    bg-emerald-700 font-black text-white shadow-lg shadow-emerald-700/20
-                    transition hover:bg-emerald-800 active:scale-95
-                  "
-                >
+              <button
+                type="button"
+                onClick={handleSalvar}
+                disabled={salvando}
+                className="
+                  flex h-[52px] items-center justify-center gap-2 rounded-2xl
+                  bg-emerald-700 font-black text-white shadow-lg shadow-emerald-700/20
+                  transition hover:bg-emerald-800 active:scale-95 disabled:opacity-70
+                "
+              >
+                {salvando ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
                   <Save size={18} />
-                  {editando ? "Atualizar" : "Salvar"}
-                </button>
-              </div>
+                )}
+                {salvando ? "Salvando..." : editando ? "Atualizar" : "Salvar"}
+              </button>
             </div>
-          </motion.div>
+          </div>
         </motion.div>
-      )}
+      </motion.div>
     </AnimatePresence>
+  );
+
+  return createPortal(modal, document.body);
+}
+
+function SecaoTitulo({ icon: Icon, titulo, texto, azul = false }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className={`
+          flex h-10 w-10 items-center justify-center rounded-2xl
+          ${
+            azul
+              ? "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300"
+              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+          }
+        `}
+      >
+        <Icon size={19} />
+      </div>
+
+      <div>
+        <h3 className="font-black">{titulo}</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{texto}</p>
+      </div>
+    </div>
+  );
+}
+
+function BotaoImagem({ icon: Icon, titulo, texto, onClick, destaque = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`
+        flex min-h-[76px] flex-col items-center justify-center gap-1 rounded-2xl
+        border px-3 py-3 text-center transition active:scale-95
+        ${
+          destaque
+            ? "border-emerald-500 bg-emerald-700 text-white shadow-lg shadow-emerald-700/20"
+            : "border-gray-200 bg-gray-100 text-gray-800 dark:border-white/10 dark:bg-white/10 dark:text-gray-200"
+        }
+      `}
+    >
+      <Icon size={23} />
+      <span className="text-sm font-black">{titulo}</span>
+      <span
+        className={`text-[11px] font-bold ${
+          destaque ? "text-emerald-100" : "text-gray-500 dark:text-gray-400"
+        }`}
+      >
+        {texto}
+      </span>
+    </button>
+  );
+}
+
+function BotaoImagemOverlay({ icon: Icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="
+        flex h-11 items-center justify-center gap-1.5 rounded-2xl
+        bg-white px-3 text-xs font-black text-gray-900 shadow-lg
+        transition active:scale-95
+      "
+    >
+      <Icon size={16} />
+      {label}
+    </button>
   );
 }
 
@@ -969,6 +929,7 @@ function Campo({
   optional = false,
   descricao,
   erro,
+  atalhos = [],
 }) {
   function handleChange(e) {
     let valor = e.target.value;
@@ -1002,6 +963,28 @@ function Campo({
         erro={erro}
         inputMode={type === "number" ? "numeric" : undefined}
       />
+
+      {atalhos.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {atalhos.map((item) => (
+            <button
+              key={`${label}-${item}`}
+              type="button"
+              onClick={() => onChange(item)}
+              className={`
+                rounded-full px-3 py-1 text-[11px] font-black transition active:scale-95
+                ${
+                  Number(value) === Number(item)
+                    ? "bg-emerald-700 text-white"
+                    : "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300"
+                }
+              `}
+            >
+              {item}d
+            </button>
+          ))}
+        </div>
+      )}
 
       {descricao && <Dica texto={descricao} />}
 
