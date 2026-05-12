@@ -1,9 +1,4 @@
 import {
-  useEffect,
-  useState,
-} from "react";
-
-import {
   Pill,
   FileText,
   Syringe,
@@ -13,23 +8,8 @@ import {
 } from "lucide-react";
 
 import TabButton from "./TabButton";
-import { motion } from "framer-motion";
 
 function BottomNav({ page, isAdmin, onNavigate }) {
-  const [overlayAberto, setOverlayAberto] = useState(false);
-
-  useEffect(() => {
-    function ouvirOverlay(e) {
-      setOverlayAberto(Boolean(e.detail?.open));
-    }
-
-    window.addEventListener("app-overlay-change", ouvirOverlay);
-
-    return () => {
-      window.removeEventListener("app-overlay-change", ouvirOverlay);
-    };
-  }, []);
-
   const menuPages = [
     "baseProdutos",
     "mapeamentos",
@@ -38,16 +18,7 @@ function BottomNav({ page, isAdmin, onNavigate }) {
   ];
 
   return (
-    <motion.nav
-      initial={false}
-      animate={{
-        y: overlayAberto ? "140%" : "0%",
-        opacity: overlayAberto ? 0 : 1,
-      }}
-      transition={{
-        duration: 0.22,
-        ease: "easeOut",
-      }}
+    <nav
       className="
         fixed bottom-0 left-0 z-50 w-full
         border-t border-gray-200 bg-white/90 px-2 pt-2
@@ -125,7 +96,7 @@ function BottomNav({ page, isAdmin, onNavigate }) {
           </>
         )}
       </div>
-    </motion.nav>
+    </nav>
   );
 }
 

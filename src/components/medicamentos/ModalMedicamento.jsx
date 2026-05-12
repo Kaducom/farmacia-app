@@ -52,27 +52,84 @@ function ModalMedicamento({
   const [erros, setErros] = useState({});
 
   useEffect(() => {
-    if (!abrirModal) return;
+    function liberarTravaPerdida() {
+      const main = document.querySelector("main");
 
-    const scrollY = window.scrollY;
+      if (main?.dataset?.modalMedicamentoLock === "true") {
+        main.style.overflow = "";
+        main.style.touchAction = "";
+        main.style.overscrollBehavior = "";
+        main.removeAttribute("data-modal-medicamento-lock");
+      }
 
+      if (document.body?.dataset?.modalMedicamentoLock === "true") {
+        document.body.style.overflow = "";
+        document.body.removeAttribute("data-modal-medicamento-lock");
+      }
+
+      if (document.documentElement?.dataset?.modalMedicamentoLock === "true") {
+        document.documentElement.style.overflow = "";
+        document.documentElement.removeAttribute("data-modal-medicamento-lock");
+      }
+    }
+
+    if (!abrirModal) {
+      window.dispatchEvent(
+        new CustomEvent("app-overlay-change", {
+          detail: {
+            open: false,
+          },
+        })
+      );
+
+      setTimeout(liberarTravaPerdida, 80);
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("app-overlay-change", {
+        detail: {
+          open: true,
+        },
+      })
+    );
+
+    const main = document.querySelector("main");
     const body = document.body;
-    const originalOverflow = body.style.overflow;
-    const originalPosition = body.style.position;
-    const originalTop = body.style.top;
-    const originalWidth = body.style.width;
-    const originalPaddingRight = body.style.paddingRight;
+    const html = document.documentElement;
 
-    const scrollbarWidth =
-      window.innerWidth - document.documentElement.clientWidth;
+    const scrollWindow = window.scrollY;
+    const scrollMain = main?.scrollTop || 0;
 
+    const anterior = {
+      bodyOverflow: body.style.overflow,
+      htmlOverflow: html.style.overflow,
+      mainOverflow: main?.style.overflow || "",
+      mainTouchAction: main?.style.touchAction || "",
+      mainOverscroll: main?.style.overscrollBehavior || "",
+    };
+
+    body.dataset.modalMedicamentoLock = "true";
+    html.dataset.modalMedicamentoLock = "true";
     body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.width = "100%";
+    html.style.overflow = "hidden";
 
-    if (scrollbarWidth > 0) {
-      body.style.paddingRight = `${scrollbarWidth}px`;
+    if (main) {
+      main.dataset.modalMedicamentoLock = "true";
+      main.style.overflow = "hidden";
+      main.style.touchAction = "none";
+      main.style.overscrollBehavior = "contain";
+    }
+
+    function bloquearScrollFundo(e) {
+      const areaModal = e.target?.closest?.("[data-modal-scroll='true']");
+
+      if (areaModal) {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
     }
 
     function fecharComEsc(e) {
@@ -81,17 +138,48 @@ function ModalMedicamento({
       }
     }
 
+    document.addEventListener("wheel", bloquearScrollFundo, {
+      passive: false,
+      capture: true,
+    });
+
+    document.addEventListener("touchmove", bloquearScrollFundo, {
+      passive: false,
+      capture: true,
+    });
+
     window.addEventListener("keydown", fecharComEsc);
 
     return () => {
-      body.style.overflow = originalOverflow;
-      body.style.position = originalPosition;
-      body.style.top = originalTop;
-      body.style.width = originalWidth;
-      body.style.paddingRight = originalPaddingRight;
-
-      window.scrollTo(0, scrollY);
+      document.removeEventListener("wheel", bloquearScrollFundo, true);
+      document.removeEventListener("touchmove", bloquearScrollFundo, true);
       window.removeEventListener("keydown", fecharComEsc);
+
+      body.style.overflow = anterior.bodyOverflow;
+      html.style.overflow = anterior.htmlOverflow;
+
+      body.removeAttribute("data-modal-medicamento-lock");
+      html.removeAttribute("data-modal-medicamento-lock");
+
+      if (main) {
+        main.style.overflow = anterior.mainOverflow;
+        main.style.touchAction = anterior.mainTouchAction;
+        main.style.overscrollBehavior = anterior.mainOverscroll;
+        main.scrollTop = scrollMain;
+        main.removeAttribute("data-modal-medicamento-lock");
+      }
+
+      window.scrollTo(0, scrollWindow);
+
+      window.dispatchEvent(
+        new CustomEvent("app-overlay-change", {
+          detail: {
+            open: false,
+          },
+        })
+      );
+
+      setTimeout(liberarTravaPerdida, 120);
     };
   }, [abrirModal]);
 
@@ -236,15 +324,19 @@ function ModalMedicamento({
     setQuantidade(proximo);
   }
 
+  function impedirBolhaDoModal(e) {
+    e.stopPropagation();
+  }
+
   return (
     <AnimatePresence>
       {abrirModal && (
         <motion.div
           className="
-            fixed inset-0 z-[2147483647] flex items-end justify-center overflow-hidden
-            bg-black/70 px-3
-            pt-[calc(env(safe-area-inset-top)+4.75rem)]
-            pb-[calc(env(safe-area-inset-bottom)+0.75rem)]
+            fixed inset-0 z-[2147483647] flex h-[100dvh] items-end justify-center
+            overflow-hidden bg-black/70 px-3
+            pb-[calc(env(safe-area-inset-bottom)+0.9rem)]
+            pt-[calc(env(safe-area-inset-top)+0.9rem)]
             backdrop-blur-md
             sm:items-center sm:p-4
           "
@@ -252,20 +344,22 @@ function ModalMedicamento({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={fecharModal}
+          onWheel={(e) => e.preventDefault()}
         >
           <motion.div
+            data-modal-medicamento="true"
             onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, y: 34, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 34, scale: 0.97 }}
             transition={{ duration: 0.22 }}
-          className="
-            relative flex w-full max-w-2xl flex-col overflow-hidden
-            rounded-t-[2rem] border border-gray-200 bg-white text-gray-950 shadow-2xl
-            max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-5.5rem)]
-            dark:border-white/10 dark:bg-gray-950 dark:text-white
-            sm:rounded-[2rem] sm:max-h-[92vh]
-          "
+            className="
+              relative flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.8rem)]
+              w-full max-w-2xl flex-col overflow-hidden rounded-[2rem]
+              border border-gray-200 bg-white text-gray-950 shadow-2xl
+              dark:border-white/10 dark:bg-gray-950 dark:text-white
+              sm:max-h-[92dvh]
+            "
           >
             <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-emerald-500/10 to-transparent" />
             <div className="pointer-events-none absolute -right-20 top-10 h-48 w-48 rounded-full bg-emerald-500/10 blur-3xl" />
@@ -276,14 +370,14 @@ function ModalMedicamento({
             </div>
 
             {/* HEADER */}
-            <div className="relative shrink-0 border-b border-gray-200/80 bg-white/90 p-4 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/90 sm:p-5">
+            <div className="relative shrink-0 border-b border-gray-200/80 bg-white/95 p-4 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/95 sm:p-5">
               <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-gray-300 dark:bg-gray-700 sm:hidden" />
 
               <div className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <div
                     className="
-                      flex h-13 w-13 h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl
+                      flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl
                       bg-gradient-to-br from-emerald-600 to-emerald-900 text-white
                       shadow-lg shadow-emerald-700/20
                     "
@@ -307,7 +401,7 @@ function ModalMedicamento({
                       {editando ? "Editar medicamento" : "Novo medicamento"}
                     </h2>
 
-                    <p className="mt-1 line-clamp-2 text-sm text-gray-500 dark:text-gray-400">
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                       Estoque, validade, remoção e pré-vencimento.
                     </p>
                   </div>
@@ -328,8 +422,16 @@ function ModalMedicamento({
             </div>
 
             {/* BODY */}
-            <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
-              <div className="space-y-4 pb-2">
+            <div
+              data-modal-scroll="true"
+              onWheel={impedirBolhaDoModal}
+              onTouchMove={impedirBolhaDoModal}
+              className="
+                relative min-h-0 flex-1 overflow-y-auto overscroll-contain
+                p-4 sm:p-5
+              "
+            >
+              <div className="space-y-4 pb-4">
                 {erros.geral && <AvisoErro texto={erros.geral} />}
 
                 {/* IMAGEM */}
@@ -439,7 +541,7 @@ function ModalMedicamento({
                         <button
                           type="button"
                           onClick={() => alterarQuantidade(-1)}
-                          className="flex h-13 h-[52px] w-13 w-[52px] shrink-0 items-center justify-center rounded-2xl bg-gray-100 text-gray-700 transition active:scale-95 dark:bg-white/10 dark:text-gray-200"
+                          className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl bg-gray-100 text-gray-700 transition active:scale-95 dark:bg-white/10 dark:text-gray-200"
                         >
                           <Minus size={19} />
                         </button>
@@ -460,7 +562,7 @@ function ModalMedicamento({
                         <button
                           type="button"
                           onClick={() => alterarQuantidade(1)}
-                          className="flex h-13 h-[52px] w-13 w-[52px] shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20 transition active:scale-95"
+                          className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20 transition active:scale-95"
                         >
                           <Plus size={19} />
                         </button>
