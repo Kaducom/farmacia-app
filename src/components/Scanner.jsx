@@ -15,17 +15,19 @@ import {
   Camera,
   CameraOff,
   CheckCircle2,
-  Crosshair,
   Keyboard,
   Lightbulb,
   LightbulbOff,
   Loader2,
+  Minus,
   PackageCheck,
   Pill,
+  Plus,
   RefreshCcw,
   RotateCw,
   ScanLine,
   ShieldCheck,
+  SlidersHorizontal,
   Trash2,
   X,
   Zap,
@@ -80,10 +82,13 @@ function Scanner({
 
   const [torchDisponivel, setTorchDisponivel] = useState(false);
   const [torchAtiva, setTorchAtiva] = useState(false);
+  const [quantidadeScanner, setQuantidadeScanner] = useState(1);
 
   useEffect(() => {
     mountedRef.current = true;
     fechandoRef.current = false;
+
+    liberarTravasAntigas();
 
     window.dispatchEvent(
       new CustomEvent("app-overlay-change", {
@@ -102,33 +107,36 @@ function Scanner({
           detail: { open: false },
         })
       );
+
+      setTimeout(liberarTravasAntigas, 80);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const scrollY = window.scrollY;
+  function liberarTravasAntigas() {
+    const main = document.querySelector("main");
 
-    const body = document.body;
-    const originalOverflow = body.style.overflow;
-    const originalPosition = body.style.position;
-    const originalTop = body.style.top;
-    const originalWidth = body.style.width;
+    document.body.style.overflow = "";
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
+    document.body.style.width = "";
+    document.body.style.touchAction = "";
+    document.body.style.overscrollBehavior = "";
 
-    body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.width = "100%";
+    document.documentElement.style.overflow = "";
+    document.documentElement.style.position = "";
+    document.documentElement.style.touchAction = "";
+    document.documentElement.style.overscrollBehavior = "";
 
-    return () => {
-      body.style.overflow = originalOverflow;
-      body.style.position = originalPosition;
-      body.style.top = originalTop;
-      body.style.width = originalWidth;
-
-      window.scrollTo(0, scrollY);
-    };
-  }, []);
+    if (main) {
+      main.style.overflow = "";
+      main.style.position = "";
+      main.style.touchAction = "";
+      main.style.overscrollBehavior = "";
+    }
+  }
 
   function setSeguro(fn) {
     if (mountedRef.current && !fechandoRef.current) {
@@ -145,6 +153,13 @@ function Scanner({
       err?.name === "ChecksumException" ||
       err?.name === "FormatException"
     );
+  }
+
+  function alterarQuantidade(delta) {
+    setQuantidadeScanner((prev) => {
+      const atual = Number(prev || 1);
+      return Math.max(1, Math.min(999, atual + delta));
+    });
   }
 
   function limparBloqueio() {
@@ -470,6 +485,7 @@ function Scanner({
         onScan?.(codigoLimpo, {
           modoContinuo,
           origem: "scanner",
+          quantidade: quantidadeScanner,
         })
       );
 
@@ -581,7 +597,16 @@ function Scanner({
     fechandoRef.current = true;
 
     pararScanner();
+
+    window.dispatchEvent(
+      new CustomEvent("app-overlay-change", {
+        detail: { open: false },
+      })
+    );
+
     onClose?.();
+
+    setTimeout(liberarTravasAntigas, 80);
   }
 
   async function reiniciarScanner() {
@@ -693,9 +718,11 @@ function Scanner({
           `}
         />
 
-        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/10 to-black/90" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/5 to-black/90" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_35%),radial-gradient(circle_at_bottom,rgba(15,23,42,0.92),transparent_58%)]" />
       </div>
 
+      {/* TOPO */}
       <div
         className="
           relative z-20 shrink-0 px-4
@@ -723,7 +750,7 @@ function Scanner({
               <h2 className="truncate text-lg font-black">Scanner</h2>
 
               <p className="truncate text-xs text-white/65">
-                Mire no código e deixe o app trabalhar
+                Leitura rápida com quantidade por scan
               </p>
             </div>
           </div>
@@ -736,12 +763,14 @@ function Scanner({
               bg-white text-slate-950 shadow-xl shadow-black/25
               transition active:scale-95
             "
+            aria-label="Fechar scanner"
           >
             <X size={24} strokeWidth={3} />
           </button>
         </div>
       </div>
 
+      {/* MIRA */}
       <div
         className="
           relative z-10 flex min-h-0 flex-1 items-center justify-center
@@ -750,8 +779,8 @@ function Scanner({
       >
         <div
           className="
-            relative h-[min(48dvh,380px)] w-full max-w-md
-            sm:h-[420px]
+            relative h-[min(52dvh,410px)] w-full max-w-md
+            sm:h-[430px]
           "
         >
           <div
@@ -759,7 +788,7 @@ function Scanner({
               absolute inset-0 rounded-[2.25rem] border-2 backdrop-blur-[1px]
               ${
                 lido
-                  ? "border-emerald-400 shadow-[0_0_52px_rgba(52,211,153,0.45)]"
+                  ? "border-emerald-400 shadow-[0_0_58px_rgba(52,211,153,0.5)]"
                   : bloqueado
                   ? "border-emerald-300/70 shadow-[0_0_42px_rgba(52,211,153,0.25)]"
                   : emErro
@@ -776,33 +805,44 @@ function Scanner({
 
           {lendo && (
             <motion.div
-              initial={{ y: 22, opacity: 0.75 }}
-              animate={{ y: 280, opacity: 1 }}
+              initial={{ top: "12%" }}
+              animate={{ top: "82%" }}
               transition={{
-                duration: 1.25,
+                duration: 1.2,
                 repeat: Infinity,
                 repeatType: "reverse",
                 ease: "easeInOut",
               }}
               className="
-                absolute left-7 right-7 top-5 h-1 rounded-full
+                absolute left-7 right-7 h-1 rounded-full
                 bg-emerald-400 shadow-[0_0_26px_rgba(52,211,153,0.95)]
               "
             />
           )}
 
-          <div className="pointer-events-none absolute inset-x-6 top-1/2 flex -translate-y-1/2 items-center justify-center">
-            <div className="rounded-full border border-white/15 bg-black/45 px-4 py-2 text-xs font-black text-white/90 shadow-xl backdrop-blur-md">
-              {lido
-                ? "Código capturado ✨"
-                : bloqueado
-                ? "Código protegido"
-                : "Centralize o código aqui"}
-            </div>
+          <div className="pointer-events-none absolute left-5 top-5 rounded-full border border-white/10 bg-black/35 px-3 py-1 text-[11px] font-black text-white/80 backdrop-blur-md">
+            Qtd por leitura: x{quantidadeScanner}
           </div>
+
+          {(lido || bloqueado || emErro || iniciando) && (
+            <div className="pointer-events-none absolute bottom-5 left-5 right-5">
+              <StatusScanner
+                iniciando={iniciando}
+                lendo={false}
+                lido={lido}
+                bloqueado={bloqueado}
+                emErro={emErro}
+                codigoLido={codigoLido}
+                codigoBloqueado={codigoBloqueado}
+                erro={erro}
+                compacto
+              />
+            </div>
+          )}
         </div>
       </div>
 
+      {/* PAINEL */}
       <div
         className="
           relative z-20 shrink-0 px-4
@@ -811,58 +851,45 @@ function Scanner({
       >
         <div
           className="
-            max-h-[46dvh] overflow-y-auto overscroll-contain rounded-t-[2rem]
+            max-h-[44dvh] overflow-y-auto overscroll-contain rounded-[2rem]
             border border-white/10 bg-slate-950/78 p-3 shadow-2xl
             backdrop-blur-2xl
-            sm:mx-auto sm:max-h-[44dvh] sm:max-w-3xl sm:rounded-[2rem]
+            sm:mx-auto sm:max-h-[42dvh] sm:max-w-3xl
           "
         >
           <div className="space-y-3">
-            <StatusScanner
-              iniciando={iniciando}
-              lendo={lendo}
-              lido={lido}
-              bloqueado={bloqueado}
-              emErro={emErro}
-              codigoLido={codigoLido}
-              codigoBloqueado={codigoBloqueado}
-              erro={erro}
-            />
+            <div className="grid grid-cols-[1fr_auto] gap-3">
+              <QuantidadeScanner
+                quantidade={quantidadeScanner}
+                diminuir={() => alterarQuantidade(-1)}
+                aumentar={() => alterarQuantidade(1)}
+                setQuantidade={setQuantidadeScanner}
+              />
 
-            {codigoBloqueado ? (
-              <button
-                type="button"
-                onClick={limparBloqueio}
-                className="
-                  flex w-full items-center justify-center gap-2 rounded-3xl
-                  border border-emerald-400/20 bg-emerald-500/15 px-4 py-4
-                  text-sm font-black text-emerald-100 shadow-xl backdrop-blur-md
-                  transition active:scale-[0.98]
-                "
-              >
-                <ShieldCheck size={20} />
-                Liberar mesmo código
-              </button>
-            ) : (
-              <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15">
-                    <Crosshair size={20} />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-black">Câmera principal</p>
-                    <p className="text-xs text-white/60">
-                      Tentando usar 1x e evitar ultra-wide 0,5x.
-                    </p>
-                  </div>
-
-                  <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-black text-emerald-100">
-                    1x
-                  </span>
-                </div>
-              </div>
-            )}
+              {codigoBloqueado ? (
+                <button
+                  type="button"
+                  onClick={limparBloqueio}
+                  className="
+                    flex min-w-[98px] flex-col items-center justify-center rounded-3xl
+                    border border-emerald-400/20 bg-emerald-500/15 px-3 py-3
+                    text-xs font-black text-emerald-100 shadow-xl backdrop-blur-md
+                    transition active:scale-[0.98]
+                  "
+                >
+                  <ShieldCheck size={21} />
+                  Liberar
+                </button>
+              ) : (
+                <StatusPill
+                  iniciando={iniciando}
+                  lendo={lendo}
+                  lido={lido}
+                  bloqueado={bloqueado}
+                  emErro={emErro}
+                />
+              )}
+            </div>
 
             <MiniPreviewScanner
               itens={itensPreview}
@@ -940,6 +967,104 @@ function Scanner({
   );
 }
 
+function QuantidadeScanner({
+  quantidade,
+  diminuir,
+  aumentar,
+  setQuantidade,
+}) {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-white/10 p-3 backdrop-blur-md">
+      <div className="mb-2 flex items-center gap-2 text-xs font-black text-white/70">
+        <SlidersHorizontal size={15} />
+        Quantidade por leitura
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={diminuir}
+          className="
+            flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
+            bg-white/10 text-white transition active:scale-95
+          "
+        >
+          <Minus size={18} />
+        </button>
+
+        <input
+          value={quantidade}
+          onChange={(e) => {
+            const valor = Number(e.target.value.replace(/\D/g, ""));
+            setQuantidade(Math.max(1, Math.min(999, valor || 1)));
+          }}
+          inputMode="numeric"
+          className="
+            h-11 min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/25
+            text-center text-xl font-black text-white outline-none
+            focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/15
+          "
+        />
+
+        <button
+          type="button"
+          onClick={aumentar}
+          className="
+            flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
+            bg-emerald-600 text-white shadow-lg shadow-emerald-600/25
+            transition active:scale-95
+          "
+        >
+          <Plus size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function StatusPill({ iniciando, lendo, lido, bloqueado, emErro }) {
+  let texto = "Ativo";
+  let Icon = Camera;
+  let classe = "border-white/10 bg-white/10 text-white";
+
+  if (iniciando) {
+    texto = "Abrindo";
+    Icon = Loader2;
+    classe = "border-emerald-400/20 bg-emerald-500/10 text-emerald-100";
+  }
+
+  if (lido) {
+    texto = "Lido";
+    Icon = CheckCircle2;
+    classe = "border-emerald-400/25 bg-emerald-500/15 text-emerald-100";
+  }
+
+  if (bloqueado) {
+    texto = "Protegido";
+    Icon = ShieldCheck;
+    classe = "border-emerald-400/25 bg-emerald-500/15 text-emerald-100";
+  }
+
+  if (emErro) {
+    texto = "Erro";
+    Icon = AlertTriangle;
+    classe = "border-red-400/25 bg-red-500/15 text-red-100";
+  }
+
+  return (
+    <div
+      className={`
+        flex min-w-[98px] flex-col items-center justify-center rounded-3xl
+        border px-3 py-3 text-xs font-black shadow-xl backdrop-blur-md
+        ${classe}
+      `}
+    >
+      <Icon size={21} className={iniciando ? "animate-spin" : ""} />
+      {texto}
+    </div>
+  );
+}
+
 function StatusScanner({
   iniciando,
   lendo,
@@ -949,15 +1074,17 @@ function StatusScanner({
   codigoLido,
   codigoBloqueado,
   erro,
+  compacto = false,
 }) {
   if (iniciando) {
     return (
       <StatusBox
         icon={Loader2}
         titulo="Abrindo câmera..."
-        texto="Preparando leitura do código"
+        texto="Preparando leitura"
         variant="info"
         loading
+        compacto={compacto}
       />
     );
   }
@@ -969,6 +1096,7 @@ function StatusScanner({
         titulo="Código lido"
         texto={codigoLido}
         variant="success"
+        compacto={compacto}
       />
     );
   }
@@ -978,8 +1106,9 @@ function StatusScanner({
       <StatusBox
         icon={ShieldCheck}
         titulo="Já adicionado"
-        texto={`Para somar de novo, toque em liberar: ${codigoBloqueado}`}
+        texto={`Toque em liberar para ler de novo: ${codigoBloqueado}`}
         variant="success"
+        compacto={compacto}
       />
     );
   }
@@ -988,9 +1117,10 @@ function StatusScanner({
     return (
       <StatusBox
         icon={AlertTriangle}
-        titulo="Scanner em modo segurança"
+        titulo="Scanner em segurança"
         texto={erro}
         variant="danger"
+        compacto={compacto}
       />
     );
   }
@@ -1000,8 +1130,9 @@ function StatusScanner({
       <StatusBox
         icon={Camera}
         titulo="Scanner ativo"
-        texto="Leia um produto. Código repetido fica protegido."
+        texto="Leitura protegida contra repetição."
         variant="default"
+        compacto={compacto}
       />
     );
   }
@@ -1012,22 +1143,31 @@ function StatusScanner({
       titulo="Câmera pausada"
       texto="Use reiniciar ou digite manualmente."
       variant="default"
+      compacto={compacto}
     />
   );
 }
 
-function StatusBox({ icon: Icon, titulo, texto, variant = "default", loading }) {
+function StatusBox({
+  icon: Icon,
+  titulo,
+  texto,
+  variant = "default",
+  loading,
+  compacto = false,
+}) {
   const estilos = {
-    default: "border-white/10 bg-white/10 text-white",
-    info: "border-emerald-400/20 bg-emerald-500/10 text-emerald-50",
-    success: "border-emerald-400/30 bg-emerald-500/15 text-emerald-100",
-    danger: "border-red-400/30 bg-red-500/15 text-red-100",
+    default: "border-white/10 bg-black/35 text-white",
+    info: "border-emerald-400/20 bg-emerald-500/15 text-emerald-50",
+    success: "border-emerald-400/30 bg-emerald-500/20 text-emerald-100",
+    danger: "border-red-400/30 bg-red-500/20 text-red-100",
   };
 
   return (
     <div
       className={`
-        flex items-center gap-3 rounded-3xl border p-3.5 shadow-xl backdrop-blur-xl
+        flex items-center gap-3 rounded-3xl border shadow-xl backdrop-blur-xl
+        ${compacto ? "p-3" : "p-3.5"}
         ${estilos[variant] || estilos.default}
       `}
     >
@@ -1053,7 +1193,7 @@ function BotaoControle({ icon: Icon, label, onClick, disabled = false }) {
       onClick={onClick}
       disabled={disabled}
       className="
-        flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-2xl
+        flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-2xl
         border border-white/10 bg-white/10 px-2 py-3 text-xs font-black
         text-white backdrop-blur-md transition active:scale-95
         disabled:cursor-not-allowed disabled:opacity-35
@@ -1077,7 +1217,7 @@ function MiniPreviewScanner({ itens = [], onLimpar }) {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-black">Itens escaneados</p>
             <p className="text-xs text-white/60">
-              Produtos somados aparecem aqui.
+              Produtos somados aparecem aqui em tempo real.
             </p>
           </div>
         </div>

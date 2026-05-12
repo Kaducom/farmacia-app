@@ -6,22 +6,27 @@ import Scanner from "../components/Scanner";
 import { motion, AnimatePresence } from "framer-motion";
 
 import {
+  AlertTriangle,
   Barcode,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
   Clock3,
+  Eye,
   ImageIcon,
   Loader2,
+  Minus,
   PackageCheck,
   PackagePlus,
+  Pencil,
   Pill,
   Plus,
+  ShieldCheck,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
 
-import CardMedicamento from "../components/medicamentos/CardMedicamento";
 import BuscaMedicamentos from "../components/medicamentos/BuscaMedicamentos";
 import FabMedicamentos from "../components/medicamentos/FabMedicamentos";
 import ModalMedicamento from "../components/medicamentos/ModalMedicamento";
@@ -598,6 +603,48 @@ function Medicamentos() {
     }
   }
 
+
+  async function alterarQuantidadeMedicamento(id, delta) {
+    if (!id) return;
+
+    const med = medicamentos.find((item) => item.id === id);
+
+    if (!med) return;
+
+    const quantidadeAtual = Number(med.quantidade || 1);
+    const novaQuantidade = Math.max(1, Math.min(9999, quantidadeAtual + delta));
+
+    if (novaQuantidade === quantidadeAtual) {
+      addToast("Quantidade mínima é 1 unidade 📦", "info");
+      return;
+    }
+
+    try {
+      await db.medicamentos.update(id, {
+        quantidade: novaQuantidade,
+      });
+
+      setMedicamentos((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                quantidade: novaQuantidade,
+              }
+            : item
+        )
+      );
+
+      addToast(
+        `${delta > 0 ? "+" : "-"}1 ${med.nome || "produto"} • agora x${novaQuantidade} 📦`,
+        "ok"
+      );
+    } catch (err) {
+      console.error("Erro ao alterar quantidade:", err);
+      addToast("Erro ao alterar quantidade 😕", "erro");
+    }
+  }
+
   // =============================
   // 📅 DATAS
   // =============================
@@ -1008,8 +1055,12 @@ function alternarCardMedicamento(id) {
       });
   }
 
-  async function aoEscanear(codigo) {
+  async function aoEscanear(codigo, meta = {}) {
     const codigoLimpo = String(codigo || "").replace(/\s/g, "").trim();
+    const quantidadeEscaneada = Math.max(
+      1,
+      Math.min(999, Number(meta?.quantidade || 1))
+    );
 
     if (!codigoLimpo) {
       addToast("Código inválido 😕", "erro");
@@ -1045,6 +1096,7 @@ function alternarCardMedicamento(id) {
           codigo: codigoLimpo,
           produto: produtoBase,
           lotes,
+          quantidadeScanner: quantidadeEscaneada,
           origem:
             lotes.length > 0
               ? "estoque"
@@ -1071,7 +1123,7 @@ function alternarCardMedicamento(id) {
       limpar();
 
       setCodigoScanner(codigoLimpo);
-      setQuantidade(1);
+      setQuantidade(quantidadeEscaneada);
       setValidade("");
       setFabOpen(false);
       setNome("");
@@ -1107,13 +1159,15 @@ function alternarCardMedicamento(id) {
     }
   }
 
-  async function somarLoteExistente(lote) {
+  async function somarLoteExistente(lote, quantidadeSomar = 1) {
     if (!lote?.id || processandoLote) return;
+
+    const qtdSomar = Math.max(1, Math.min(999, Number(quantidadeSomar || 1)));
 
     try {
       setProcessandoLote(true);
 
-      const novaQuantidade = Number(lote.quantidade || 1) + 1;
+      const novaQuantidade = Number(lote.quantidade || 1) + qtdSomar;
 
       await db.medicamentos.update(lote.id, {
         quantidade: novaQuantidade,
@@ -1128,7 +1182,7 @@ function alternarCardMedicamento(id) {
         tipo: "incrementado",
       });
 
-      addToast(`+1 ${lote.nome || "produto"} • ${lote.validade} 📦`, "ok");
+      addToast(`+${qtdSomar} ${lote.nome || "produto"} • ${lote.validade} 📦`, "ok");
 
       setLoteScanner(null);
       await carregar();
@@ -1140,7 +1194,7 @@ function alternarCardMedicamento(id) {
     }
   }
 
-  async function salvarNovaValidadeDoScanner(validadeNova) {
+  async function salvarNovaValidadeDoScanner(validadeNova, quantidadeSomar = null) {
     if (processandoLote) return;
 
     const validadeDigitada = formatarValidadeDigitada(validadeNova);
@@ -1159,6 +1213,13 @@ function alternarCardMedicamento(id) {
     const validadeFormatada = dataParaTextoBR(dataValida);
     const produto = loteScanner.produto || {};
     const nomeProduto = produto.nome || "Produto sem nome";
+    const qtdSomar = Math.max(
+      1,
+      Math.min(
+        999,
+        Number(quantidadeSomar || loteScanner?.quantidadeScanner || 1)
+      )
+    );
 
     try {
       setProcessandoLote(true);
@@ -1172,7 +1233,7 @@ function alternarCardMedicamento(id) {
       );
 
       if (loteMesmaValidade) {
-        const novaQuantidade = Number(loteMesmaValidade.quantidade || 1) + 1;
+        const novaQuantidade = Number(loteMesmaValidade.quantidade || 1) + qtdSomar;
 
         await db.medicamentos.update(loteMesmaValidade.id, {
           quantidade: novaQuantidade,
@@ -1187,7 +1248,7 @@ function alternarCardMedicamento(id) {
           tipo: "incrementado",
         });
 
-        addToast("Validade já existia. +1 nesse lote 📦", "ok");
+        addToast(`Validade já existia. +${qtdSomar} nesse lote 📦`, "ok");
       } else {
         const novoLote = {
           nome: nomeProduto,
@@ -1198,7 +1259,7 @@ function alternarCardMedicamento(id) {
           diasPreVencido: produto.diasPreVencido
             ? Number(produto.diasPreVencido)
             : null,
-          quantidade: 1,
+          quantidade: qtdSomar,
         };
 
         await db.medicamentos.add(novoLote);
@@ -1218,11 +1279,11 @@ function alternarCardMedicamento(id) {
           nome: nomeProduto,
           imagem: produto.imagem || null,
           validade: validadeFormatada,
-          quantidade: 1,
+          quantidade: qtdSomar,
           tipo: "novo-lote",
         });
 
-        addToast(`Novo lote criado • ${validadeFormatada} ✨`, "ok");
+        addToast(`Novo lote criado • ${validadeFormatada} • x${qtdSomar} ✨`, "ok");
       }
 
       setLoteScanner(null);
@@ -1368,6 +1429,7 @@ return (
         setQuantidade={setQuantidade}
         setAbrirModal={setAbrirModal}
         setFabOpen={setFabOpen}
+        onAlterarQuantidade={alterarQuantidadeMedicamento}
       />
     ))}
   </motion.div>
@@ -1679,6 +1741,7 @@ function CardMedicamentoSanfonado({
   setQuantidade,
   setAbrirModal,
   setFabOpen,
+  onAlterarQuantidade,
 }) {
   const status = calcularStatus(m);
   const datas = calcularDatas(m);
@@ -1688,37 +1751,41 @@ function CardMedicamentoSanfonado({
       titulo: "Vencido",
       descricao: "Retirar imediatamente",
       card:
-        "border-red-200 bg-red-50/90 dark:border-red-500/20 dark:bg-red-500/10",
+        "border-red-300 bg-red-50/95 dark:border-red-500/25 dark:bg-red-500/10",
       badge: "bg-red-600 text-white",
       icon: "bg-red-600 text-white",
       texto: "text-red-700 dark:text-red-300",
+      brilho: "shadow-red-500/10",
     },
     remover: {
       titulo: "Remover",
       descricao: "Hora de tirar da prateleira",
       card:
-        "border-orange-200 bg-orange-50/90 dark:border-orange-500/20 dark:bg-orange-500/10",
+        "border-orange-300 bg-orange-50/95 dark:border-orange-500/25 dark:bg-orange-500/10",
       badge: "bg-orange-600 text-white",
       icon: "bg-orange-600 text-white",
       texto: "text-orange-700 dark:text-orange-300",
+      brilho: "shadow-orange-500/10",
     },
     pre: {
       titulo: "Pré-vencimento",
       descricao: "Atenção para desconto/ação",
       card:
-        "border-amber-200 bg-amber-50/90 dark:border-amber-500/20 dark:bg-amber-500/10",
+        "border-amber-300 bg-amber-50/95 dark:border-amber-500/25 dark:bg-amber-500/10",
       badge: "bg-amber-500 text-white",
       icon: "bg-amber-500 text-white",
       texto: "text-amber-700 dark:text-amber-300",
+      brilho: "shadow-amber-500/10",
     },
     ok: {
       titulo: "Normal",
-      descricao: "Estoque em ordem",
+      descricao: "Estoque tranquilo",
       card:
         "border-emerald-200 bg-white/90 dark:border-emerald-500/20 dark:bg-gray-900/80",
       badge: "bg-emerald-600 text-white",
       icon: "bg-emerald-600 text-white",
       texto: "text-emerald-700 dark:text-emerald-300",
+      brilho: "shadow-emerald-500/10",
     },
   };
 
@@ -1759,14 +1826,27 @@ function CardMedicamentoSanfonado({
     };
   }
 
+  function editarMedicamento() {
+    setEditando(m);
+    setNome(m.nome || "");
+    setValidade(m.validade || "");
+    setImagem(m.imagem || null);
+    setDiasPre(m.diasPreVencido || "");
+    setDiasRemover(m.diasRemover || 7);
+    setQuantidade(Number(m.quantidade || 1));
+    setAbrirModal(true);
+    setFabOpen(false);
+  }
+
   const dataPrincipal = obterDataPrincipal();
+  const quantidadeAtual = Number(m.quantidade || 1);
 
   return (
     <motion.div
       layout
       className={`
-        overflow-hidden rounded-3xl border shadow-xl backdrop-blur-xl transition
-        ${config.card}
+        group overflow-hidden rounded-[2rem] border shadow-xl backdrop-blur-xl transition
+        ${config.card} ${config.brilho}
       `}
     >
       <button
@@ -1779,8 +1859,8 @@ function CardMedicamentoSanfonado({
       >
         <div
           className="
-            flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl
-            bg-gray-100 shadow-inner dark:bg-gray-800
+            relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl
+            bg-gray-100 shadow-inner ring-1 ring-black/5 dark:bg-gray-800 dark:ring-white/10
           "
         >
           {m.imagem ? (
@@ -1792,6 +1872,8 @@ function CardMedicamentoSanfonado({
           ) : (
             <Pill size={28} className={config.texto} />
           )}
+
+          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 transition group-hover:opacity-100" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -1806,7 +1888,7 @@ function CardMedicamentoSanfonado({
             </span>
 
             <span className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-black text-gray-600 dark:bg-white/10 dark:text-gray-300">
-              x{Number(m.quantidade || 1)}
+              x{quantidadeAtual}
             </span>
           </div>
 
@@ -1815,7 +1897,7 @@ function CardMedicamentoSanfonado({
           </p>
 
           <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
-            {dataPrincipal.label}:{" "}
+            {dataPrincipal.label}: {" "}
             <strong className={config.texto}>{dataPrincipal.valor}</strong>
           </p>
 
@@ -1856,7 +1938,7 @@ function CardMedicamentoSanfonado({
             transition={{ duration: 0.22 }}
             className="overflow-hidden"
           >
-            <div className="border-t border-black/5 p-3 pt-0 dark:border-white/10 sm:p-4 sm:pt-0">
+            <div className="border-t border-black/5 p-3 dark:border-white/10 sm:p-4">
               <div className="mb-3 grid grid-cols-3 gap-2">
                 <MiniDataCard
                   label="Pré"
@@ -1865,7 +1947,9 @@ function CardMedicamentoSanfonado({
 
                 <MiniDataCard
                   label="Retirar"
-                  valor={datas.remover ? formatarData(datas.remover) : "Sem data"}
+                  valor={
+                    datas.remover ? formatarData(datas.remover) : "Sem data"
+                  }
                 />
 
                 <MiniDataCard
@@ -1876,24 +1960,103 @@ function CardMedicamentoSanfonado({
                 />
               </div>
 
-              <div className="rounded-3xl bg-white/70 p-2 shadow-inner dark:bg-black/10">
-                <CardMedicamento
-                  m={m}
-                  calcularStatus={calcularStatus}
-                  calcularDatas={calcularDatas}
-                  formatarData={formatarData}
-                  setPreview={setPreview}
-                  setConfirmar={setConfirmar}
-                  setEditando={setEditando}
-                  setNome={setNome}
-                  setValidade={setValidade}
-                  setImagem={setImagem}
-                  setDiasPre={setDiasPre}
-                  setDiasRemover={setDiasRemover}
-                  setQuantidade={setQuantidade}
-                  setAbrirModal={setAbrirModal}
-                  setFabOpen={setFabOpen}
-                />
+              <LinhaTempoMedicamento
+                datas={datas}
+                status={status}
+                formatarData={formatarData}
+              />
+
+              <div className="mt-3 rounded-3xl border border-black/5 bg-white/70 p-3 shadow-inner dark:border-white/10 dark:bg-black/10">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm font-black text-gray-950 dark:text-white">
+                      Controle rápido de quantidade
+                    </p>
+
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Ajuste sem abrir edição. Perfeito para reposição relâmpago.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onAlterarQuantidade?.(m.id, -1)}
+                      className="
+                        flex h-11 w-11 items-center justify-center rounded-2xl
+                        bg-gray-200 text-gray-700 transition active:scale-95
+                        dark:bg-white/10 dark:text-gray-200
+                      "
+                    >
+                      <Minus size={18} />
+                    </button>
+
+                    <div
+                      className="
+                        flex h-11 min-w-20 items-center justify-center rounded-2xl
+                        bg-gray-950 px-4 text-lg font-black text-white shadow-lg
+                        dark:bg-white dark:text-gray-950
+                      "
+                    >
+                      x{quantidadeAtual}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => onAlterarQuantidade?.(m.id, 1)}
+                      className="
+                        flex h-11 w-11 items-center justify-center rounded-2xl
+                        bg-emerald-700 text-white shadow-lg shadow-emerald-700/20
+                        transition active:scale-95
+                      "
+                    >
+                      <Plus size={18} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => m.imagem && setPreview(m.imagem)}
+                  disabled={!m.imagem}
+                  className="
+                    flex h-12 items-center justify-center gap-2 rounded-2xl
+                    bg-gray-800 text-sm font-black text-white shadow-lg transition active:scale-95
+                    disabled:cursor-not-allowed disabled:opacity-45
+                    dark:bg-white/10
+                  "
+                >
+                  <Eye size={17} />
+                  Ver
+                </button>
+
+                <button
+                  type="button"
+                  onClick={editarMedicamento}
+                  className="
+                    flex h-12 items-center justify-center gap-2 rounded-2xl
+                    bg-blue-600 text-sm font-black text-white shadow-lg shadow-blue-600/20
+                    transition active:scale-95
+                  "
+                >
+                  <Pencil size={17} />
+                  Editar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setConfirmar(m)}
+                  className="
+                    flex h-12 items-center justify-center gap-2 rounded-2xl
+                    bg-red-600 text-sm font-black text-white shadow-lg shadow-red-600/20
+                    transition active:scale-95
+                  "
+                >
+                  <Trash2 size={17} />
+                  Excluir
+                </button>
               </div>
             </div>
           </motion.div>
@@ -1917,6 +2080,168 @@ function MiniDataCard({ label, valor }) {
   );
 }
 
+function calcularDiasLinha(data) {
+  if (!data) return null;
+
+  const dataFinal = data instanceof Date ? new Date(data) : new Date(data);
+
+  if (Number.isNaN(dataFinal.getTime())) return null;
+
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  dataFinal.setHours(0, 0, 0, 0);
+
+  return Math.ceil((dataFinal - hoje) / (1000 * 60 * 60 * 24));
+}
+
+function textoDiasLinha(dias) {
+  if (dias === null) return "Sem cálculo";
+  if (dias === 0) return "Hoje";
+  if (dias === 1) return "Amanhã";
+  if (dias < 0) return `Há ${Math.abs(dias)} dias`;
+
+  return `Em ${dias} dias`;
+}
+
+function LinhaTempoMedicamento({ datas, status, formatarData }) {
+  const etapas = [
+    {
+      id: "pre",
+      icon: Clock3,
+      titulo: "Pré-vencimento",
+      descricao: datas.pre
+        ? "Começa o alerta de atenção"
+        : "Sem pré-vencimento configurado",
+      data: datas.pre,
+      ativo: status === "pre",
+      corIcone: datas.pre
+        ? "bg-amber-500 text-white"
+        : "bg-gray-300 text-gray-700 dark:bg-white/10 dark:text-gray-300",
+      corBadge: datas.pre
+        ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+        : "bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400",
+      linha: "bg-amber-400",
+    },
+    {
+      id: "remover",
+      icon: Trash2,
+      titulo: "Retirar da prateleira",
+      descricao: "Data limite para remover do estoque exposto",
+      data: datas.remover,
+      ativo: status === "remover",
+      corIcone: "bg-red-600 text-white",
+      corBadge: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+      linha: "bg-red-500",
+    },
+    {
+      id: "validade",
+      icon: CalendarDays,
+      titulo: "Validade final",
+      descricao: "Último dia informado para o lote",
+      data: datas.validade,
+      ativo: status === "vencido",
+      corIcone:
+        status === "vencido"
+          ? "bg-red-600 text-white"
+          : "bg-emerald-700 text-white",
+      corBadge:
+        status === "vencido"
+          ? "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300"
+          : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+      linha: status === "vencido" ? "bg-red-500" : "bg-emerald-500",
+    },
+  ];
+
+  return (
+    <div
+      className="
+        mt-3 overflow-hidden rounded-3xl border border-emerald-200/80
+        bg-gradient-to-br from-emerald-950/[0.04] via-white/80 to-emerald-50/80
+        p-4 shadow-inner
+        dark:border-emerald-500/20 dark:from-emerald-500/10 dark:via-slate-950/40 dark:to-slate-950/70
+      "
+    >
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-base font-black text-gray-950 dark:text-white">
+            Linha do tempo
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Datas importantes deste lote
+          </p>
+        </div>
+
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20">
+          <CalendarDays size={21} />
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {etapas.map((etapa, index) => {
+          const Icon = etapa.icon;
+          const dias = calcularDiasLinha(etapa.data);
+          const semData = !etapa.data;
+
+          return (
+            <div key={etapa.id} className="relative flex gap-3">
+              {index < etapas.length - 1 && (
+                <div className="absolute left-[21px] top-11 h-[calc(100%+0.75rem)] w-0.5 rounded-full bg-gray-200 dark:bg-white/10" />
+              )}
+
+              <div
+                className={`
+                  relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-lg
+                  ${etapa.corIcone}
+                  ${etapa.ativo ? "ring-4 ring-white/70 dark:ring-white/10" : ""}
+                `}
+              >
+                <Icon size={19} />
+              </div>
+
+              <div
+                className={`
+                  min-w-0 flex-1 rounded-2xl border p-3
+                  ${
+                    etapa.ativo
+                      ? "border-emerald-300 bg-white shadow-md dark:border-emerald-500/25 dark:bg-white/10"
+                      : "border-transparent bg-white/70 dark:bg-black/10"
+                  }
+                `}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-black text-gray-950 dark:text-white">
+                      {etapa.titulo}
+                    </p>
+
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                      {etapa.descricao}
+                    </p>
+
+                    <p className="mt-1 text-sm font-black text-gray-900 dark:text-gray-100">
+                      {semData ? "Sem data" : formatarData(etapa.data)}
+                    </p>
+                  </div>
+
+                  <span
+                    className={`
+                      shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black
+                      ${etapa.corBadge}
+                    `}
+                  >
+                    {textoDiasLinha(dias)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // =============================
 // 🧪 MODAL LOTE SCANNER
 // =============================
@@ -1931,9 +2256,35 @@ function ModalLoteScanner({
   onNovaValidade,
 }) {
   const [validadeRapida, setValidadeRapida] = useState("");
+  const [quantidadeSomar, setQuantidadeSomar] = useState(
+    Math.max(1, Number(dados?.quantidadeScanner || 1))
+  );
 
   const produto = dados?.produto || {};
   const lotes = Array.isArray(dados?.lotes) ? dados.lotes : [];
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("app-overlay-change", {
+        detail: { open: true },
+      })
+    );
+
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent("app-overlay-change", {
+          detail: { open: false },
+        })
+      );
+    };
+  }, []);
+
+  function alterarQuantidade(delta) {
+    setQuantidadeSomar((prev) => {
+      const atual = Number(prev || 1);
+      return Math.max(1, Math.min(999, atual + delta));
+    });
+  }
 
   function parseDataLocal(valor) {
     if (!valor) return null;
@@ -2008,6 +2359,16 @@ function ModalLoteScanner({
     return `Em ${dias} dias`;
   }
 
+  function getStatusLote(valor) {
+    const dias = calcularDiasAte(valor);
+
+    if (dias === null) return "neutro";
+    if (dias < 0) return "vencido";
+    if (dias <= 30) return "alerta";
+
+    return "ok";
+  }
+
   const lotesOrdenados = [...lotes].sort((a, b) => {
     const dataA = parseDataLocal(a.validade);
     const dataB = parseDataLocal(b.validade);
@@ -2020,6 +2381,11 @@ function ModalLoteScanner({
   });
 
   const loteMaisProximo = lotesOrdenados[0] || null;
+
+  const totalUnidades = lotesOrdenados.reduce(
+    (total, lote) => total + Number(lote.quantidade || 1),
+    0
+  );
 
   function handleValidade(e) {
     const formatada = formatarValidadeDigitada(e.target.value);
@@ -2035,22 +2401,32 @@ function ModalLoteScanner({
     const validadeCompleta = digitos.length === 8;
 
     if (validadeMesAno || validadeCompleta) {
-      onNovaValidade(formatada);
+      onNovaValidade(formatada, quantidadeSomar);
       setValidadeRapida("");
     }
   }
 
+  function fechar() {
+    window.dispatchEvent(
+      new CustomEvent("app-overlay-change", {
+        detail: { open: false },
+      })
+    );
+
+    onFechar();
+  }
+
   return (
     <motion.div
-      onClick={onFechar}
+      onClick={fechar}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="
-        fixed inset-0 z-[100000] flex items-end justify-center
-        bg-black/65 px-3
-        pb-[calc(env(safe-area-inset-bottom)+0.75rem)]
-        pt-[calc(env(safe-area-inset-top)+0.75rem)]
+        fixed inset-0 z-[2147483647] flex h-[100dvh] items-end justify-center
+        overflow-hidden bg-slate-950/80 px-3
+        pb-[calc(env(safe-area-inset-bottom)+0.85rem)]
+        pt-[calc(env(safe-area-inset-top)+0.85rem)]
         backdrop-blur-md
         sm:items-center sm:p-4
       "
@@ -2062,17 +2438,19 @@ function ModalLoteScanner({
         exit={{ y: 34, opacity: 0, scale: 0.96 }}
         transition={{ duration: 0.22 }}
         className="
-          relative flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)]
-          w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem]
-          border border-gray-200 bg-white text-gray-950 shadow-2xl
-          dark:border-white/10 dark:bg-gray-950 dark:text-white
-          sm:rounded-[2rem] sm:max-h-[92vh]
+          relative flex h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.7rem)]
+          w-full max-w-2xl flex-col overflow-hidden rounded-[2rem]
+          border border-white/10 bg-white text-gray-950 shadow-2xl
+          dark:bg-gray-950 dark:text-white
+          sm:h-[92dvh]
         "
       >
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-emerald-500/10 to-transparent" />
+
         {/* HEADER */}
-        <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-emerald-700 via-emerald-800 to-slate-950 p-5 text-white">
-          <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-white/10" />
-          <div className="absolute -bottom-14 left-8 h-32 w-32 rounded-full bg-emerald-300/10" />
+        <div className="relative shrink-0 overflow-hidden border-b border-white/10 bg-gradient-to-br from-emerald-700 via-emerald-900 to-slate-950 p-5 text-white">
+          <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-white/10" />
+          <div className="absolute -bottom-20 left-8 h-44 w-44 rounded-full bg-emerald-300/10" />
 
           <div className="relative mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/30 sm:hidden" />
 
@@ -2090,7 +2468,8 @@ function ModalLoteScanner({
             </div>
 
             <div className="min-w-0 flex-1">
-              <span className="mb-1 inline-flex rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-50">
+              <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-50">
+                <Sparkles size={12} />
                 Produto reconhecido
               </span>
 
@@ -2100,35 +2479,32 @@ function ModalLoteScanner({
 
               <p className="mt-1 flex items-center gap-1 truncate text-xs text-emerald-100">
                 <Barcode size={14} />
-                {dados.codigo}
+                {dados?.codigo}
               </p>
             </div>
 
             <button
               type="button"
-              onClick={onFechar}
+              onClick={fechar}
               className="
                 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
-                bg-white/15 text-white transition active:scale-95
+                bg-white/15 text-white transition active:scale-95 hover:bg-white/20
               "
             >
               <X size={21} />
             </button>
           </div>
 
-          <div className="relative mt-5 grid grid-cols-3 gap-2">
+          <div className="relative mt-5 grid grid-cols-4 gap-2">
             <MiniLoteInfo label="Lotes" valor={lotes.length} />
-            <MiniLoteInfo
-              label="Unid."
-              valor={lotes.reduce(
-                (total, lote) => total + Number(lote.quantidade || 1),
-                0
-              )}
-            />
+            <MiniLoteInfo label="Unid." valor={totalUnidades} />
+            <MiniLoteInfo label="Somar" valor={`x${quantidadeSomar}`} />
             <MiniLoteInfo
               label="Próximo"
               valor={
-                loteMaisProximo ? formatarData(loteMaisProximo.validade) : "Novo"
+                loteMaisProximo
+                  ? formatarData(loteMaisProximo.validade)
+                  : "Novo"
               }
             />
           </div>
@@ -2136,6 +2512,92 @@ function ModalLoteScanner({
 
         {/* BODY */}
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-5">
+          <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-black text-emerald-800 dark:text-emerald-300">
+                  Quantidade para somar
+                </p>
+
+                <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                  Ajuste uma vez e toque no lote certo.
+                </p>
+              </div>
+
+              <span className="rounded-full bg-emerald-700 px-3 py-1 text-xs font-black text-white">
+                +{quantidadeSomar}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => alterarQuantidade(-1)}
+                disabled={processando}
+                className="
+                  flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
+                  bg-white text-emerald-700 shadow-sm transition active:scale-95
+                  disabled:opacity-60 dark:bg-gray-950 dark:text-emerald-300
+                "
+              >
+                <Minus size={19} />
+              </button>
+
+              <input
+                value={quantidadeSomar}
+                onChange={(e) => {
+                  const valor = Number(e.target.value.replace(/\D/g, ""));
+                  setQuantidadeSomar(Math.max(1, Math.min(999, valor || 1)));
+                }}
+                inputMode="numeric"
+                disabled={processando}
+                className="
+                  h-12 min-w-0 flex-1 rounded-2xl border border-emerald-200
+                  bg-white px-4 text-center text-xl font-black text-gray-950
+                  outline-none transition
+                  focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20
+                  disabled:opacity-60
+                  dark:border-emerald-500/20 dark:bg-gray-950 dark:text-white
+                "
+              />
+
+              <button
+                type="button"
+                onClick={() => alterarQuantidade(1)}
+                disabled={processando}
+                className="
+                  flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
+                  bg-emerald-700 text-white shadow-lg shadow-emerald-700/20
+                  transition active:scale-95 disabled:opacity-60
+                "
+              >
+                <Plus size={19} />
+              </button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {[1, 5, 10, 20, 50].map((qtd) => (
+                <button
+                  key={qtd}
+                  type="button"
+                  disabled={processando}
+                  onClick={() => setQuantidadeSomar(qtd)}
+                  className={`
+                    rounded-full px-3 py-1 text-xs font-black transition active:scale-95
+                    disabled:opacity-60
+                    ${
+                      quantidadeSomar === qtd
+                        ? "bg-emerald-700 text-white"
+                        : "bg-white text-gray-600 dark:bg-gray-950 dark:text-gray-300"
+                    }
+                  `}
+                >
+                  x{qtd}
+                </button>
+              ))}
+            </div>
+          </section>
+
           {lotesOrdenados.length > 0 ? (
             <section>
               <div className="mb-3 flex items-center justify-between gap-3">
@@ -2146,27 +2608,22 @@ function ModalLoteScanner({
                   </p>
 
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Toque na validade correta para somar +1 unidade.
+                    Toque na validade correta para somar +{quantidadeSomar}.
                   </p>
                 </div>
-
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                  +1
-                </span>
               </div>
 
               <div className="space-y-3">
                 {lotesOrdenados.map((lote, index) => {
                   const destaque = index === 0;
-                  const dias = calcularDiasAte(lote.validade);
-                  const vencido = dias !== null && dias < 0;
+                  const status = getStatusLote(lote.validade);
 
                   return (
                     <button
                       key={lote.id || `${lote.validade}-${index}`}
                       type="button"
                       disabled={processando}
-                      onClick={() => onSomarLote(lote)}
+                      onClick={() => onSomarLote(lote, quantidadeSomar)}
                       className={`
                         group flex w-full items-center gap-3 rounded-3xl border p-3 text-left
                         shadow-sm transition active:scale-[0.985] disabled:opacity-60
@@ -2181,8 +2638,10 @@ function ModalLoteScanner({
                         className={`
                           flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg
                           ${
-                            vencido
+                            status === "vencido"
                               ? "bg-red-600"
+                              : status === "alerta"
+                              ? "bg-yellow-500"
                               : destaque
                               ? "bg-emerald-700"
                               : "bg-slate-700 dark:bg-slate-600"
@@ -2204,9 +2663,15 @@ function ModalLoteScanner({
                             </span>
                           )}
 
-                          {vencido && (
+                          {status === "vencido" && (
                             <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black uppercase text-white">
                               vencida
+                            </span>
+                          )}
+
+                          {status === "alerta" && (
+                            <span className="rounded-full bg-yellow-500 px-2 py-0.5 text-[10px] font-black uppercase text-white">
+                              atenção
                             </span>
                           )}
                         </div>
@@ -2223,7 +2688,7 @@ function ModalLoteScanner({
                         ) : (
                           <>
                             <Plus size={18} />
-                            1
+                            {quantidadeSomar}
                           </>
                         )}
                       </div>
@@ -2241,16 +2706,16 @@ function ModalLoteScanner({
 
                 <div>
                   <p className="font-black">Produto aprendido na base</p>
+
                   <p className="mt-1 text-sm">
                     Ainda não há lote no estoque. Informe a primeira validade
-                    para criar o card.
+                    para criar o card com x{quantidadeSomar}.
                   </p>
                 </div>
               </div>
             </section>
           )}
 
-          {/* NOVA VALIDADE */}
           <section className="rounded-3xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-500/20 dark:bg-blue-500/10">
             <div className="mb-3 flex items-start gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
@@ -2271,7 +2736,8 @@ function ModalLoteScanner({
             <div className="rounded-2xl bg-white/80 p-3 dark:bg-gray-950/40">
               <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">
                 Digite <strong>0427</strong> para 04/2027 ou{" "}
-                <strong>15052027</strong> para 15/05/2027.
+                <strong>15052027</strong> para 15/05/2027. A quantidade criada
+                será x{quantidadeSomar}.
               </p>
 
               <input
@@ -2283,7 +2749,7 @@ function ModalLoteScanner({
                 placeholder="mmaa ou ddmmaaaa"
                 disabled={processando}
                 className="
-                  h-13 h-[52px] w-full rounded-2xl border border-blue-200 bg-white px-4
+                  h-[52px] w-full rounded-2xl border border-blue-200 bg-white px-4
                   text-center text-lg font-black text-gray-950 outline-none transition
                   placeholder:text-gray-400
                   focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20
@@ -2307,6 +2773,7 @@ function ModalLoteScanner({
                 size={19}
                 className="mt-0.5 shrink-0 text-emerald-600"
               />
+
               <p>
                 Mesmo código com validade diferente vira outro card. Validade
                 mês/ano usa o último dia do mês automaticamente.
@@ -2321,10 +2788,13 @@ function ModalLoteScanner({
 
 function MiniLoteInfo({ label, valor }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/15 p-2 text-center backdrop-blur-md">
-      <p className="truncate text-sm font-black">{valor}</p>
-      <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-100">
+    <div className="rounded-2xl border border-white/10 bg-white/15 p-2 text-center backdrop-blur-sm">
+      <p className="truncate text-[10px] font-black uppercase tracking-wide text-emerald-100/75">
         {label}
+      </p>
+
+      <p className="mt-1 truncate text-sm font-black text-white">
+        {valor}
       </p>
     </div>
   );
