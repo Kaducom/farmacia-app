@@ -51,138 +51,6 @@ function ModalMedicamento({
 }) {
   const [erros, setErros] = useState({});
 
-  // corrigir_modal_medicamento: trava segura do scroll
-  useEffect(() => {
-    function soltarTravasPerdidas() {
-      const main = document.querySelector("main");
-
-      if (main?.dataset?.modalMedicamentoLock === "true") {
-        main.style.overflow = "";
-        main.style.touchAction = "";
-        main.style.overscrollBehavior = "";
-        main.removeAttribute("data-modal-medicamento-lock");
-      }
-
-      if (document.body?.dataset?.modalMedicamentoLock === "true") {
-        document.body.style.overflow = "";
-        document.body.removeAttribute("data-modal-medicamento-lock");
-      }
-
-      if (document.documentElement?.dataset?.modalMedicamentoLock === "true") {
-        document.documentElement.style.overflow = "";
-        document.documentElement.removeAttribute("data-modal-medicamento-lock");
-      }
-    }
-
-    if (!abrirModal) {
-      window.dispatchEvent(
-        new CustomEvent("app-overlay-change", {
-          detail: {
-            open: false,
-          },
-        })
-      );
-
-      setTimeout(soltarTravasPerdidas, 80);
-      return;
-    }
-
-    window.dispatchEvent(
-      new CustomEvent("app-overlay-change", {
-        detail: {
-          open: true,
-        },
-      })
-    );
-
-    const main = document.querySelector("main");
-    const body = document.body;
-    const html = document.documentElement;
-
-    const scrollMain = main?.scrollTop || 0;
-
-    const anterior = {
-      bodyOverflow: body.style.overflow,
-      htmlOverflow: html.style.overflow,
-      mainOverflow: main?.style.overflow || "",
-      mainTouchAction: main?.style.touchAction || "",
-      mainOverscroll: main?.style.overscrollBehavior || "",
-    };
-
-    body.dataset.modalMedicamentoLock = "true";
-    html.dataset.modalMedicamentoLock = "true";
-
-    body.style.overflow = "hidden";
-    html.style.overflow = "hidden";
-
-    if (main) {
-      main.dataset.modalMedicamentoLock = "true";
-      main.style.overflow = "hidden";
-      main.style.touchAction = "none";
-      main.style.overscrollBehavior = "contain";
-    }
-
-    function bloquearScrollFundo(e) {
-      const areaModal = e.target?.closest?.("[data-modal-scroll='true']");
-
-      if (areaModal) {
-        return;
-      }
-
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    function fecharComEsc(e) {
-      if (e.key === "Escape") {
-        fecharModal();
-      }
-    }
-
-    document.addEventListener("wheel", bloquearScrollFundo, {
-      passive: false,
-      capture: true,
-    });
-
-    document.addEventListener("touchmove", bloquearScrollFundo, {
-      passive: false,
-      capture: true,
-    });
-
-    window.addEventListener("keydown", fecharComEsc);
-
-    return () => {
-      document.removeEventListener("wheel", bloquearScrollFundo, true);
-      document.removeEventListener("touchmove", bloquearScrollFundo, true);
-      window.removeEventListener("keydown", fecharComEsc);
-
-      body.style.overflow = anterior.bodyOverflow;
-      html.style.overflow = anterior.htmlOverflow;
-
-      body.removeAttribute("data-modal-medicamento-lock");
-      html.removeAttribute("data-modal-medicamento-lock");
-
-      if (main) {
-        main.style.overflow = anterior.mainOverflow;
-        main.style.touchAction = anterior.mainTouchAction;
-        main.style.overscrollBehavior = anterior.mainOverscroll;
-        main.scrollTop = scrollMain;
-        main.removeAttribute("data-modal-medicamento-lock");
-      }
-
-      window.dispatchEvent(
-        new CustomEvent("app-overlay-change", {
-          detail: {
-            open: false,
-          },
-        })
-      );
-
-      setTimeout(soltarTravasPerdidas, 120);
-    };
-  }, [abrirModal]);
-
-
   useEffect(() => {
     function liberarTravaPerdida() {
       const main = document.querySelector("main");
@@ -476,6 +344,7 @@ function ModalMedicamento({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={fecharModal}
+          onWheel={(e) => e.preventDefault()}
         >
           <motion.div
             data-modal-medicamento="true"
@@ -840,7 +709,7 @@ function ModalMedicamento({
             <div
               className="
                 relative z-20 shrink-0 border-t border-gray-200/80 bg-white/95
-                p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur-xl
+                p-4 backdrop-blur-xl
                 dark:border-white/10 dark:bg-gray-950/95
                 sm:p-5
               "
