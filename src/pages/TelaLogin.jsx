@@ -72,7 +72,7 @@ function TelaLogin() {
   const tituloModo = useMemo(() => {
     if (modo === "criar") return "Criar missão";
     if (modo === "visitante") return "Entrar em modo visitante";
-    return "Bem-vindo ao AVISAI";
+    return "Bem-vindo ao Avisai";
   }, [modo]);
 
   const textoModo = useMemo(() => {
@@ -227,7 +227,7 @@ function TelaLogin() {
                   "
                 >
                   <Rocket size={13} />
-                  AVISAI
+                  Avisai
                 </div>
 
                 <h1 className="text-3xl font-black tracking-tight">
@@ -531,7 +531,7 @@ function LogoAvisai() {
         >
           <img
             src="/icons/icon-512.png"
-            alt="AVISAI"
+            alt="Avisai"
             className="h-full w-full object-cover"
           />
         </div>
@@ -557,7 +557,7 @@ function LogoAvisai() {
       </motion.div>
 
       <div className="mt-3 text-center">
-        <p className="text-3xl font-black tracking-[0.18em]">AVISAI</p>
+        <p className="text-3xl font-black tracking-[0.18em]">Avisai</p>
         <p className="mt-1 text-[11px] font-black uppercase tracking-[0.24em] text-emerald-300">
           Inteligência em saúde
         </p>
@@ -626,7 +626,7 @@ function HeroLogin() {
               </p>
 
               <p className="mt-1 text-sm leading-6 text-emerald-100/75">
-                O AVISAI começa na farmácia, mas já nasce preparado para controlar qualquer produto por validade, setor e rotina.
+                O Avisai começa na farmácia, mas já nasce preparado para controlar qualquer produto por validade, setor e rotina.
               </p>
             </div>
           </div>
