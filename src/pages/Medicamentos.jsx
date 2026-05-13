@@ -4,38 +4,33 @@ import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import ToastStack from "../components/ToastStack";
 import Scanner from "../components/Scanner";
 import { motion, AnimatePresence } from "framer-motion";
+import CardProdutoSanfonado from "../components/produtos/CardProdutoSanfonado";
+import ModalLoteScanner from "../components/produtos/ModalLoteScanner";
+import {
+  filtrarProdutosPorEscopo,
+  obterEscopoProdutos,
+  obterSetorInicialFiltro,
+  obterSetoresParaFiltro,
+} from "../config/acessoProdutos";
 
 import {
-  AlertTriangle,
-  Barcode,
   CalendarDays,
-  CheckCircle2,
-  ChevronDown,
-  Clock3,
-  Eye,
   ImageIcon,
-  Loader2,
-  Minus,
-  PackageCheck,
   PackagePlus,
-  Pencil,
-  Pill,
   Plus,
-  ShieldCheck,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
 
-import BuscaMedicamentos from "../components/medicamentos/BuscaMedicamentos";
 import FabMedicamentos from "../components/medicamentos/FabMedicamentos";
 import ModalMedicamento from "../components/medicamentos/ModalMedicamento";
 import FundoBolhas from "../components/FundoBolhas";
 import { firestore } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import BuscaProdutos from "../components/produtos/BuscaProdutos";
 
 // =============================
-// 💊 COMPONENTE PRINCIPAL
+// 📦 COMPONENTE PRINCIPAL
 // =============================
 
 const COLECAO_PRODUTOS_GLOBAIS = "produtosCodigo";
@@ -110,12 +105,17 @@ async function compactarImagemParaFirestore(imagemBase64) {
 function Medicamentos() {
   const { usuarioAtual, isVisitante } = useAuth();
 
+  const escopoProdutos = obterEscopoProdutos(usuarioAtual);
+  const setoresFiltroProdutos = obterSetoresParaFiltro(usuarioAtual);
+  const setorInicialProdutos = obterSetorInicialFiltro(usuarioAtual);
+
   const [medicamentos, setMedicamentos] = useState([]);
 
   const [imagem, setImagem] = useState(null);
   const [abrirModal, setAbrirModal] = useState(false);
 
   const [nome, setNome] = useState("");
+  const [setor, setSetor] = useState("Medicamentos");
   const [validade, setValidade] = useState("");
   const [diasPre, setDiasPre] = useState("");
   const [diasRemover, setDiasRemover] = useState(7);
@@ -126,6 +126,8 @@ function Medicamentos() {
   const [preview, setPreview] = useState(null);
 
   const [busca, setBusca] = useState("");
+  const [ordenacao, setOrdenacao] = useState("validade-proxima");
+  const [setorFiltro, setSetorFiltro] = useState(setorInicialProdutos);
   const [toasts, setToasts] = useState([]);
 
   const [fabOpen, setFabOpen] = useState(false);
@@ -158,6 +160,23 @@ function Medicamentos() {
       Notification.requestPermission();
     }
   }, []);
+
+  useEffect(() => {
+  const setoresPermitidosFiltro = obterSetoresParaFiltro(usuarioAtual);
+  const setorInicial = obterSetorInicialFiltro(usuarioAtual);
+
+  setSetorFiltro((atual) => {
+    if (!setoresPermitidosFiltro.includes(atual)) {
+      return setorInicial;
+    }
+
+    if (setoresPermitidosFiltro.includes("Todos") && atual === "Medicamentos") {
+      return "Todos";
+    }
+
+    return atual;
+  });
+}, [usuarioAtual]);
 
   useEffect(() => {
   const overlayAberto =
@@ -233,6 +252,7 @@ function Medicamentos() {
         ...m,
         quantidade: Number(m.quantidade || 1),
         codigo: m.codigo ? String(m.codigo) : null,
+        setor: m.setor || "Medicamentos",
       }));
 
       normalizados.sort((a, b) => {
@@ -248,8 +268,8 @@ function Medicamentos() {
 
       setMedicamentos(normalizados);
     } catch (err) {
-      console.error("Erro ao carregar medicamentos:", err);
-      addToast("Erro ao carregar medicamentos 😕", "erro");
+      console.error("Erro ao carregar produtos:", err);
+      addToast("Erro ao carregar produtos 😕", "erro");
     }
   }
 
@@ -286,6 +306,7 @@ function Medicamentos() {
     setDiasPre("");
     setDiasRemover(7);
     setQuantidade(1);
+    setSetor("Medicamentos");
     setEditando(null);
     setCodigoScanner("");
   }
@@ -346,6 +367,7 @@ function Medicamentos() {
     }
 
     const codigoFinal = codigoScanner || editando?.codigo || null;
+    const setorFinal = setor || "Medicamentos";
     const validadeFormatada = dataParaTextoBR(dataValida);
     const validadeComparacao = normalizarValidadeParaComparar(validadeFormatada);
 
@@ -354,14 +376,20 @@ function Medicamentos() {
 
       const mesmaValidade =
         normalizarValidadeParaComparar(m.validade) === validadeComparacao;
+      const mesmoSetor = String(m.setor || "Medicamentos") === setorFinal;
 
       if (codigoFinal) {
-        return String(m.codigo || "") === String(codigoFinal) && mesmaValidade;
+        return (
+          String(m.codigo || "") === String(codigoFinal) &&
+          mesmaValidade &&
+          mesmoSetor
+        );
       }
 
       return (
         String(m.nome || "").toLowerCase() === nomeLimpo.toLowerCase() &&
-        mesmaValidade
+        mesmaValidade &&
+        mesmoSetor
       );
     });
 
@@ -370,6 +398,7 @@ function Medicamentos() {
       validade: validadeFormatada,
       imagem,
       codigo: codigoFinal ? String(codigoFinal) : null,
+      setor: setorFinal,
       diasRemover: Number(diasRemover) || 7,
       diasPreVencido: diasPre ? Number(diasPre) : null,
       quantidade: qtd,
@@ -381,6 +410,7 @@ function Medicamentos() {
           codigo: String(codigoFinal),
           nome: nomeLimpo,
           imagem,
+          setor: setorFinal,
           diasRemover: Number(diasRemover) || 7,
           diasPreVencido: diasPre ? Number(diasPre) : null,
         });
@@ -388,7 +418,7 @@ function Medicamentos() {
 
       if (editando) {
         await db.medicamentos.update(editando.id, dados);
-        addToast("Medicamento atualizado ✨");
+        addToast("Produto atualizado ✨");
       } else if (existente) {
         await db.medicamentos.update(existente.id, {
           quantidade: Number(existente.quantidade || 1) + qtd,
@@ -397,7 +427,7 @@ function Medicamentos() {
         addToast("Quantidade atualizada nesse lote 📦");
       } else {
         await db.medicamentos.add(dados);
-        addToast("Medicamento salvo 💊");
+        addToast("Produto salvo 📦");
       }
 
       limpar();
@@ -406,8 +436,8 @@ function Medicamentos() {
 
       await carregar();
     } catch (err) {
-      console.error("Erro ao salvar medicamento:", err);
-      addToast("Erro ao salvar medicamento 😕", "erro");
+      console.error("Erro ao salvar produto:", err);
+      addToast("Erro ao salvar produto 😕", "erro");
     }
   }
 
@@ -420,6 +450,7 @@ function Medicamentos() {
       codigo,
       nome: String(produto?.nome || "").trim(),
       imagem: produto?.imagem || null,
+      setor: produto?.setor || "Medicamentos",
       diasRemover: Number(produto?.diasRemover || 7),
       diasPreVencido: produto?.diasPreVencido
         ? Number(produto.diasPreVencido)
@@ -443,6 +474,7 @@ function Medicamentos() {
       await db.produtosCodigo.update(existente.id, {
         nome: dados.nome || existente.nome,
         imagem: dados.imagem || existente.imagem || null,
+        setor: dados.setor || existente.setor || "Medicamentos",
         diasRemover: dados.diasRemover || existente.diasRemover || 7,
         diasPreVencido:
           dados.diasPreVencido ?? existente.diasPreVencido ?? null,
@@ -483,6 +515,7 @@ function Medicamentos() {
         codigo: String(dados.codigo || codigoTexto),
         nome: dados.nome || "",
         imagem: dados.imagem || null,
+        setor: dados.setor || "Medicamentos",
         diasRemover: Number(dados.diasRemover || 7),
         diasPreVencido: dados.diasPreVencido
           ? Number(dados.diasPreVencido)
@@ -532,6 +565,7 @@ function Medicamentos() {
       const payload = {
         codigo: dados.codigo,
         nome: dados.nome,
+        setor: dados.setor || "Medicamentos",
         diasRemover: dados.diasRemover || 7,
         diasPreVencido: dados.diasPreVencido ?? null,
         atualizadoEm: serverTimestamp(),
@@ -594,12 +628,12 @@ function Medicamentos() {
       await db.medicamentos.delete(id);
 
       setConfirmar(null);
-      addToast("Medicamento excluído 🗑️");
+      addToast("Produto excluído 🗑️");
 
       await carregar();
     } catch (err) {
-      console.error("Erro ao remover medicamento:", err);
-      addToast("Erro ao excluir medicamento 😕", "erro");
+      console.error("Erro ao remover produto:", err);
+      addToast("Erro ao excluir produto 😕", "erro");
     }
   }
 
@@ -922,15 +956,106 @@ function alternarCardMedicamento(id) {
   }));
 }
 
+function prepararEdicaoProduto(produto) {
+  setEditando(produto);
+  setNome(produto.nome || "");
+  setValidade(produto.validade || "");
+  setImagem(produto.imagem || null);
+  setDiasPre(produto.diasPreVencido || "");
+  setDiasRemover(produto.diasRemover || 7);
+  setQuantidade(Number(produto.quantidade || 1));
+
+  if (typeof setSetor === "function") {
+    setSetor(produto.setor || "Medicamentos");
+  }
+
+  setAbrirModal(true);
+  setFabOpen(false);
+}
+
   // =============================
-  // 🔍 LISTA / FILTRO
+  // 🔍 LISTA / FILTRO / ORDENAÇÃO
   // =============================
 
-  const lista = medicamentos.filter((m) =>
-    `${m.nome || ""} ${m.validade || ""} ${m.codigo || ""}`
+  const buscaNormalizada = busca.trim().toLowerCase();
+
+  function obterTempoValidade(item) {
+    const data = parseDataSegura(item.validade);
+
+    if (!data || Number.isNaN(data.getTime())) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return data.getTime();
+  }
+
+  function compararNome(a, b) {
+    return String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", {
+      sensitivity: "base",
+      numeric: true,
+    });
+  }
+
+  function compararCodigo(a, b) {
+    return String(a.codigo || "").localeCompare(String(b.codigo || ""), "pt-BR", {
+      sensitivity: "base",
+      numeric: true,
+    });
+  }
+
+const produtosNoEscopo = filtrarProdutosPorEscopo(
+  medicamentos,
+  usuarioAtual
+);
+
+const lista = [...produtosNoEscopo]
+  .filter((m) => {
+    const setorProduto = m.setor || "Medicamentos";
+
+    const combinaBusca = `${m.nome || ""} ${m.validade || ""} ${
+      m.codigo || ""
+    } ${setorProduto}`
       .toLowerCase()
-      .includes(busca.toLowerCase())
-  );
+      .includes(buscaNormalizada);
+
+    const combinaSetor =
+      !escopoProdutos.mostrarFiltroSetor ||
+      setorFiltro === "Todos" ||
+      setorProduto === setorFiltro;
+
+    return combinaBusca && combinaSetor;
+  })
+    .sort((a, b) => {
+      if (ordenacao === "validade-proxima") {
+        return obterTempoValidade(a) - obterTempoValidade(b);
+      }
+
+      if (ordenacao === "validade-distante") {
+        return obterTempoValidade(b) - obterTempoValidade(a);
+      }
+
+      if (ordenacao === "nome-az") {
+        return compararNome(a, b);
+      }
+
+      if (ordenacao === "nome-za") {
+        return compararNome(b, a);
+      }
+
+      if (ordenacao === "quantidade-maior") {
+        return Number(b.quantidade || 0) - Number(a.quantidade || 0);
+      }
+
+      if (ordenacao === "quantidade-menor") {
+        return Number(a.quantidade || 0) - Number(b.quantidade || 0);
+      }
+
+      if (ordenacao === "codigo") {
+        return compararCodigo(a, b);
+      }
+
+      return 0;
+    });
 
   // =============================
   // 📷 FLUXO DO SCANNER
@@ -965,9 +1090,10 @@ function alternarCardMedicamento(id) {
           item.validade
         )}-${agora}`,
         codigo: item.codigo ? String(item.codigo) : "",
-        nome: item.nome || "Medicamento",
+        nome: item.nome || "Produto",
         imagem: item.imagem || null,
         validade: item.validade || "",
+        setor: item.setor || "Medicamentos",
         quantidade: Number(item.quantidade || 1),
         tipo: item.tipo || "incrementado",
         atualizadoEm: agora,
@@ -1041,6 +1167,7 @@ function alternarCardMedicamento(id) {
       .map((lote) => ({
         ...lote,
         codigo: lote.codigo ? String(lote.codigo) : null,
+        setor: lote.setor || "Medicamentos",
         quantidade: Number(lote.quantidade || 1),
       }))
       .sort((a, b) => {
@@ -1086,6 +1213,7 @@ function alternarCardMedicamento(id) {
           codigo: codigoLimpo,
           nome: produtoLocal?.nome || lotes[0]?.nome || "",
           imagem: produtoLocal?.imagem || lotes[0]?.imagem || null,
+          setor: produtoLocal?.setor || lotes[0]?.setor || "Medicamentos",
           diasRemover: produtoLocal?.diasRemover || lotes[0]?.diasRemover || 7,
           diasPreVencido:
             produtoLocal?.diasPreVencido || lotes[0]?.diasPreVencido || "",
@@ -1128,6 +1256,7 @@ function alternarCardMedicamento(id) {
       setFabOpen(false);
       setNome("");
       setImagem(null);
+      setSetor("Medicamentos");
       setDiasRemover(7);
       setDiasPre(2);
 
@@ -1178,6 +1307,7 @@ function alternarCardMedicamento(id) {
         nome: lote.nome,
         imagem: lote.imagem,
         validade: lote.validade,
+        setor: lote.setor || "Medicamentos",
         quantidade: novaQuantidade,
         tipo: "incrementado",
       });
@@ -1244,6 +1374,7 @@ function alternarCardMedicamento(id) {
           nome: loteMesmaValidade.nome,
           imagem: loteMesmaValidade.imagem,
           validade: loteMesmaValidade.validade,
+          setor: loteMesmaValidade.setor || produto.setor || "Medicamentos",
           quantidade: novaQuantidade,
           tipo: "incrementado",
         });
@@ -1255,6 +1386,7 @@ function alternarCardMedicamento(id) {
           validade: validadeFormatada,
           imagem: produto.imagem || null,
           codigo: String(loteScanner.codigo),
+          setor: produto.setor || "Medicamentos",
           diasRemover: Number(produto.diasRemover || 7),
           diasPreVencido: produto.diasPreVencido
             ? Number(produto.diasPreVencido)
@@ -1268,6 +1400,7 @@ function alternarCardMedicamento(id) {
           codigo: String(loteScanner.codigo),
           nome: nomeProduto,
           imagem: produto.imagem || null,
+          setor: produto.setor || "Medicamentos",
           diasRemover: Number(produto.diasRemover || 7),
           diasPreVencido: produto.diasPreVencido
             ? Number(produto.diasPreVencido)
@@ -1279,6 +1412,7 @@ function alternarCardMedicamento(id) {
           nome: nomeProduto,
           imagem: produto.imagem || null,
           validade: validadeFormatada,
+          setor: produto.setor || "Medicamentos",
           quantidade: qtdSomar,
           tipo: "novo-lote",
         });
@@ -1316,6 +1450,7 @@ function alternarCardMedicamento(id) {
     try {
       await db.medicamentos.add({
         nome: inputValidadeRapida.nome,
+        setor: inputValidadeRapida.setor || "Medicamentos",
         validade: dataParaTextoBR(dataValida),
         quantidade: 1,
         diasRemover: 7,
@@ -1347,10 +1482,17 @@ return (
       "
     >
       {/* 🔍 BUSCA */}
-      <BuscaMedicamentos
+      <BuscaProdutos
         busca={busca}
         setBusca={setBusca}
+        ordenacao={ordenacao}
+        setOrdenacao={setOrdenacao}
+        setorFiltro={setorFiltro}
+        setSetorFiltro={setSetorFiltro}
+        setores={setoresFiltroProdutos}
+        mostrarFiltroSetor={escopoProdutos.mostrarFiltroSetor}
         quantidadeFiltrada={lista.length}
+        quantidadeTotal={produtosNoEscopo.length}
       />
 
       {/* EMPTY STATE */}
@@ -1376,11 +1518,10 @@ return (
               <PackagePlus size={32} />
             </div>
 
-            <h2 className="text-xl font-bold">Nenhum medicamento encontrado</h2>
+            <h2 className="text-xl font-bold">Nenhum produto encontrado</h2>
 
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              Cadastre seu primeiro medicamento e deixe sua farmácia digital em
-              ordem.
+              Cadastre seu primeiro produto.
             </p>
 
             <button
@@ -1398,7 +1539,7 @@ return (
               "
             >
               <Plus size={18} />
-              Adicionar medicamento
+              Adicionar produto
             </button>
           </motion.div>
         )}
@@ -1406,29 +1547,22 @@ return (
 
 {/* LISTA */}
 {lista.length > 0 && (
-  <motion.div layout className="mt-4 space-y-3">
-    {lista.map((m) => (
-      <CardMedicamentoSanfonado
-        key={m.id}
-        m={m}
+  <motion.div layout className="relative z-0 mt-4 space-y-3">
+    {lista.map((produto) => (
+      <CardProdutoSanfonado
+        key={produto.id}
+        produto={produto}
         aberto={
-          cardsAbertos[String(m.id)] ?? deveAbrirAutomaticamente(m)
+          cardsAbertos[String(produto.id)] ??
+          deveAbrirAutomaticamente(produto)
         }
-        onToggle={() => alternarCardMedicamento(m.id)}
+        onToggle={() => alternarCardMedicamento(produto.id)}
         calcularStatus={calcularStatus}
         calcularDatas={calcularDatas}
         formatarData={formatarData}
-        setPreview={setPreview}
-        setConfirmar={setConfirmar}
-        setEditando={setEditando}
-        setNome={setNome}
-        setValidade={setValidade}
-        setImagem={setImagem}
-        setDiasPre={setDiasPre}
-        setDiasRemover={setDiasRemover}
-        setQuantidade={setQuantidade}
-        setAbrirModal={setAbrirModal}
-        setFabOpen={setFabOpen}
+        onPreview={setPreview}
+        onConfirmar={setConfirmar}
+        onEditar={prepararEdicaoProduto}
         onAlterarQuantidade={alterarQuantidadeMedicamento}
       />
     ))}
@@ -1455,6 +1589,8 @@ return (
         setImagem={setImagem}
         nome={nome}
         setNome={setNome}
+        setor={setor}
+        setSetor={setSetor}
         quantidade={quantidade}
         setQuantidade={setQuantidade}
         validade={validade}
@@ -1528,7 +1664,7 @@ return (
                 {preview ? (
                   <img
                     src={preview}
-                    alt="Preview do medicamento"
+                    alt="Preview do produto"
                     className="max-h-[80vh] max-w-[90vw] rounded-2xl object-contain"
                   />
                 ) : (
@@ -1573,7 +1709,7 @@ return (
                 <Trash2 size={28} />
               </div>
 
-              <h2 className="text-lg font-bold">Excluir medicamento?</h2>
+              <h2 className="text-lg font-bold">Excluir produto?</h2>
 
               <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                 Essa ação removerá{" "}
@@ -1720,1084 +1856,11 @@ return (
 }
 
 // =============================
-// 💊 CARD SANFONADO MEDICAMENTO
+// 📦 CARD SANFONADO PRODUTO
 // =============================
-
-function CardMedicamentoSanfonado({
-  m,
-  aberto,
-  onToggle,
-  calcularStatus,
-  calcularDatas,
-  formatarData,
-  setPreview,
-  setConfirmar,
-  setEditando,
-  setNome,
-  setValidade,
-  setImagem,
-  setDiasPre,
-  setDiasRemover,
-  setQuantidade,
-  setAbrirModal,
-  setFabOpen,
-  onAlterarQuantidade,
-}) {
-  const status = calcularStatus(m);
-  const datas = calcularDatas(m);
-
-  const configStatus = {
-    vencido: {
-      titulo: "Vencido",
-      descricao: "Retirar imediatamente",
-      card:
-        "border-red-300 bg-red-50/95 dark:border-red-500/25 dark:bg-red-500/10",
-      badge: "bg-red-600 text-white",
-      icon: "bg-red-600 text-white",
-      texto: "text-red-700 dark:text-red-300",
-      brilho: "shadow-red-500/10",
-    },
-    remover: {
-      titulo: "Remover",
-      descricao: "Hora de tirar da prateleira",
-      card:
-        "border-orange-300 bg-orange-50/95 dark:border-orange-500/25 dark:bg-orange-500/10",
-      badge: "bg-orange-600 text-white",
-      icon: "bg-orange-600 text-white",
-      texto: "text-orange-700 dark:text-orange-300",
-      brilho: "shadow-orange-500/10",
-    },
-    pre: {
-      titulo: "Pré-vencimento",
-      descricao: "Atenção para desconto/ação",
-      card:
-        "border-amber-300 bg-amber-50/95 dark:border-amber-500/25 dark:bg-amber-500/10",
-      badge: "bg-amber-500 text-white",
-      icon: "bg-amber-500 text-white",
-      texto: "text-amber-700 dark:text-amber-300",
-      brilho: "shadow-amber-500/10",
-    },
-    ok: {
-      titulo: "Normal",
-      descricao: "Estoque tranquilo",
-      card:
-        "border-emerald-200 bg-white/90 dark:border-emerald-500/20 dark:bg-gray-900/80",
-      badge: "bg-emerald-600 text-white",
-      icon: "bg-emerald-600 text-white",
-      texto: "text-emerald-700 dark:text-emerald-300",
-      brilho: "shadow-emerald-500/10",
-    },
-  };
-
-  const config = configStatus[status] || configStatus.ok;
-
-  function obterDataPrincipal() {
-    if (status === "vencido") {
-      return {
-        label: "Venceu em",
-        valor: datas.validade ? formatarData(datas.validade) : "Sem data",
-      };
-    }
-
-    if (status === "remover") {
-      return {
-        label: "Validade",
-        valor: datas.validade ? formatarData(datas.validade) : "Sem data",
-      };
-    }
-
-    if (status === "pre") {
-      return {
-        label: "Retirar em",
-        valor: datas.remover ? formatarData(datas.remover) : "Sem data",
-      };
-    }
-
-    if (datas.pre) {
-      return {
-        label: "Pré em",
-        valor: formatarData(datas.pre),
-      };
-    }
-
-    return {
-      label: "Retirar em",
-      valor: datas.remover ? formatarData(datas.remover) : "Sem data",
-    };
-  }
-
-  function editarMedicamento() {
-    setEditando(m);
-    setNome(m.nome || "");
-    setValidade(m.validade || "");
-    setImagem(m.imagem || null);
-    setDiasPre(m.diasPreVencido || "");
-    setDiasRemover(m.diasRemover || 7);
-    setQuantidade(Number(m.quantidade || 1));
-    setAbrirModal(true);
-    setFabOpen(false);
-  }
-
-  const dataPrincipal = obterDataPrincipal();
-  const quantidadeAtual = Number(m.quantidade || 1);
-
-  return (
-    <motion.div
-      layout
-      className={`
-        group overflow-hidden rounded-[2rem] border shadow-xl backdrop-blur-xl transition
-        ${config.card} ${config.brilho}
-      `}
-    >
-      <button
-        type="button"
-        onClick={onToggle}
-        className="
-          flex w-full items-center gap-3 p-3 text-left transition
-          active:scale-[0.99] sm:p-4
-        "
-      >
-        <div
-          className="
-            relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl
-            bg-gray-100 shadow-inner ring-1 ring-black/5 dark:bg-gray-800 dark:ring-white/10
-          "
-        >
-          {m.imagem ? (
-            <img
-              src={m.imagem}
-              alt={m.nome || "Medicamento"}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <Pill size={28} className={config.texto} />
-          )}
-
-          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 transition group-hover:opacity-100" />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`
-                rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wide
-                ${config.badge}
-              `}
-            >
-              {config.titulo}
-            </span>
-
-            <span className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-black text-gray-600 dark:bg-white/10 dark:text-gray-300">
-              x{quantidadeAtual}
-            </span>
-          </div>
-
-          <p className="mt-2 truncate text-base font-black text-gray-950 dark:text-white">
-            {m.nome || "Medicamento sem nome"}
-          </p>
-
-          <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
-            {dataPrincipal.label}: {" "}
-            <strong className={config.texto}>{dataPrincipal.valor}</strong>
-          </p>
-
-          {m.codigo && (
-            <p className="mt-1 truncate text-[11px] text-gray-400">
-              Código: {m.codigo}
-            </p>
-          )}
-        </div>
-
-        <div className="flex shrink-0 flex-col items-center gap-2">
-          <div
-            className={`
-              flex h-10 w-10 items-center justify-center rounded-2xl shadow-lg
-              ${config.icon}
-            `}
-          >
-            <ChevronDown
-              size={22}
-              className={`transition-transform duration-200 ${
-                aberto ? "rotate-180" : ""
-              }`}
-            />
-          </div>
-
-          <span className="hidden text-[10px] font-bold uppercase text-gray-400 sm:block">
-            {aberto ? "Fechar" : "Abrir"}
-          </span>
-        </div>
-      </button>
-
-      <AnimatePresence initial={false}>
-        {aberto && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22 }}
-            className="overflow-hidden"
-          >
-            <div className="border-t border-black/5 p-3 dark:border-white/10 sm:p-4">
-              <div className="mb-3 grid grid-cols-3 gap-2">
-                <MiniDataCard
-                  label="Pré"
-                  valor={datas.pre ? formatarData(datas.pre) : "Sem pré"}
-                />
-
-                <MiniDataCard
-                  label="Retirar"
-                  valor={
-                    datas.remover ? formatarData(datas.remover) : "Sem data"
-                  }
-                />
-
-                <MiniDataCard
-                  label="Validade"
-                  valor={
-                    datas.validade ? formatarData(datas.validade) : "Sem data"
-                  }
-                />
-              </div>
-
-              <LinhaTempoMedicamento
-                datas={datas}
-                status={status}
-                formatarData={formatarData}
-              />
-
-              <div className="mt-3 rounded-3xl border border-black/5 bg-white/70 p-3 shadow-inner dark:border-white/10 dark:bg-black/10">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-sm font-black text-gray-950 dark:text-white">
-                      Controle rápido de quantidade
-                    </p>
-
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Ajuste sem abrir edição. Perfeito para reposição relâmpago.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onAlterarQuantidade?.(m.id, -1)}
-                      className="
-                        flex h-11 w-11 items-center justify-center rounded-2xl
-                        bg-gray-200 text-gray-700 transition active:scale-95
-                        dark:bg-white/10 dark:text-gray-200
-                      "
-                    >
-                      <Minus size={18} />
-                    </button>
-
-                    <div
-                      className="
-                        flex h-11 min-w-20 items-center justify-center rounded-2xl
-                        bg-gray-950 px-4 text-lg font-black text-white shadow-lg
-                        dark:bg-white dark:text-gray-950
-                      "
-                    >
-                      x{quantidadeAtual}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => onAlterarQuantidade?.(m.id, 1)}
-                      className="
-                        flex h-11 w-11 items-center justify-center rounded-2xl
-                        bg-emerald-700 text-white shadow-lg shadow-emerald-700/20
-                        transition active:scale-95
-                      "
-                    >
-                      <Plus size={18} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => m.imagem && setPreview(m.imagem)}
-                  disabled={!m.imagem}
-                  className="
-                    flex h-12 items-center justify-center gap-2 rounded-2xl
-                    bg-gray-800 text-sm font-black text-white shadow-lg transition active:scale-95
-                    disabled:cursor-not-allowed disabled:opacity-45
-                    dark:bg-white/10
-                  "
-                >
-                  <Eye size={17} />
-                  Ver
-                </button>
-
-                <button
-                  type="button"
-                  onClick={editarMedicamento}
-                  className="
-                    flex h-12 items-center justify-center gap-2 rounded-2xl
-                    bg-blue-600 text-sm font-black text-white shadow-lg shadow-blue-600/20
-                    transition active:scale-95
-                  "
-                >
-                  <Pencil size={17} />
-                  Editar
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setConfirmar(m)}
-                  className="
-                    flex h-12 items-center justify-center gap-2 rounded-2xl
-                    bg-red-600 text-sm font-black text-white shadow-lg shadow-red-600/20
-                    transition active:scale-95
-                  "
-                >
-                  <Trash2 size={17} />
-                  Excluir
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
-
-function MiniDataCard({ label, valor }) {
-  return (
-    <div className="rounded-2xl bg-white/80 p-3 text-center shadow-sm dark:bg-white/10">
-      <p className="text-[10px] font-black uppercase tracking-wide text-gray-400">
-        {label}
-      </p>
-
-      <p className="mt-1 truncate text-xs font-black text-gray-800 dark:text-gray-100">
-        {valor}
-      </p>
-    </div>
-  );
-}
-
-function calcularDiasLinha(data) {
-  if (!data) return null;
-
-  const dataFinal = data instanceof Date ? new Date(data) : new Date(data);
-
-  if (Number.isNaN(dataFinal.getTime())) return null;
-
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-
-  dataFinal.setHours(0, 0, 0, 0);
-
-  return Math.ceil((dataFinal - hoje) / (1000 * 60 * 60 * 24));
-}
-
-function textoDiasLinha(dias) {
-  if (dias === null) return "Sem cálculo";
-  if (dias === 0) return "Hoje";
-  if (dias === 1) return "Amanhã";
-  if (dias < 0) return `Há ${Math.abs(dias)} dias`;
-
-  return `Em ${dias} dias`;
-}
-
-function LinhaTempoMedicamento({ datas, status, formatarData }) {
-  const etapas = [
-    {
-      id: "pre",
-      icon: Clock3,
-      titulo: "Pré-vencimento",
-      descricao: datas.pre
-        ? "Começa o alerta de atenção"
-        : "Sem pré-vencimento configurado",
-      data: datas.pre,
-      ativo: status === "pre",
-      corIcone: datas.pre
-        ? "bg-amber-500 text-white"
-        : "bg-gray-300 text-gray-700 dark:bg-white/10 dark:text-gray-300",
-      corBadge: datas.pre
-        ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
-        : "bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400",
-      linha: "bg-amber-400",
-    },
-    {
-      id: "remover",
-      icon: Trash2,
-      titulo: "Retirar da prateleira",
-      descricao: "Data limite para remover do estoque exposto",
-      data: datas.remover,
-      ativo: status === "remover",
-      corIcone: "bg-red-600 text-white",
-      corBadge: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
-      linha: "bg-red-500",
-    },
-    {
-      id: "validade",
-      icon: CalendarDays,
-      titulo: "Validade final",
-      descricao: "Último dia informado para o lote",
-      data: datas.validade,
-      ativo: status === "vencido",
-      corIcone:
-        status === "vencido"
-          ? "bg-red-600 text-white"
-          : "bg-emerald-700 text-white",
-      corBadge:
-        status === "vencido"
-          ? "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300"
-          : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
-      linha: status === "vencido" ? "bg-red-500" : "bg-emerald-500",
-    },
-  ];
-
-  return (
-    <div
-      className="
-        mt-3 overflow-hidden rounded-3xl border border-emerald-200/80
-        bg-gradient-to-br from-emerald-950/[0.04] via-white/80 to-emerald-50/80
-        p-4 shadow-inner
-        dark:border-emerald-500/20 dark:from-emerald-500/10 dark:via-slate-950/40 dark:to-slate-950/70
-      "
-    >
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-base font-black text-gray-950 dark:text-white">
-            Linha do tempo
-          </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Datas importantes deste lote
-          </p>
-        </div>
-
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20">
-          <CalendarDays size={21} />
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {etapas.map((etapa, index) => {
-          const Icon = etapa.icon;
-          const dias = calcularDiasLinha(etapa.data);
-          const semData = !etapa.data;
-
-          return (
-            <div key={etapa.id} className="relative flex gap-3">
-              {index < etapas.length - 1 && (
-                <div className="absolute left-[21px] top-11 h-[calc(100%+0.75rem)] w-0.5 rounded-full bg-gray-200 dark:bg-white/10" />
-              )}
-
-              <div
-                className={`
-                  relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-lg
-                  ${etapa.corIcone}
-                  ${etapa.ativo ? "ring-4 ring-white/70 dark:ring-white/10" : ""}
-                `}
-              >
-                <Icon size={19} />
-              </div>
-
-              <div
-                className={`
-                  min-w-0 flex-1 rounded-2xl border p-3
-                  ${
-                    etapa.ativo
-                      ? "border-emerald-300 bg-white shadow-md dark:border-emerald-500/25 dark:bg-white/10"
-                      : "border-transparent bg-white/70 dark:bg-black/10"
-                  }
-                `}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-black text-gray-950 dark:text-white">
-                      {etapa.titulo}
-                    </p>
-
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                      {etapa.descricao}
-                    </p>
-
-                    <p className="mt-1 text-sm font-black text-gray-900 dark:text-gray-100">
-                      {semData ? "Sem data" : formatarData(etapa.data)}
-                    </p>
-                  </div>
-
-                  <span
-                    className={`
-                      shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black
-                      ${etapa.corBadge}
-                    `}
-                  >
-                    {textoDiasLinha(dias)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 // =============================
 // 🧪 MODAL LOTE SCANNER
 // =============================
-
-function ModalLoteScanner({
-  dados,
-  processando,
-  formatarData,
-  formatarValidadeDigitada,
-  onFechar,
-  onSomarLote,
-  onNovaValidade,
-}) {
-  const [validadeRapida, setValidadeRapida] = useState("");
-  const [quantidadeSomar, setQuantidadeSomar] = useState(
-    Math.max(1, Number(dados?.quantidadeScanner || 1))
-  );
-
-  const produto = dados?.produto || {};
-  const lotes = Array.isArray(dados?.lotes) ? dados.lotes : [];
-
-  useEffect(() => {
-    window.dispatchEvent(
-      new CustomEvent("app-overlay-change", {
-        detail: { open: true },
-      })
-    );
-
-    return () => {
-      window.dispatchEvent(
-        new CustomEvent("app-overlay-change", {
-          detail: { open: false },
-        })
-      );
-    };
-  }, []);
-
-  function alterarQuantidade(delta) {
-    setQuantidadeSomar((prev) => {
-      const atual = Number(prev || 1);
-      return Math.max(1, Math.min(999, atual + delta));
-    });
-  }
-
-  function parseDataLocal(valor) {
-    if (!valor) return null;
-
-    if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
-      return valor;
-    }
-
-    const texto = String(valor).trim();
-
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(texto)) {
-      const [dia, mes, ano] = texto.split("/").map(Number);
-      const data = new Date(ano, mes - 1, dia);
-
-      if (
-        data.getDate() !== dia ||
-        data.getMonth() !== mes - 1 ||
-        data.getFullYear() !== ano
-      ) {
-        return null;
-      }
-
-      return data;
-    }
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
-      const [ano, mes, dia] = texto.split("-").map(Number);
-      const data = new Date(ano, mes - 1, dia);
-
-      if (
-        data.getDate() !== dia ||
-        data.getMonth() !== mes - 1 ||
-        data.getFullYear() !== ano
-      ) {
-        return null;
-      }
-
-      return data;
-    }
-
-    const convertida = new Date(texto);
-
-    if (Number.isNaN(convertida.getTime())) {
-      return null;
-    }
-
-    return convertida;
-  }
-
-  function calcularDiasAte(valor) {
-    const data = parseDataLocal(valor);
-
-    if (!data) return null;
-
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-
-    const alvo = new Date(data);
-    alvo.setHours(0, 0, 0, 0);
-
-    return Math.ceil((alvo - hoje) / (1000 * 60 * 60 * 24));
-  }
-
-  function textoDias(valor) {
-    const dias = calcularDiasAte(valor);
-
-    if (dias === null) return "Sem cálculo";
-    if (dias === 0) return "Hoje";
-    if (dias === 1) return "Amanhã";
-    if (dias < 0) return `${Math.abs(dias)} dias vencido`;
-
-    return `Em ${dias} dias`;
-  }
-
-  function getStatusLote(valor) {
-    const dias = calcularDiasAte(valor);
-
-    if (dias === null) return "neutro";
-    if (dias < 0) return "vencido";
-    if (dias <= 30) return "alerta";
-
-    return "ok";
-  }
-
-  const lotesOrdenados = [...lotes].sort((a, b) => {
-    const dataA = parseDataLocal(a.validade);
-    const dataB = parseDataLocal(b.validade);
-
-    if (!dataA && !dataB) return 0;
-    if (!dataA) return 1;
-    if (!dataB) return -1;
-
-    return dataA - dataB;
-  });
-
-  const loteMaisProximo = lotesOrdenados[0] || null;
-
-  const totalUnidades = lotesOrdenados.reduce(
-    (total, lote) => total + Number(lote.quantidade || 1),
-    0
-  );
-
-  function handleValidade(e) {
-    const formatada = formatarValidadeDigitada(e.target.value);
-    const digitos = formatada.replace(/\D/g, "");
-
-    setValidadeRapida(formatada);
-
-    const mesPossivel = Number(digitos.slice(0, 2));
-
-    const validadeMesAno =
-      digitos.length === 4 && mesPossivel >= 1 && mesPossivel <= 12;
-
-    const validadeCompleta = digitos.length === 8;
-
-    if (validadeMesAno || validadeCompleta) {
-      onNovaValidade(formatada, quantidadeSomar);
-      setValidadeRapida("");
-    }
-  }
-
-  function fechar() {
-    window.dispatchEvent(
-      new CustomEvent("app-overlay-change", {
-        detail: { open: false },
-      })
-    );
-
-    onFechar();
-  }
-
-  return (
-    <motion.div
-      onClick={fechar}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="
-        fixed inset-0 z-[2147483647] flex h-[100dvh] items-end justify-center
-        overflow-hidden bg-slate-950/80 px-3
-        pb-[calc(env(safe-area-inset-bottom)+0.85rem)]
-        pt-[calc(env(safe-area-inset-top)+0.85rem)]
-        backdrop-blur-md
-        sm:items-center sm:p-4
-      "
-    >
-      <motion.div
-        onClick={(e) => e.stopPropagation()}
-        initial={{ y: 34, opacity: 0, scale: 0.96 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: 34, opacity: 0, scale: 0.96 }}
-        transition={{ duration: 0.22 }}
-        className="
-          relative flex h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.7rem)]
-          w-full max-w-2xl flex-col overflow-hidden rounded-[2rem]
-          border border-white/10 bg-white text-gray-950 shadow-2xl
-          dark:bg-gray-950 dark:text-white
-          sm:h-[92dvh]
-        "
-      >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-emerald-500/10 to-transparent" />
-
-        {/* HEADER */}
-        <div className="relative shrink-0 overflow-hidden border-b border-white/10 bg-gradient-to-br from-emerald-700 via-emerald-900 to-slate-950 p-5 text-white">
-          <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-white/10" />
-          <div className="absolute -bottom-20 left-8 h-44 w-44 rounded-full bg-emerald-300/10" />
-
-          <div className="relative mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/30 sm:hidden" />
-
-          <div className="relative flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-white/15 bg-white/15 shadow-xl backdrop-blur-md">
-              {produto.imagem ? (
-                <img
-                  src={produto.imagem}
-                  alt={produto.nome || "Produto"}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <Pill size={31} />
-              )}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-50">
-                <Sparkles size={12} />
-                Produto reconhecido
-              </span>
-
-              <p className="truncate text-xl font-black">
-                {produto.nome || "Produto reconhecido"}
-              </p>
-
-              <p className="mt-1 flex items-center gap-1 truncate text-xs text-emerald-100">
-                <Barcode size={14} />
-                {dados?.codigo}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={fechar}
-              className="
-                flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
-                bg-white/15 text-white transition active:scale-95 hover:bg-white/20
-              "
-            >
-              <X size={21} />
-            </button>
-          </div>
-
-          <div className="relative mt-5 grid grid-cols-4 gap-2">
-            <MiniLoteInfo label="Lotes" valor={lotes.length} />
-            <MiniLoteInfo label="Unid." valor={totalUnidades} />
-            <MiniLoteInfo label="Somar" valor={`x${quantidadeSomar}`} />
-            <MiniLoteInfo
-              label="Próximo"
-              valor={
-                loteMaisProximo
-                  ? formatarData(loteMaisProximo.validade)
-                  : "Novo"
-              }
-            />
-          </div>
-        </div>
-
-        {/* BODY */}
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-5">
-          <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <p className="font-black text-emerald-800 dark:text-emerald-300">
-                  Quantidade para somar
-                </p>
-
-                <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                  Ajuste uma vez e toque no lote certo.
-                </p>
-              </div>
-
-              <span className="rounded-full bg-emerald-700 px-3 py-1 text-xs font-black text-white">
-                +{quantidadeSomar}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => alterarQuantidade(-1)}
-                disabled={processando}
-                className="
-                  flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
-                  bg-white text-emerald-700 shadow-sm transition active:scale-95
-                  disabled:opacity-60 dark:bg-gray-950 dark:text-emerald-300
-                "
-              >
-                <Minus size={19} />
-              </button>
-
-              <input
-                value={quantidadeSomar}
-                onChange={(e) => {
-                  const valor = Number(e.target.value.replace(/\D/g, ""));
-                  setQuantidadeSomar(Math.max(1, Math.min(999, valor || 1)));
-                }}
-                inputMode="numeric"
-                disabled={processando}
-                className="
-                  h-12 min-w-0 flex-1 rounded-2xl border border-emerald-200
-                  bg-white px-4 text-center text-xl font-black text-gray-950
-                  outline-none transition
-                  focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20
-                  disabled:opacity-60
-                  dark:border-emerald-500/20 dark:bg-gray-950 dark:text-white
-                "
-              />
-
-              <button
-                type="button"
-                onClick={() => alterarQuantidade(1)}
-                disabled={processando}
-                className="
-                  flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
-                  bg-emerald-700 text-white shadow-lg shadow-emerald-700/20
-                  transition active:scale-95 disabled:opacity-60
-                "
-              >
-                <Plus size={19} />
-              </button>
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              {[1, 5, 10, 20, 50].map((qtd) => (
-                <button
-                  key={qtd}
-                  type="button"
-                  disabled={processando}
-                  onClick={() => setQuantidadeSomar(qtd)}
-                  className={`
-                    rounded-full px-3 py-1 text-xs font-black transition active:scale-95
-                    disabled:opacity-60
-                    ${
-                      quantidadeSomar === qtd
-                        ? "bg-emerald-700 text-white"
-                        : "bg-white text-gray-600 dark:bg-gray-950 dark:text-gray-300"
-                    }
-                  `}
-                >
-                  x{qtd}
-                </button>
-              ))}
-            </div>
-          </section>
-
-          {lotesOrdenados.length > 0 ? (
-            <section>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <p className="flex items-center gap-2 font-black">
-                    <Clock3 size={18} className="text-emerald-600" />
-                    Validades no estoque
-                  </p>
-
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Toque na validade correta para somar +{quantidadeSomar}.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {lotesOrdenados.map((lote, index) => {
-                  const destaque = index === 0;
-                  const status = getStatusLote(lote.validade);
-
-                  return (
-                    <button
-                      key={lote.id || `${lote.validade}-${index}`}
-                      type="button"
-                      disabled={processando}
-                      onClick={() => onSomarLote(lote, quantidadeSomar)}
-                      className={`
-                        group flex w-full items-center gap-3 rounded-3xl border p-3 text-left
-                        shadow-sm transition active:scale-[0.985] disabled:opacity-60
-                        ${
-                          destaque
-                            ? "border-emerald-300 bg-emerald-50 dark:border-emerald-500/25 dark:bg-emerald-500/10"
-                            : "border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5"
-                        }
-                      `}
-                    >
-                      <div
-                        className={`
-                          flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg
-                          ${
-                            status === "vencido"
-                              ? "bg-red-600"
-                              : status === "alerta"
-                              ? "bg-yellow-500"
-                              : destaque
-                              ? "bg-emerald-700"
-                              : "bg-slate-700 dark:bg-slate-600"
-                          }
-                        `}
-                      >
-                        <CalendarDays size={21} />
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-black">
-                            {formatarData(lote.validade)}
-                          </p>
-
-                          {destaque && (
-                            <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-black uppercase text-white">
-                              mais próxima
-                            </span>
-                          )}
-
-                          {status === "vencido" && (
-                            <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black uppercase text-white">
-                              vencida
-                            </span>
-                          )}
-
-                          {status === "alerta" && (
-                            <span className="rounded-full bg-yellow-500 px-2 py-0.5 text-[10px] font-black uppercase text-white">
-                              atenção
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          {textoDias(lote.validade)} • quantidade atual: x
-                          {lote.quantidade || 1}
-                        </p>
-                      </div>
-
-                      <div className="flex h-12 min-w-16 items-center justify-center gap-1 rounded-2xl bg-emerald-600 px-3 font-black text-white shadow-lg shadow-emerald-600/20 transition group-active:scale-95">
-                        {processando ? (
-                          <Loader2 size={18} className="animate-spin" />
-                        ) : (
-                          <>
-                            <Plus size={18} />
-                            {quantidadeSomar}
-                          </>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          ) : (
-            <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
-              <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white">
-                  <PackageCheck size={21} />
-                </div>
-
-                <div>
-                  <p className="font-black">Produto aprendido na base</p>
-
-                  <p className="mt-1 text-sm">
-                    Ainda não há lote no estoque. Informe a primeira validade
-                    para criar o card com x{quantidadeSomar}.
-                  </p>
-                </div>
-              </div>
-            </section>
-          )}
-
-          <section className="rounded-3xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-500/20 dark:bg-blue-500/10">
-            <div className="mb-3 flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
-                <PackageCheck size={20} />
-              </div>
-
-              <div>
-                <p className="font-black text-blue-800 dark:text-blue-300">
-                  Criar nova validade
-                </p>
-
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                  Use quando o mesmo produto chegou com outro vencimento.
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-white/80 p-3 dark:bg-gray-950/40">
-              <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">
-                Digite <strong>0427</strong> para 04/2027 ou{" "}
-                <strong>15052027</strong> para 15/05/2027. A quantidade criada
-                será x{quantidadeSomar}.
-              </p>
-
-              <input
-                autoFocus
-                value={validadeRapida}
-                onChange={handleValidade}
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="mmaa ou ddmmaaaa"
-                disabled={processando}
-                className="
-                  h-[52px] w-full rounded-2xl border border-blue-200 bg-white px-4
-                  text-center text-lg font-black text-gray-950 outline-none transition
-                  placeholder:text-gray-400
-                  focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20
-                  disabled:opacity-60
-                  dark:border-blue-500/20 dark:bg-gray-950 dark:text-white
-                "
-              />
-
-              {processando && (
-                <div className="mt-3 flex items-center justify-center gap-2 text-sm font-black text-blue-700 dark:text-blue-300">
-                  <Loader2 size={17} className="animate-spin" />
-                  Salvando lote...
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-3xl bg-gray-100 p-4 text-sm text-gray-600 dark:bg-white/5 dark:text-gray-300">
-            <div className="flex items-start gap-2">
-              <CheckCircle2
-                size={19}
-                className="mt-0.5 shrink-0 text-emerald-600"
-              />
-
-              <p>
-                Mesmo código com validade diferente vira outro card. Validade
-                mês/ano usa o último dia do mês automaticamente.
-              </p>
-            </div>
-          </section>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-function MiniLoteInfo({ label, valor }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/15 p-2 text-center backdrop-blur-sm">
-      <p className="truncate text-[10px] font-black uppercase tracking-wide text-emerald-100/75">
-        {label}
-      </p>
-
-      <p className="mt-1 truncate text-sm font-black text-white">
-        {valor}
-      </p>
-    </div>
-  );
-}
 
 export default Medicamentos;

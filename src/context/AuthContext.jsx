@@ -29,7 +29,12 @@ import {
   secondaryAuth,
 } from "../firebase";
 
-const AuthContext = createContext();
+import {
+  SETORES_PRODUTOS,
+  SETOR_PADRAO_PRODUTOS,
+} from "../config/acessoProdutos";
+
+export const AuthContext = createContext();
 
 function criarUsuarioVisitante() {
   return {
@@ -38,9 +43,40 @@ function criarUsuarioVisitante() {
     email: "modo.visitante@local",
     publicId: "VISITA",
     tipo: "visitante",
+    cargo: "visitante",
+    setoresProdutos: [],
     farmaciaId: "local",
     visitante: true,
   };
+}
+
+function normalizarSetoresProdutos(setores) {
+  if (!Array.isArray(setores)) {
+    return [SETOR_PADRAO_PRODUTOS];
+  }
+
+  const limpos = setores
+    .map((setor) => String(setor || "").trim())
+    .filter(Boolean)
+    .filter((setor) => SETORES_PRODUTOS.includes(setor));
+
+  return limpos.length ? [...new Set(limpos)] : [SETOR_PADRAO_PRODUTOS];
+}
+
+function obterSetoresPadraoPorTipo(tipo, cargo) {
+  if (tipo === "admin" || cargo === "gerente" || cargo === "admin") {
+    return SETORES_PRODUTOS;
+  }
+
+  return [SETOR_PADRAO_PRODUTOS];
+}
+
+function normalizarCargo(cargo, tipo = "comum") {
+  if (tipo === "admin") return "admin";
+
+  return String(cargo || "balconista")
+    .trim()
+    .toLowerCase();
 }
 
 export function AuthProvider({ children }) {
@@ -54,12 +90,7 @@ export function AuthProvider({ children }) {
           const modoVisitante =
             localStorage.getItem("modoVisitante") === "true";
 
-          setUsuarioAtual(
-            modoVisitante
-              ? criarUsuarioVisitante()
-              : null
-          );
-
+          setUsuarioAtual(modoVisitante ? criarUsuarioVisitante() : null);
           setLoading(false);
           return;
         }
@@ -75,15 +106,26 @@ export function AuthProvider({ children }) {
           return;
         }
 
+        const dados = snap.data() || {};
+
+        const tipo = dados.tipo || "comum";
+        const cargo = dados.cargo || (tipo === "admin" ? "admin" : "balconista");
+
         setUsuarioAtual({
           uid: user.uid,
           email: user.email,
-          ...snap.data(),
+          ...dados,
+          tipo,
+          cargo,
+          setoresProdutos: normalizarSetoresProdutos(
+            dados.setoresProdutos ||
+              obterSetoresPadraoPorTipo(tipo, cargo)
+          ),
         });
 
         setLoading(false);
       } catch (err) {
-        console.error(err);
+        console.error("Erro ao carregar usuário:", err);
         setUsuarioAtual(null);
         setLoading(false);
       }
@@ -96,11 +138,7 @@ export function AuthProvider({ children }) {
     try {
       localStorage.removeItem("modoVisitante");
 
-      await signInWithEmailAndPassword(
-        auth,
-        email,
-        senha
-      );
+      await signInWithEmailAndPassword(auth, email, senha);
 
       return { ok: true };
     } catch (err) {
@@ -118,7 +156,7 @@ export function AuthProvider({ children }) {
     try {
       await signOut(auth);
     } catch (err) {
-      console.error(err);
+      console.error("Erro ao sair:", err);
     }
   }
 
@@ -136,7 +174,7 @@ export function AuthProvider({ children }) {
 
       return { ok: true };
     } catch (err) {
-      console.error(err);
+      console.error("Erro ao entrar como visitante:", err);
 
       return {
         ok: false,
@@ -147,9 +185,7 @@ export function AuthProvider({ children }) {
 
   async function gerarPublicIdUnico() {
     for (let i = 0; i < 10; i++) {
-      const id = String(
-        Math.floor(100000 + Math.random() * 900000)
-      );
+      const id = String(Math.floor(100000 + Math.random() * 900000));
 
       const q = query(
         collection(firestore, "usuarios"),
@@ -169,12 +205,20 @@ export function AuthProvider({ children }) {
     email,
     senha,
     tipo = "comum",
+    cargo = "balconista",
+    setoresProdutos,
   }) {
     try {
       const tipoSeguro =
         usuarioAtual?.tipo === "admin" && tipo === "admin"
           ? "admin"
           : "comum";
+
+      const cargoSeguro = normalizarCargo(cargo, tipoSeguro);
+
+      const setoresSeguros = normalizarSetoresProdutos(
+        setoresProdutos || obterSetoresPadraoPorTipo(tipoSeguro, cargoSeguro)
+      );
 
       const cred = await createUserWithEmailAndPassword(
         secondaryAuth,
@@ -189,6 +233,8 @@ export function AuthProvider({ children }) {
         email,
         publicId,
         tipo: tipoSeguro,
+        cargo: cargoSeguro,
+        setoresProdutos: setoresSeguros,
         farmaciaId: "farmacia-principal",
         criadoEm: Date.now(),
         criadoPor: usuarioAtual?.nome || "Cadastro próprio",
@@ -201,7 +247,7 @@ export function AuthProvider({ children }) {
       try {
         await signOut(secondaryAuth);
       } catch {
-        // Mantém silencioso. O auth secundário não deve atrapalhar o principal.
+        // O auth secundário não deve atrapalhar o principal.
       }
 
       return {
@@ -218,7 +264,7 @@ export function AuthProvider({ children }) {
 
   async function buscarUsuarioPorId(publicId) {
     try {
-      const idLimpo = String(publicId).trim();
+      const idLimpo = String(publicId || "").trim();
 
       if (!idLimpo) {
         return {
@@ -251,7 +297,7 @@ export function AuthProvider({ children }) {
         },
       };
     } catch (err) {
-      console.error(err);
+      console.error("Erro ao buscar usuário:", err);
 
       return {
         ok: false,
@@ -294,11 +340,72 @@ export function AuthProvider({ children }) {
         },
       };
     } catch (err) {
-      console.error(err);
+      console.error("Erro ao alterar permissão:", err);
 
       return {
         ok: false,
         erro: "Erro ao alterar permissão",
+      };
+    }
+  }
+
+  async function alterarAcessoProdutosPorId(publicId, dadosAcesso) {
+    try {
+      if (!usuarioAtual || usuarioAtual.tipo !== "admin") {
+        return {
+          ok: false,
+          erro: "Ação não permitida",
+        };
+      }
+
+      const encontrado = await buscarUsuarioPorId(publicId);
+
+      if (!encontrado.ok) return encontrado;
+
+      const usuario = encontrado.usuario;
+      const atualizadoEm = Date.now();
+
+      const tipoSeguro =
+        dadosAcesso?.tipo === "admin" ? "admin" : usuario.tipo || "comum";
+
+      const cargoSeguro = normalizarCargo(
+        dadosAcesso?.cargo || usuario.cargo,
+        tipoSeguro
+      );
+
+      const setoresSeguros = normalizarSetoresProdutos(
+        dadosAcesso?.setoresProdutos ||
+          usuario.setoresProdutos ||
+          obterSetoresPadraoPorTipo(tipoSeguro, cargoSeguro)
+      );
+
+      await updateDoc(doc(firestore, "usuarios", usuario.uid), {
+        tipo: tipoSeguro,
+        cargo: cargoSeguro,
+        setoresProdutos: setoresSeguros,
+        permissaoAtualizadaEm: atualizadoEm,
+        permissaoAtualizadaPor: usuarioAtual.nome,
+        permissaoAtualizadaPorUid: usuarioAtual.uid,
+      });
+
+      return {
+        ok: true,
+        usuario: {
+          ...usuario,
+          tipo: tipoSeguro,
+          cargo: cargoSeguro,
+          setoresProdutos: setoresSeguros,
+          permissaoAtualizadaEm: atualizadoEm,
+          permissaoAtualizadaPor: usuarioAtual.nome,
+          permissaoAtualizadaPorUid: usuarioAtual.uid,
+        },
+      };
+    } catch (err) {
+      console.error("Erro ao alterar acesso de produtos:", err);
+
+      return {
+        ok: false,
+        erro: "Erro ao alterar acesso de produtos",
       };
     }
   }
@@ -315,11 +422,7 @@ export function AuthProvider({ children }) {
     try {
       const novoId = await gerarPublicIdUnico();
 
-      const ref = doc(
-        firestore,
-        "usuarios",
-        usuarioAtual.uid
-      );
+      const ref = doc(firestore, "usuarios", usuarioAtual.uid);
 
       await updateDoc(ref, {
         publicId: novoId,
@@ -332,56 +435,58 @@ export function AuthProvider({ children }) {
 
       return novoId;
     } catch (err) {
-      console.error(err);
+      console.error("Erro ao gerar ID público:", err);
       return null;
     }
   }
 
-  async function atualizarMeuPerfil({ nome }) {
-    try {
-      if (!usuarioAtual?.uid || usuarioAtual?.visitante) {
-        return {
-          ok: false,
-          erro: "Visitante não salva perfil na nuvem",
-        };
-      }
-
-      const nomeLimpo = String(nome || "").trim();
-
-      if (!nomeLimpo) {
-        return {
-          ok: false,
-          erro: "Informe um nome",
-        };
-      }
-
-      const ref = doc(
-        firestore,
-        "usuarios",
-        usuarioAtual.uid
-      );
-
-      await updateDoc(ref, {
-        nome: nomeLimpo,
-        perfilAtualizadoEm: Date.now(),
-      });
-
-      setUsuarioAtual((prev) => ({
-        ...prev,
-        nome: nomeLimpo,
-        perfilAtualizadoEm: Date.now(),
-      }));
-
-      return { ok: true };
-    } catch (err) {
-      console.error(err);
-
+async function atualizarMeuPerfil({ nome, fotoPerfil }) {
+  try {
+    if (!usuarioAtual?.uid || usuarioAtual?.visitante) {
       return {
         ok: false,
-        erro: "Erro ao atualizar perfil",
+        erro: "Visitante não salva perfil na nuvem",
       };
     }
+
+    const nomeLimpo = String(nome || "").trim();
+
+    if (!nomeLimpo) {
+      return {
+        ok: false,
+        erro: "Informe um nome",
+      };
+    }
+
+    const agora = Date.now();
+    const ref = doc(firestore, "usuarios", usuarioAtual.uid);
+
+    const payload = {
+      nome: nomeLimpo,
+      perfilAtualizadoEm: agora,
+    };
+
+    if (fotoPerfil !== undefined) {
+      payload.fotoPerfil = fotoPerfil || null;
+    }
+
+    await updateDoc(ref, payload);
+
+    setUsuarioAtual((prev) => ({
+      ...prev,
+      ...payload,
+    }));
+
+    return { ok: true };
+  } catch (err) {
+    console.error("Erro ao atualizar perfil:", err);
+
+    return {
+      ok: false,
+      erro: "Erro ao atualizar perfil",
+    };
   }
+}
 
   const isAdmin = usuarioAtual?.tipo === "admin";
   const isVisitante =
@@ -403,6 +508,7 @@ export function AuthProvider({ children }) {
         atualizarMeuPerfil,
         buscarUsuarioPorId,
         alterarTipoPorId,
+        alterarAcessoProdutosPorId,
       }}
     >
       {children}

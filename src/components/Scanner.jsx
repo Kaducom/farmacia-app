@@ -26,6 +26,7 @@ import {
   RefreshCcw,
   RotateCw,
   ScanLine,
+  ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
   Trash2,
@@ -71,8 +72,16 @@ function Scanner({
   const ultimoCodigoRef = useRef({ codigo: "", tempo: 0 });
   const iniciouComCameraEscolhidaRef = useRef(false);
 
+  const onScanRef = useRef(onScan);
+  const modoContinuoRef = useRef(modoContinuo);
+  const quantidadeRef = useRef(1);
+  const cameraAtualRef = useRef("");
+  const permissaoRef = useRef(null);
+
   const [status, setStatus] = useState("iniciando");
   const [erro, setErro] = useState("");
+  const [permissaoCamera, setPermissaoCamera] = useState("checando");
+
   const [cameras, setCameras] = useState([]);
   const [cameraAtual, setCameraAtual] = useState("");
 
@@ -83,6 +92,22 @@ function Scanner({
   const [torchDisponivel, setTorchDisponivel] = useState(false);
   const [torchAtiva, setTorchAtiva] = useState(false);
   const [quantidadeScanner, setQuantidadeScanner] = useState(1);
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
+
+  useEffect(() => {
+    modoContinuoRef.current = modoContinuo;
+  }, [modoContinuo]);
+
+  useEffect(() => {
+    quantidadeRef.current = quantidadeScanner;
+  }, [quantidadeScanner]);
+
+  useEffect(() => {
+    cameraAtualRef.current = cameraAtual;
+  }, [cameraAtual]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -96,11 +121,15 @@ function Scanner({
       })
     );
 
-    iniciar();
+    iniciarFluxo();
 
     return () => {
       mountedRef.current = false;
       pararScanner();
+
+      if (permissaoRef.current) {
+        permissaoRef.current.onchange = null;
+      }
 
       window.dispatchEvent(
         new CustomEvent("app-overlay-change", {
@@ -112,6 +141,11 @@ function Scanner({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function iniciarFluxo() {
+    await checarPermissaoCamera();
+    await iniciar();
+  }
 
   function liberarTravasAntigas() {
     const main = document.querySelector("main");
@@ -144,6 +178,42 @@ function Scanner({
     }
   }
 
+  function traduzirPermissao(state) {
+    if (state === "granted") return "liberada";
+    if (state === "denied") return "bloqueada";
+    if (state === "prompt") return "perguntar";
+    return "desconhecida";
+  }
+
+  async function checarPermissaoCamera() {
+    try {
+      if (!navigator.permissions?.query) {
+        setSeguro(() => setPermissaoCamera("desconhecida"));
+        return "desconhecida";
+      }
+
+      const permissao = await navigator.permissions.query({
+        name: "camera",
+      });
+
+      permissaoRef.current = permissao;
+
+      const estado = traduzirPermissao(permissao.state);
+
+      setSeguro(() => setPermissaoCamera(estado));
+
+      permissao.onchange = () => {
+        const novoEstado = traduzirPermissao(permissao.state);
+        setSeguro(() => setPermissaoCamera(novoEstado));
+      };
+
+      return estado;
+    } catch {
+      setSeguro(() => setPermissaoCamera("desconhecida"));
+      return "desconhecida";
+    }
+  }
+
   function erroIgnoravel(err) {
     return (
       err instanceof NotFoundException ||
@@ -160,6 +230,11 @@ function Scanner({
       const atual = Number(prev || 1);
       return Math.max(1, Math.min(999, atual + delta));
     });
+  }
+
+  function definirQuantidade(valor) {
+    const numero = Number(String(valor || "").replace(/\D/g, ""));
+    setQuantidadeScanner(Math.max(1, Math.min(999, numero || 1)));
   }
 
   function limparBloqueio() {
@@ -233,7 +308,7 @@ function Scanner({
         (device) => device.kind === "videoinput"
       );
 
-      setCameras(lista);
+      setSeguro(() => setCameras(lista));
 
       return lista;
     } catch (err) {
@@ -267,17 +342,33 @@ function Scanner({
 
   async function iniciar(deviceId = "") {
     try {
-      setErro("");
-      setCodigoLido("");
-      setCodigoBloqueado("");
-      setStatus("iniciando");
+      setSeguro(() => {
+        setErro("");
+        setCodigoLido("");
+        setCodigoBloqueado("");
+        setStatus("iniciando");
+      });
 
       processingRef.current = false;
       codigoBloqueadoRef.current = "";
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        setErro("Este navegador não liberou acesso à câmera.");
-        setStatus("erro");
+        setSeguro(() => {
+          setErro("Este navegador não liberou acesso à câmera.");
+          setStatus("erro");
+        });
+        return;
+      }
+
+      const permissaoAtual = await checarPermissaoCamera();
+
+      if (permissaoAtual === "bloqueada") {
+        setSeguro(() => {
+          setErro(
+            "A câmera está bloqueada. Libere a permissão no navegador e toque em reiniciar."
+          );
+          setStatus("erro");
+        });
         return;
       }
 
@@ -286,8 +377,10 @@ function Scanner({
       const video = videoRef.current;
 
       if (!video) {
-        setErro("Elemento de vídeo não encontrado.");
-        setStatus("erro");
+        setSeguro(() => {
+          setErro("Elemento de vídeo não encontrado.");
+          setStatus("erro");
+        });
         return;
       }
 
@@ -352,9 +445,9 @@ function Scanner({
         const lista = await listarCamerasDisponiveis();
         const principal = escolherCameraPrincipal(lista);
 
-        if (principal?.deviceId) {
+        if (principal?.deviceId && principal?.label) {
           deviceIdFinal = principal.deviceId;
-          setCameraAtual(principal.deviceId);
+          setSeguro(() => setCameraAtual(principal.deviceId));
           iniciouComCameraEscolhidaRef.current = true;
         }
       }
@@ -373,6 +466,7 @@ function Scanner({
               facingMode: { ideal: "environment" },
               width: { ideal: 1280 },
               height: { ideal: 720 },
+              aspectRatio: { ideal: 1.7777778 },
             },
           },
           video,
@@ -384,14 +478,16 @@ function Scanner({
 
       setSeguro(() => {
         setStatus("lendo");
+        setErro("");
       });
 
       setTimeout(() => {
-        if (!fechandoRef.current) {
-          listarCameras();
-          prepararRecursosCamera();
-          aplicarZoomPrincipal();
-        }
+        if (fechandoRef.current) return;
+
+        listarCameras();
+        prepararRecursosCamera();
+        aplicarZoomPrincipal();
+        checarPermissaoCamera();
       }, 500);
     } catch (err) {
       console.error("Erro ao iniciar scanner:", err);
@@ -399,7 +495,9 @@ function Scanner({
       let msg = "Não consegui abrir a câmera. Use a entrada manual.";
 
       if (err?.name === "NotAllowedError") {
-        msg = "Permissão da câmera bloqueada. Libere a câmera no navegador.";
+        msg =
+          "Permissão da câmera negada. Libere a câmera no navegador e toque em reiniciar.";
+        setSeguro(() => setPermissaoCamera("bloqueada"));
       }
 
       if (err?.name === "NotFoundError") {
@@ -424,11 +522,11 @@ function Scanner({
   async function listarCameras() {
     const lista = await listarCamerasDisponiveis();
 
-    if (!cameraAtual && lista.length > 0) {
+    if (!cameraAtualRef.current && lista.length > 0) {
       const principal = escolherCameraPrincipal(lista);
 
       if (principal?.deviceId) {
-        setCameraAtual(principal.deviceId);
+        setSeguro(() => setCameraAtual(principal.deviceId));
       }
     }
   }
@@ -437,15 +535,17 @@ function Scanner({
     const stream = videoRef.current?.srcObject;
     const track = stream?.getVideoTracks?.()[0];
 
-    setTorchDisponivel(false);
-    setTorchAtiva(false);
+    setSeguro(() => {
+      setTorchDisponivel(false);
+      setTorchAtiva(false);
+    });
 
     if (!track?.getCapabilities) return;
 
     const capacidades = track.getCapabilities();
 
     if (capacidades.torch) {
-      setTorchDisponivel(true);
+      setSeguro(() => setTorchDisponivel(true));
     }
   }
 
@@ -454,6 +554,14 @@ function Scanner({
 
     if (!codigoLimpo || fechandoRef.current) return;
     if (processingRef.current) return;
+
+    if (codigoBloqueadoRef.current === codigoLimpo) {
+      setSeguro(() => {
+        setStatus("bloqueado");
+        setCodigoBloqueado(codigoLimpo);
+      });
+      return;
+    }
 
     const agora = Date.now();
     const ultimo = ultimoCodigoRef.current;
@@ -481,11 +589,14 @@ function Scanner({
     }
 
     try {
+      const quantidadeAtual = quantidadeRef.current || 1;
+      const modoAtual = modoContinuoRef.current;
+
       const resposta = await Promise.resolve(
-        onScan?.(codigoLimpo, {
-          modoContinuo,
+        onScanRef.current?.(codigoLimpo, {
+          modoContinuo: modoAtual,
           origem: "scanner",
-          quantidade: quantidadeScanner,
+          quantidade: quantidadeAtual,
         })
       );
 
@@ -493,7 +604,7 @@ function Scanner({
         resposta === "fechar" ||
         resposta?.fecharScanner === true ||
         resposta?.abrirModal === true ||
-        modoContinuo === false;
+        modoAtual === false;
 
       if (deveFechar) {
         setTimeout(() => {
@@ -580,8 +691,10 @@ function Scanner({
       video.load?.();
     }
 
-    setTorchDisponivel(false);
-    setTorchAtiva(false);
+    setSeguro(() => {
+      setTorchDisponivel(false);
+      setTorchAtiva(false);
+    });
   }
 
   function pararScanner() {
@@ -610,36 +723,46 @@ function Scanner({
   }
 
   async function reiniciarScanner() {
-    setErro("");
-    setCodigoLido("");
-    setCodigoBloqueado("");
+    setSeguro(() => {
+      setErro("");
+      setCodigoLido("");
+      setCodigoBloqueado("");
+      setStatus("iniciando");
+    });
 
     processingRef.current = false;
     codigoBloqueadoRef.current = "";
     iniciouComCameraEscolhidaRef.current = false;
 
-    await iniciar(cameraAtual);
+    await iniciar(cameraAtualRef.current);
   }
 
   async function trocarCamera() {
-    if (cameras.length <= 1) {
-      setErro("Só encontrei uma câmera neste dispositivo.");
-      setStatus("erro");
+    const lista = cameras.length ? cameras : await listarCamerasDisponiveis();
+
+    if (lista.length <= 1) {
+      setSeguro(() => {
+        setErro("Só encontrei uma câmera neste dispositivo.");
+        setStatus("erro");
+      });
       return;
     }
 
-    const indiceAtual = cameras.findIndex(
-      (camera) => camera.deviceId === cameraAtual
+    const indiceAtual = lista.findIndex(
+      (camera) => camera.deviceId === cameraAtualRef.current
     );
 
-    const proxima = cameras[(indiceAtual + 1) % cameras.length];
+    const proxima = lista[(indiceAtual + 1 + lista.length) % lista.length];
 
     if (!proxima?.deviceId) return;
 
-    setCameraAtual(proxima.deviceId);
-    setErro("");
-    setCodigoLido("");
-    setCodigoBloqueado("");
+    setSeguro(() => {
+      setCameraAtual(proxima.deviceId);
+      setErro("");
+      setCodigoLido("");
+      setCodigoBloqueado("");
+      setStatus("iniciando");
+    });
 
     processingRef.current = false;
     codigoBloqueadoRef.current = "";
@@ -659,11 +782,14 @@ function Scanner({
         advanced: [{ torch: !torchAtiva }],
       });
 
-      setTorchAtiva((prev) => !prev);
+      setSeguro(() => setTorchAtiva((prev) => !prev));
     } catch (err) {
       console.warn("Lanterna indisponível:", err);
-      setErro("Lanterna não disponível nesta câmera.");
-      setStatus("erro");
+
+      setSeguro(() => {
+        setErro("Lanterna não disponível nesta câmera.");
+        setStatus("erro");
+      });
     }
   }
 
@@ -673,8 +799,10 @@ function Scanner({
     const codigo = codigoManual.replace(/\D/g, "").trim();
 
     if (!codigo) {
-      setErro("Digite um código válido.");
-      setStatus("erro");
+      setSeguro(() => {
+        setErro("Digite um código válido.");
+        setStatus("erro");
+      });
       return;
     }
 
@@ -693,6 +821,7 @@ function Scanner({
   const bloqueado = status === "bloqueado";
   const iniciando = status === "iniciando";
   const emErro = status === "erro";
+  const permissaoBloqueada = permissaoCamera === "bloqueada";
 
   return (
     <motion.div
@@ -718,39 +847,42 @@ function Scanner({
           `}
         />
 
-        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/5 to-black/90" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_35%),radial-gradient(circle_at_bottom,rgba(15,23,42,0.92),transparent_58%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/82 via-black/8 to-black/92" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.2),transparent_34%),radial-gradient(circle_at_bottom,rgba(15,23,42,0.96),transparent_58%)]" />
       </div>
 
-      {/* TOPO */}
       <div
         className="
-          relative z-20 shrink-0 px-4
-          pt-[calc(env(safe-area-inset-top)+0.85rem)]
+          relative z-20 shrink-0 px-3 sm:px-4
+          pt-[calc(env(safe-area-inset-top)+0.7rem)]
         "
       >
         <div
           className="
-            flex items-center justify-between gap-3 rounded-[1.75rem]
-            border border-white/10 bg-slate-950/45 p-3 shadow-2xl
-            backdrop-blur-xl
+            flex items-center justify-between gap-3 rounded-[1.6rem]
+            border border-white/10 bg-slate-950/48 p-2.5 shadow-2xl
+            backdrop-blur-xl sm:rounded-[1.75rem] sm:p-3
           "
         >
           <div className="flex min-w-0 items-center gap-3">
             <div
               className="
-                flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
+                flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
                 bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-300/20
+                sm:h-12 sm:w-12
               "
             >
-              <ScanLine size={25} />
+              <ScanLine size={24} />
             </div>
 
             <div className="min-w-0">
-              <h2 className="truncate text-lg font-black">Scanner</h2>
+              <h2 className="truncate text-base font-black sm:text-lg">
+                Scanner
+              </h2>
 
-              <p className="truncate text-xs text-white/65">
-                Leitura rápida com quantidade por scan
+              <p className="truncate text-[11px] font-semibold text-white/62 sm:text-xs">
+                {modoContinuo ? "Modo contínuo" : "Leitura única"} · x
+                {quantidadeScanner} por leitura
               </p>
             </div>
           </div>
@@ -759,33 +891,33 @@ function Scanner({
             type="button"
             onClick={fecharScanner}
             className="
-              flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
+              flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
               bg-white text-slate-950 shadow-xl shadow-black/25
-              transition active:scale-95
+              transition active:scale-95 sm:h-12 sm:w-12
             "
             aria-label="Fechar scanner"
           >
-            <X size={24} strokeWidth={3} />
+            <X size={23} strokeWidth={3} />
           </button>
         </div>
       </div>
 
-      {/* MIRA */}
       <div
         className="
           relative z-10 flex min-h-0 flex-1 items-center justify-center
-          px-4 py-4
+          px-3 py-3 sm:px-4 sm:py-4
         "
       >
         <div
           className="
-            relative h-[min(52dvh,410px)] w-full max-w-md
+            relative h-[min(48dvh,390px)] w-full max-w-md
             sm:h-[430px]
           "
         >
           <div
             className={`
-              absolute inset-0 rounded-[2.25rem] border-2 backdrop-blur-[1px]
+              absolute inset-0 rounded-[2rem] border-2 backdrop-blur-[1px]
+              sm:rounded-[2.25rem]
               ${
                 lido
                   ? "border-emerald-400 shadow-[0_0_58px_rgba(52,211,153,0.5)]"
@@ -798,17 +930,17 @@ function Scanner({
             `}
           />
 
-          <div className="absolute -left-1 -top-1 h-14 w-14 rounded-tl-[2.25rem] border-l-4 border-t-4 border-emerald-400" />
-          <div className="absolute -right-1 -top-1 h-14 w-14 rounded-tr-[2.25rem] border-r-4 border-t-4 border-emerald-400" />
-          <div className="absolute -bottom-1 -left-1 h-14 w-14 rounded-bl-[2.25rem] border-b-4 border-l-4 border-emerald-400" />
-          <div className="absolute -bottom-1 -right-1 h-14 w-14 rounded-br-[2.25rem] border-b-4 border-r-4 border-emerald-400" />
+          <div className="absolute -left-1 -top-1 h-12 w-12 rounded-tl-[2rem] border-l-4 border-t-4 border-emerald-400 sm:h-14 sm:w-14 sm:rounded-tl-[2.25rem]" />
+          <div className="absolute -right-1 -top-1 h-12 w-12 rounded-tr-[2rem] border-r-4 border-t-4 border-emerald-400 sm:h-14 sm:w-14 sm:rounded-tr-[2.25rem]" />
+          <div className="absolute -bottom-1 -left-1 h-12 w-12 rounded-bl-[2rem] border-b-4 border-l-4 border-emerald-400 sm:h-14 sm:w-14 sm:rounded-bl-[2.25rem]" />
+          <div className="absolute -bottom-1 -right-1 h-12 w-12 rounded-br-[2rem] border-b-4 border-r-4 border-emerald-400 sm:h-14 sm:w-14 sm:rounded-br-[2.25rem]" />
 
           {lendo && (
             <motion.div
               initial={{ top: "12%" }}
               animate={{ top: "82%" }}
               transition={{
-                duration: 1.2,
+                duration: 1.15,
                 repeat: Infinity,
                 repeatType: "reverse",
                 ease: "easeInOut",
@@ -820,12 +952,16 @@ function Scanner({
             />
           )}
 
-          <div className="pointer-events-none absolute left-5 top-5 rounded-full border border-white/10 bg-black/35 px-3 py-1 text-[11px] font-black text-white/80 backdrop-blur-md">
-            Qtd por leitura: x{quantidadeScanner}
+          <div className="pointer-events-none absolute left-4 top-4 rounded-full border border-white/10 bg-black/38 px-3 py-1 text-[11px] font-black text-white/82 backdrop-blur-md">
+            x{quantidadeScanner}
+          </div>
+
+          <div className="pointer-events-none absolute right-4 top-4">
+            <PermissaoPill permissao={permissaoCamera} />
           </div>
 
           {(lido || bloqueado || emErro || iniciando) && (
-            <div className="pointer-events-none absolute bottom-5 left-5 right-5">
+            <div className="pointer-events-none absolute bottom-4 left-4 right-4">
               <StatusScanner
                 iniciando={iniciando}
                 lendo={false}
@@ -835,6 +971,7 @@ function Scanner({
                 codigoLido={codigoLido}
                 codigoBloqueado={codigoBloqueado}
                 erro={erro}
+                permissaoBloqueada={permissaoBloqueada}
                 compacto
               />
             </div>
@@ -842,28 +979,26 @@ function Scanner({
         </div>
       </div>
 
-      {/* PAINEL */}
       <div
         className="
-          relative z-20 shrink-0 px-4
-          pb-[calc(env(safe-area-inset-bottom)+0.9rem)]
+          relative z-20 shrink-0 px-3 sm:px-4
+          pb-[calc(env(safe-area-inset-bottom)+0.7rem)]
         "
       >
         <div
           className="
-            max-h-[44dvh] overflow-y-auto overscroll-contain rounded-[2rem]
-            border border-white/10 bg-slate-950/78 p-3 shadow-2xl
-            backdrop-blur-2xl
-            sm:mx-auto sm:max-h-[42dvh] sm:max-w-3xl
+            max-h-[46dvh] overflow-y-auto overflow-x-hidden overscroll-contain rounded-[1.8rem]
+            border border-white/10 bg-slate-950/80 p-3 shadow-2xl
+            backdrop-blur-2xl sm:mx-auto sm:max-h-[42dvh] sm:max-w-3xl sm:rounded-[2rem]
           "
         >
           <div className="space-y-3">
-            <div className="grid grid-cols-[1fr_auto] gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_112px]">
               <QuantidadeScanner
                 quantidade={quantidadeScanner}
                 diminuir={() => alterarQuantidade(-1)}
                 aumentar={() => alterarQuantidade(1)}
-                setQuantidade={setQuantidadeScanner}
+                setQuantidade={definirQuantidade}
               />
 
               {codigoBloqueado ? (
@@ -871,10 +1006,10 @@ function Scanner({
                   type="button"
                   onClick={limparBloqueio}
                   className="
-                    flex min-w-[98px] flex-col items-center justify-center rounded-3xl
+                    flex min-h-[58px] w-full items-center justify-center gap-2 rounded-3xl
                     border border-emerald-400/20 bg-emerald-500/15 px-3 py-3
                     text-xs font-black text-emerald-100 shadow-xl backdrop-blur-md
-                    transition active:scale-[0.98]
+                    transition active:scale-[0.98] sm:min-h-full sm:flex-col
                   "
                 >
                   <ShieldCheck size={21} />
@@ -887,6 +1022,7 @@ function Scanner({
                   lido={lido}
                   bloqueado={bloqueado}
                   emErro={emErro}
+                  permissaoBloqueada={permissaoBloqueada}
                 />
               )}
             </div>
@@ -896,7 +1032,7 @@ function Scanner({
               onLimpar={onLimparPreview}
             />
 
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <BotaoControle
                 icon={RefreshCcw}
                 label="Reiniciar"
@@ -955,6 +1091,7 @@ function Scanner({
                     bg-emerald-600 text-white shadow-lg shadow-emerald-600/25
                     transition active:scale-95
                   "
+                  aria-label="Enviar código manual"
                 >
                   <Barcode size={22} />
                 </button>
@@ -973,56 +1110,128 @@ function QuantidadeScanner({
   aumentar,
   setQuantidade,
 }) {
+  const atalhos = [1, 5, 10, 20, 50];
+
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/10 p-3 backdrop-blur-md">
+    <div className="min-w-0 rounded-3xl border border-white/10 bg-white/10 p-3 backdrop-blur-md">
       <div className="mb-2 flex items-center gap-2 text-xs font-black text-white/70">
         <SlidersHorizontal size={15} />
         Quantidade por leitura
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="grid grid-cols-[44px_minmax(70px,1fr)_44px] items-center gap-2">
         <button
           type="button"
           onClick={diminuir}
           className="
-            flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
+            flex h-11 w-11 items-center justify-center rounded-2xl
             bg-white/10 text-white transition active:scale-95
           "
+          aria-label="Diminuir quantidade"
         >
           <Minus size={18} />
         </button>
 
         <input
           value={quantidade}
-          onChange={(e) => {
-            const valor = Number(e.target.value.replace(/\D/g, ""));
-            setQuantidade(Math.max(1, Math.min(999, valor || 1)));
-          }}
+          onChange={(e) => setQuantidade(e.target.value)}
           inputMode="numeric"
           className="
-            h-11 min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/25
+            h-11 min-w-0 rounded-2xl border border-white/10 bg-black/25
             text-center text-xl font-black text-white outline-none
             focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/15
           "
+          aria-label="Quantidade por leitura"
         />
 
         <button
           type="button"
           onClick={aumentar}
           className="
-            flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
+            flex h-11 w-11 items-center justify-center rounded-2xl
             bg-emerald-600 text-white shadow-lg shadow-emerald-600/25
             transition active:scale-95
           "
+          aria-label="Aumentar quantidade"
         >
           <Plus size={18} />
         </button>
+      </div>
+
+      <div className="mt-2 grid grid-cols-5 gap-1.5">
+        {atalhos.map((valor) => (
+          <button
+            key={valor}
+            type="button"
+            onClick={() => setQuantidade(valor)}
+            className={`
+              rounded-2xl px-2 py-2 text-[11px] font-black transition active:scale-95
+              ${
+                Number(quantidade) === valor
+                  ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
+                  : "bg-white/10 text-white/75"
+              }
+            `}
+          >
+            x{valor}
+          </button>
+        ))}
       </div>
     </div>
   );
 }
 
-function StatusPill({ iniciando, lendo, lido, bloqueado, emErro }) {
+function PermissaoPill({ permissao }) {
+  let texto = "Permissão";
+  let classe = "border-white/10 bg-black/35 text-white/70";
+  let Icon = ShieldCheck;
+
+  if (permissao === "checando") {
+    texto = "Checando";
+    Icon = Loader2;
+    classe = "border-emerald-400/20 bg-emerald-500/12 text-emerald-100";
+  }
+
+  if (permissao === "liberada") {
+    texto = "Liberada";
+    Icon = ShieldCheck;
+    classe = "border-emerald-400/25 bg-emerald-500/18 text-emerald-100";
+  }
+
+  if (permissao === "perguntar") {
+    texto = "Solicitar";
+    Icon = Camera;
+    classe = "border-yellow-300/25 bg-yellow-400/14 text-yellow-100";
+  }
+
+  if (permissao === "bloqueada") {
+    texto = "Bloqueada";
+    Icon = ShieldAlert;
+    classe = "border-red-400/25 bg-red-500/18 text-red-100";
+  }
+
+  return (
+    <div
+      className={`
+        flex items-center gap-1.5 rounded-full border px-2.5 py-1
+        text-[10px] font-black shadow-xl backdrop-blur-md
+        ${classe}
+      `}
+    >
+      <Icon size={12} className={permissao === "checando" ? "animate-spin" : ""} />
+      {texto}
+    </div>
+  );
+}
+
+function StatusPill({
+  iniciando,
+  lendo,
+  lido,
+  bloqueado,
+  emErro,
+  permissaoBloqueada,
+}) {
   let texto = "Ativo";
   let Icon = Camera;
   let classe = "border-white/10 bg-white/10 text-white";
@@ -1030,6 +1239,12 @@ function StatusPill({ iniciando, lendo, lido, bloqueado, emErro }) {
   if (iniciando) {
     texto = "Abrindo";
     Icon = Loader2;
+    classe = "border-emerald-400/20 bg-emerald-500/10 text-emerald-100";
+  }
+
+  if (lendo) {
+    texto = "Lendo";
+    Icon = ScanLine;
     classe = "border-emerald-400/20 bg-emerald-500/10 text-emerald-100";
   }
 
@@ -1046,16 +1261,17 @@ function StatusPill({ iniciando, lendo, lido, bloqueado, emErro }) {
   }
 
   if (emErro) {
-    texto = "Erro";
-    Icon = AlertTriangle;
+    texto = permissaoBloqueada ? "Bloq." : "Erro";
+    Icon = permissaoBloqueada ? ShieldAlert : AlertTriangle;
     classe = "border-red-400/25 bg-red-500/15 text-red-100";
   }
 
   return (
     <div
       className={`
-        flex min-w-[98px] flex-col items-center justify-center rounded-3xl
+        flex min-h-[58px] w-full items-center justify-center gap-2 rounded-3xl
         border px-3 py-3 text-xs font-black shadow-xl backdrop-blur-md
+        sm:min-h-full sm:flex-col
         ${classe}
       `}
     >
@@ -1074,6 +1290,7 @@ function StatusScanner({
   codigoLido,
   codigoBloqueado,
   erro,
+  permissaoBloqueada,
   compacto = false,
 }) {
   if (iniciando) {
@@ -1116,8 +1333,8 @@ function StatusScanner({
   if (emErro) {
     return (
       <StatusBox
-        icon={AlertTriangle}
-        titulo="Scanner em segurança"
+        icon={permissaoBloqueada ? ShieldAlert : AlertTriangle}
+        titulo={permissaoBloqueada ? "Câmera bloqueada" : "Scanner em segurança"}
         texto={erro}
         variant="danger"
         compacto={compacto}
@@ -1193,10 +1410,10 @@ function BotaoControle({ icon: Icon, label, onClick, disabled = false }) {
       onClick={onClick}
       disabled={disabled}
       className="
-        flex min-h-[62px] flex-col items-center justify-center gap-1 rounded-2xl
+        flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-2xl
         border border-white/10 bg-white/10 px-2 py-3 text-xs font-black
         text-white backdrop-blur-md transition active:scale-95
-        disabled:cursor-not-allowed disabled:opacity-35
+        disabled:cursor-not-allowed disabled:opacity-35 sm:min-h-[62px]
       "
     >
       <Icon size={20} />
@@ -1253,7 +1470,7 @@ function MiniPreviewScanner({ itens = [], onLimpar }) {
           {ultimo.imagem ? (
             <img
               src={ultimo.imagem}
-              alt={ultimo.nome || "Medicamento"}
+              alt={ultimo.nome || "Produto"}
               className="h-full w-full object-cover"
             />
           ) : (
@@ -1263,7 +1480,7 @@ function MiniPreviewScanner({ itens = [], onLimpar }) {
 
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-black">
-            {ultimo.nome || "Medicamento"}
+            {ultimo.nome || "Produto"}
           </p>
 
           <p className="mt-0.5 truncate text-xs text-emerald-100/75">
@@ -1285,14 +1502,14 @@ function MiniPreviewScanner({ itens = [], onLimpar }) {
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {restantes.map((item) => (
             <div
-              key={item.id}
+              key={item.id || `${item.codigo}-${item.nome}`}
               className="flex min-w-[160px] items-center gap-2 rounded-2xl bg-black/20 p-2"
             >
               <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/15">
                 {item.imagem ? (
                   <img
                     src={item.imagem}
-                    alt={item.nome || "Medicamento"}
+                    alt={item.nome || "Produto"}
                     className="h-full w-full object-cover"
                   />
                 ) : (
@@ -1302,7 +1519,7 @@ function MiniPreviewScanner({ itens = [], onLimpar }) {
 
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-black">
-                  {item.nome || "Medicamento"}
+                  {item.nome || "Produto"}
                 </p>
 
                 <p className="text-[11px] text-emerald-100/70">

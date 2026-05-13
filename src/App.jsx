@@ -8,7 +8,7 @@ import {
 
 import { AnimatePresence, motion } from "framer-motion";
 
-import { useAuth } from "./context/AuthContext";
+import { useAuth } from "./context/useAuth";
 
 import AppHeader from "./components/navigation/AppHeader";
 import BottomNav from "./components/navigation/BottomNav";
@@ -33,6 +33,11 @@ const Mapeamentos = lazy(() => import("./pages/Mapeamentos"));
 const Backup = lazy(() => import("./pages/Backup"));
 const Perfil = lazy(() => import("./pages/Perfil"));
 const Notificacoes = lazy(() => import("./pages/Notificacoes"));
+
+const HEADER_BACK_PAGES = [
+  ...MENU_PAGES,
+  "perfil",
+];
 
 function App() {
   const { usuarioAtual, loading, isAdmin } = useAuth();
@@ -76,7 +81,6 @@ function App() {
 
     if (!primeiraPaginaDefinida.current) {
       setPagina(isAdmin ? ADMIN_START_PAGE : COMMON_START_PAGE);
-
       primeiraPaginaDefinida.current = true;
       return;
     }
@@ -94,23 +98,39 @@ function App() {
     return <TelaLogin />;
   }
 
-  const mostrarVoltar = MENU_PAGES.includes(pagina);
+  const mostrarVoltar = HEADER_BACK_PAGES.includes(pagina);
+
+  function limparOverlay() {
+    setOverlayAberto(false);
+    document.body.classList.remove("app-overlay-open");
+
+    window.dispatchEvent(
+      new CustomEvent("app-overlay-change", {
+        detail: {
+          open: false,
+        },
+      })
+    );
+  }
 
   function irPara(proximaPagina) {
     if (!isAdmin && !COMMON_ALLOWED_PAGES.includes(proximaPagina)) {
+      limparOverlay();
       setPagina(COMMON_START_PAGE);
       return;
     }
 
-    setOverlayAberto(false);
-    document.body.classList.remove("app-overlay-open");
-
+    limparOverlay();
     setPagina(proximaPagina);
   }
 
   function voltarPagina() {
-    setOverlayAberto(false);
-    document.body.classList.remove("app-overlay-open");
+    limparOverlay();
+
+    if (pagina === "perfil") {
+      setPagina("menu");
+      return;
+    }
 
     if (MENU_PAGES.includes(pagina)) {
       setPagina("menu");

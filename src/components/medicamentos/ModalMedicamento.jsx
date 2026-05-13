@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import ToastStack from "../ToastStack";
 
 import {
+  Boxes,
   Camera,
   CalendarDays,
   Clock3,
@@ -34,6 +35,9 @@ function ModalMedicamento({
   nome,
   setNome,
 
+  setor = "Medicamentos",
+  setSetor = () => {},
+
   quantidade,
   setQuantidade,
 
@@ -59,17 +63,30 @@ function ModalMedicamento({
   const [erros, setErros] = useState({});
   const [salvando, setSalvando] = useState(false);
 
+  const setoresDisponiveis = [
+    "Medicamentos",
+    "Alimentos",
+    "Geladeira",
+    "Perfumaria",
+    "Higiene",
+    "Estoque geral",
+    "Outros",
+  ];
+
+  const setorSelecionado = setor || "Medicamentos";
+
   const progresso = useMemo(() => {
     let pontos = 0;
 
-    if (nome.trim()) pontos += 25;
-    if (Number(quantidade || 0) > 0) pontos += 20;
+    if (nome.trim()) pontos += 22;
+    if (setorSelecionado) pontos += 10;
+    if (Number(quantidade || 0) > 0) pontos += 18;
     if (validarData(validade)) pontos += 30;
-    if (diasRemover !== "" && Number(diasRemover) >= 0) pontos += 15;
-    if (imagem) pontos += 10;
+    if (diasRemover !== "" && Number(diasRemover) >= 0) pontos += 12;
+    if (imagem) pontos += 8;
 
     return Math.min(100, pontos);
-  }, [nome, quantidade, validade, diasRemover, imagem]);
+  }, [nome, setorSelecionado, quantidade, validade, diasRemover, imagem]);
 
   useEffect(() => {
     if (!abrirModal) {
@@ -245,7 +262,11 @@ function ModalMedicamento({
     const novosErros = {};
 
     if (!nome.trim()) {
-      novosErros.nome = "Informe o nome do medicamento.";
+      novosErros.nome = "Informe o nome do produto.";
+    }
+
+    if (!setorSelecionado) {
+      novosErros.setor = "Escolha o setor do produto.";
     }
 
     if (!quantidade || Number(quantidade) < 1) {
@@ -362,7 +383,7 @@ function ModalMedicamento({
                     shadow-lg shadow-emerald-700/25
                   "
                 >
-                  <Pill size={26} />
+                  <Package size={26} />
                 </div>
 
                 <div className="min-w-0">
@@ -378,11 +399,11 @@ function ModalMedicamento({
                   </div>
 
                   <h2 className="truncate text-xl font-black tracking-tight">
-                    {editando ? "Editar medicamento" : "Novo medicamento"}
+                    {editando ? "Editar produto" : "Novo produto"}
                   </h2>
 
                   <p className="mt-1 line-clamp-2 text-sm text-gray-500 dark:text-gray-400">
-                    Estoque, validade, alertas e imagem do produto.
+                    Setor, estoque, validade, alertas e imagem do produto.
                   </p>
                 </div>
               </div>
@@ -488,7 +509,7 @@ function ModalMedicamento({
                   <div className="relative mt-3 overflow-hidden rounded-3xl border border-gray-200 shadow-xl dark:border-white/10">
                     <img
                       src={imagem}
-                      alt="Preview do medicamento"
+                      alt="Preview do produto"
                       className="h-56 w-full object-cover sm:h-72"
                     />
 
@@ -527,14 +548,14 @@ function ModalMedicamento({
               {/* DADOS PRINCIPAIS */}
               <section className="rounded-3xl border border-gray-200 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5">
                 <SecaoTitulo
-                  icon={Pill}
+                  icon={Package}
                   titulo="Dados principais"
-                  texto="Nome e quantidade do lote."
+                  texto="Nome, setor e quantidade do lote."
                 />
 
                 <div className="mt-4 space-y-4">
                   <section>
-                    <LabelArea icon={Pill} label="Nome do medicamento" />
+                    <LabelArea icon={Pill} label="Nome do produto" />
 
                     <InputBase
                       value={nome}
@@ -542,7 +563,7 @@ function ModalMedicamento({
                         limparErro("nome");
                         setNome(e.target.value);
                       }}
-                      placeholder="Ex: Dipirona 500mg"
+                      placeholder="Ex: Dipirona 500mg, Shampoo, Leite..."
                       maxLength={80}
                       erro={erros.nome}
                     />
@@ -550,6 +571,51 @@ function ModalMedicamento({
                     <Dica texto={`${nome.length}/80 caracteres`} />
 
                     {erros.nome && <MensagemErro texto={erros.nome} />}
+                  </section>
+
+                  <section>
+                    <LabelArea icon={Boxes} label="Setor" />
+
+                    <div
+                      className={`
+                        grid grid-cols-2 gap-2 sm:grid-cols-3
+                        ${
+                          erros.setor
+                            ? "rounded-3xl border border-red-500/60 p-2"
+                            : ""
+                        }
+                      `}
+                    >
+                      {setoresDisponiveis.map((item) => {
+                        const ativo = setorSelecionado === item;
+
+                        return (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() => {
+                              limparErro("setor");
+                              setSetor(item);
+                            }}
+                            className={`
+                              min-h-[44px] rounded-2xl border px-3 py-2 text-xs font-black
+                              transition active:scale-95
+                              ${
+                                ativo
+                                  ? "border-emerald-600 bg-emerald-700 text-white shadow-lg shadow-emerald-700/20"
+                                  : "border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:border-white/10 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/15"
+                              }
+                            `}
+                          >
+                            {item}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <Dica texto="Depois vamos usar isso para filtros, cargos e permissões." />
+
+                    {erros.setor && <MensagemErro texto={erros.setor} />}
                   </section>
 
                   <section>
