@@ -12,13 +12,13 @@ import {
   Bell,
   BookOpenCheck,
   Boxes,
+  Brain,
   CalendarClock,
   CheckCircle2,
   ChevronRight,
   Copy,
   Crown,
   Download,
-  FileText,
   History,
   LayoutDashboard,
   Loader2,
@@ -26,7 +26,6 @@ import {
   Map,
   Moon,
   Package,
-  Pill,
   RefreshCcw,
   ScanBarcode,
   Search,
@@ -34,9 +33,6 @@ import {
   Shield,
   Skull,
   Sparkles,
-  Stethoscope,
-  User,
-  UserRound,
   X,
 } from "lucide-react";
 
@@ -48,7 +44,7 @@ import {
 } from "firebase/firestore";
 
 import { useTheme } from "../context/ThemeContext";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import FundoBolhas from "../components/FundoBolhas";
 import { firestore } from "../firebase";
 import { db } from "../db";
@@ -78,6 +74,7 @@ function Menu({ setPagina }) {
   const toastTimerRef = useRef(null);
 
   const [toast, setToast] = useState(null);
+  const [confirmarSair, setConfirmarSair] = useState(false);
   const [carregando, setCarregando] = useState(false);
   const [dashboard, setDashboard] = useState(dashboardInicial);
 
@@ -128,55 +125,38 @@ function Menu({ setPagina }) {
   const ferramentasAdmin = [
     {
       titulo: "Base Produtos",
-      descricao: "Produtos aprendidos pelo scanner",
+      descricao: "Produtos aprendidos",
       icon: ScanBarcode,
       pagina: "baseProdutos",
       destaque: "from-orange-600 to-amber-500",
     },
     {
       titulo: "Mapeamentos",
-      descricao: "Histórico das contagens",
+      descricao: "Histórico de contagens",
       icon: Map,
       pagina: "mapeamentos",
       destaque: "from-slate-700 to-slate-500",
     },
     {
       titulo: "Notificações",
-      descricao: "Alertas, lembretes e avisos",
+      descricao: "Alertas e lembretes",
       icon: Bell,
       pagina: "notificacoes",
       destaque: "from-pink-600 to-rose-500",
     },
     {
       titulo: "Backup",
-      descricao: "Exportar e restaurar dados",
+      descricao: "Exportar dados",
       icon: Download,
       pagina: "backup",
       destaque: "from-green-700 to-lime-500",
     },
-  ];
-
-  const ferramentasRapidas = [
     {
-      titulo: "Receitas",
-      descricao: "Validade rápida",
-      icon: FileText,
-      pagina: "receitas",
-      destaque: "from-blue-700 to-indigo-600",
-    },
-    {
-      titulo: "Posologia",
-      descricao: "Gotas, doses e frascos",
-      icon: Stethoscope,
-      pagina: "posologia",
-      destaque: "from-violet-700 to-fuchsia-600",
-    },
-    {
-      titulo: "Perfil",
-      descricao: isVisitante ? "Modo visitante" : "Conta e tema",
-      icon: UserRound,
-      pagina: "perfil",
-      destaque: "from-emerald-700 to-green-500",
+      titulo: "Academia AMSI",
+      descricao: "Estudo e treino",
+      icon: Brain,
+      pagina: "doutor",
+      destaque: "from-cyan-700 to-blue-500",
     },
   ];
 
@@ -194,6 +174,22 @@ function Menu({ setPagina }) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("app-overlay-change", {
+        detail: { open: confirmarSair },
+      })
+    );
+
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent("app-overlay-change", {
+          detail: { open: false },
+        })
+      );
+    };
+  }, [confirmarSair]);
 
   function mostrarToast(msg, tipo = "ok") {
     setToast({ msg, tipo });
@@ -395,6 +391,11 @@ function Menu({ setPagina }) {
     }
   }
 
+  async function confirmarLogout() {
+    setConfirmarSair(false);
+    await logout();
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden">
       <FundoBolhas variant="emerald" />
@@ -403,7 +404,17 @@ function Menu({ setPagina }) {
         {toast && <Toast toast={toast} fechar={() => setToast(null)} />}
       </AnimatePresence>
 
-      <div className="relative z-10 mx-auto max-w-6xl space-y-5 p-4 pb-32 text-gray-950 dark:text-white">
+      <AnimatePresence>
+        {confirmarSair && (
+          <ModalConfirmarSair
+            isVisitante={isVisitante}
+            onCancel={() => setConfirmarSair(false)}
+            onConfirm={confirmarLogout}
+          />
+        )}
+      </AnimatePresence>
+
+      <div className="relative z-10 mx-auto max-w-6xl space-y-4 p-4 pb-32 text-gray-950 dark:text-white">
         <MenuHero
           saudacao={saudacao}
           primeiroNome={primeiroNome}
@@ -412,47 +423,24 @@ function Menu({ setPagina }) {
           isVisitante={isVisitante}
           dashboard={dashboard}
           onPerfil={() => setPagina("perfil")}
-          onLogout={logout}
+          onLogout={() => setConfirmarSair(true)}
           onCopyId={() => copiarTexto(usuarioAtual?.publicId, "ID")}
         />
 
-        {!isAdmin && (
-          <section className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
-            <SectionTitle
-              icon={Sparkles}
-              title={isVisitante ? "Uso rápido" : "Atalhos"}
-              description={
-                isVisitante
-                  ? "Ferramentas liberadas sem criar conta"
-                  : "Ferramentas principais da sua conta"
-              }
-            />
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {ferramentasRapidas.map((acao) => (
-                <ActionCard
-                  key={acao.pagina}
-                  {...acao}
-                  onClick={() => setPagina(acao.pagina)}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
         {isAdmin && (
-          <section className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
+          <section className="rounded-[1.8rem] border border-gray-200 bg-white/85 p-4 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70 sm:p-5">
             <SectionTitle
-              icon={Sparkles}
+              icon={Crown}
               title="Ferramentas Master"
-              description="Recursos administrativos que não ficam no menu inferior"
+              description="Recursos administrativos fora da barra inferior"
             />
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
               {ferramentasAdmin.map((acao) => (
                 <ActionCard
                   key={acao.pagina}
                   {...acao}
+                  compact
                   onClick={() => setPagina(acao.pagina)}
                 />
               ))}
@@ -461,7 +449,7 @@ function Menu({ setPagina }) {
         )}
 
         {isAdmin && (
-          <section className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
+          <section className="rounded-[1.8rem] border border-gray-200 bg-white/85 p-4 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70 sm:p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <SectionTitle
                 icon={LayoutDashboard}
@@ -473,18 +461,18 @@ function Menu({ setPagina }) {
               <button
                 type="button"
                 onClick={carregarDashboard}
-                className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-700 text-white shadow-lg shadow-emerald-700/20 transition active:scale-95"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-green-700 text-white shadow-lg shadow-emerald-700/20 transition active:scale-95 sm:h-14 sm:w-14"
                 aria-label="Atualizar dashboard"
               >
                 {carregando ? (
-                  <Loader2 size={25} className="animate-spin" />
+                  <Loader2 size={24} className="animate-spin" />
                 ) : (
-                  <RefreshCcw size={25} />
+                  <RefreshCcw size={24} />
                 )}
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-6">
               <MetricPremium
                 icon={Package}
                 titulo="Itens"
@@ -511,7 +499,7 @@ function Menu({ setPagina }) {
                 icon={CalendarClock}
                 titulo="Próximos"
                 valor={dashboard.proximos}
-                descricao="vencer/remover"
+                descricao="alerta"
                 aviso={dashboard.proximos > 0}
               />
 
@@ -533,16 +521,16 @@ function Menu({ setPagina }) {
         )}
 
         {isAdmin && (
-          <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-            <div className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
+          <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="rounded-[1.8rem] border border-gray-200 bg-white/85 p-4 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70 sm:p-5">
               <SectionTitle
                 icon={Shield}
                 title="Gerenciar acessos"
-                description="Busque pelo ID público para editar o cargo de uma conta"
+                description="Busque pelo ID público para editar a permissão"
               />
 
-              <div className="flex gap-2">
-                <div className="relative flex-1">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="relative">
                   <Search
                     size={18}
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
@@ -556,8 +544,8 @@ function Menu({ setPagina }) {
                         buscarPorId();
                       }
                     }}
-                    placeholder="Digite o ID do usuário"
-                    className="w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 font-semibold outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-white/5"
+                    placeholder="ID do usuário"
+                    className="h-12 w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 font-semibold outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-white/5"
                   />
                 </div>
 
@@ -565,7 +553,7 @@ function Menu({ setPagina }) {
                   type="button"
                   onClick={buscarPorId}
                   disabled={loadingBusca}
-                  className="rounded-2xl bg-emerald-700 px-5 font-bold text-white shadow-lg shadow-emerald-700/15 transition active:scale-95 disabled:opacity-60"
+                  className="h-12 rounded-2xl bg-emerald-700 px-5 font-bold text-white shadow-lg shadow-emerald-700/15 transition active:scale-95 disabled:opacity-60"
                 >
                   {loadingBusca ? (
                     <Loader2 size={20} className="animate-spin" />
@@ -599,24 +587,24 @@ function Menu({ setPagina }) {
           </section>
         )}
 
-        <section className="rounded-[2rem] border border-gray-200 bg-white/85 p-5 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
+        <section className="rounded-[1.8rem] border border-gray-200 bg-white/85 p-4 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70 sm:p-5">
           <SectionTitle
             icon={Settings}
             title="Preferências"
-            description="Ajustes rápidos do visual e sessão"
+            description="Ajustes rápidos do visual"
           />
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="flex items-center justify-between rounded-3xl border border-gray-200 bg-gray-50/90 p-4 dark:border-white/10 dark:bg-white/5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800 text-white dark:bg-white/10">
+          <div className="rounded-3xl border border-gray-200 bg-gray-50/90 p-4 dark:border-white/10 dark:bg-white/5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800 text-white dark:bg-white/10">
                   <Moon size={21} />
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <p className="font-black">Modo Escuro</p>
 
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <p className="truncate text-sm text-gray-500 dark:text-gray-400">
                     {dark ? "Visual noturno ativo" : "Visual claro ativo"}
                   </p>
                 </div>
@@ -625,7 +613,7 @@ function Menu({ setPagina }) {
               <button
                 type="button"
                 onClick={toggleTheme}
-                className={`flex h-8 w-16 items-center rounded-full px-1 transition-all ${
+                className={`flex h-8 w-16 shrink-0 items-center rounded-full px-1 transition-all ${
                   dark ? "justify-end bg-green-500" : "justify-start bg-gray-400"
                 }`}
                 aria-label="Alternar tema"
@@ -633,14 +621,6 @@ function Menu({ setPagina }) {
                 <div className="h-6 w-6 rounded-full bg-white shadow-md" />
               </button>
             </div>
-
-            <PreferenceCard
-              icon={LogOut}
-              titulo="Sair"
-              descricao="Encerrar sessão neste aparelho"
-              danger
-              onClick={logout}
-            />
           </div>
         </section>
       </div>
@@ -664,21 +644,19 @@ function MenuHero({
     : usuarioAtual?.email || "Conta ativa";
 
   return (
-    <section className="relative overflow-hidden rounded-[2.2rem] bg-gradient-to-br from-emerald-700 via-green-800 to-slate-950 p-5 text-white shadow-2xl shadow-emerald-950/30 md:p-6">
+    <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-700 via-green-800 to-slate-950 p-4 text-white shadow-2xl shadow-emerald-950/30 md:p-5">
       <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-sm" />
       <div className="absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-emerald-300/10" />
       <div className="absolute right-28 top-24 h-10 w-10 rounded-full bg-white/10 blur-sm" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_35%)]" />
 
-      <div className="relative grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-stretch">
-        <div className="flex flex-col justify-between gap-6">
-          <div className="flex items-start gap-4">
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[1.7rem] border border-white/20 bg-white/15 shadow-xl backdrop-blur-md">
-              <User size={39} />
-            </div>
+      <div className="relative grid gap-4 lg:grid-cols-[1.15fr_0.85fr] lg:items-stretch">
+        <div className="flex flex-col justify-between gap-5">
+          <div className="flex items-start gap-3">
+            <HeroAvatar usuarioAtual={usuarioAtual} nome={primeiroNome} />
 
             <div className="min-w-0">
-              <p className="text-sm font-black uppercase tracking-[0.18em] text-emerald-100">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">
                 {saudacao}
               </p>
 
@@ -686,11 +664,11 @@ function MenuHero({
                 {primeiroNome}
               </h1>
 
-              <p className="mt-2 truncate text-sm text-emerald-100">
+              <p className="mt-1 truncate text-sm text-emerald-100">
                 {subtitulo}
               </p>
 
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <Chip>{isVisitante ? "✨ Visitante" : "Conta ativa"}</Chip>
 
                 {usuarioAtual?.publicId && !isVisitante && (
@@ -709,11 +687,15 @@ function MenuHero({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:max-w-sm">
+          <div className="grid grid-cols-2 gap-2 sm:max-w-sm">
             <button
               type="button"
               onClick={onPerfil}
-              className="rounded-2xl bg-white py-3 font-black text-green-800 shadow-lg transition active:scale-95"
+              className="
+                flex h-12 items-center justify-center rounded-2xl bg-white
+                text-sm font-black text-green-800 shadow-lg transition
+                hover:bg-emerald-50 active:scale-95
+              "
             >
               Meu perfil
             </button>
@@ -721,21 +703,26 @@ function MenuHero({
             <button
               type="button"
               onClick={onLogout}
-              className="flex items-center justify-center gap-2 rounded-2xl border border-white/20 bg-red-500/20 py-3 font-black backdrop-blur-sm transition active:scale-95"
+              className="
+                flex h-12 items-center justify-center gap-2 rounded-2xl
+                border border-white/20 bg-red-500/20 text-sm font-black
+                text-white backdrop-blur-sm transition hover:bg-red-500/30
+                active:scale-95
+              "
             >
-              <LogOut size={18} />
+              <LogOut size={17} />
               Sair
             </button>
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-white/10 bg-white/10 p-4 backdrop-blur-xl">
-          <p className="mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-[0.15em] text-emerald-100">
-            <Sparkles size={16} />
+        <div className="rounded-[1.7rem] border border-white/10 bg-white/10 p-3 backdrop-blur-xl sm:p-4">
+          <p className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-[0.15em] text-emerald-100">
+            <Sparkles size={15} />
             Resumo rápido
           </p>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             <HeroMiniStat
               label={isAdmin ? "Itens" : "Receitas"}
               value={isAdmin ? dashboard.totalMedicamentos : "Livre"}
@@ -760,15 +747,35 @@ function MenuHero({
   );
 }
 
+function HeroAvatar({ usuarioAtual, nome }) {
+  const foto = usuarioAtual?.fotoPerfil;
+
+  return (
+    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[1.45rem] border border-white/20 bg-white/15 shadow-xl backdrop-blur-md sm:h-20 sm:w-20 sm:rounded-[1.7rem]">
+      {foto ? (
+        <img
+          src={foto}
+          alt={nome || "Usuário"}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <span className="text-2xl font-black text-white sm:text-3xl">
+          {obterIniciais(nome)}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function SectionTitle({ icon: Icon, title, description, noMargin = false }) {
   return (
-    <div className={noMargin ? "" : "mb-4"}>
-      <h2 className="flex items-center gap-2 text-xl font-black">
-        <Icon size={22} />
+    <div className={noMargin ? "" : "mb-3"}>
+      <h2 className="flex items-center gap-2 text-lg font-black sm:text-xl">
+        <Icon size={21} />
         {title}
       </h2>
 
-      <p className="text-sm text-gray-500 dark:text-gray-400">
+      <p className="text-xs text-gray-500 dark:text-gray-400 sm:text-sm">
         {description}
       </p>
     </div>
@@ -778,40 +785,53 @@ function SectionTitle({ icon: Icon, title, description, noMargin = false }) {
 function HeroMiniStat({ label, value, detail }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-black/15 p-3">
-      <p className="text-xs font-bold text-emerald-100">{label}</p>
+      <p className="text-[11px] font-bold text-emerald-100">{label}</p>
       <p className="mt-1 text-2xl font-black">{value}</p>
       <p className="text-xs text-emerald-100/80">{detail}</p>
     </div>
   );
 }
 
-function ActionCard({ icon: Icon, titulo, descricao, destaque, onClick }) {
+function ActionCard({
+  icon: Icon,
+  titulo,
+  descricao,
+  destaque,
+  onClick,
+  compact = false,
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group relative overflow-hidden rounded-[1.7rem] border border-gray-200 bg-gray-50 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl active:scale-[0.98] dark:border-white/10 dark:bg-white/5"
+      className={`
+        group relative overflow-hidden rounded-[1.45rem] border border-gray-200
+        bg-gray-50 p-3 text-left shadow-sm transition hover:-translate-y-0.5
+        hover:shadow-xl active:scale-[0.98]
+        dark:border-white/10 dark:bg-white/5 sm:rounded-[1.7rem] sm:p-4
+        ${compact ? "min-h-[128px]" : "min-h-[136px]"}
+      `}
     >
       <div
         className={`absolute -right-10 -top-10 h-28 w-28 rounded-full bg-gradient-to-br ${destaque} opacity-20 blur-xl transition group-hover:opacity-35`}
       />
 
-      <div className="relative flex items-center justify-between gap-4">
+      <div className="relative flex items-center justify-between gap-3">
         <div
-          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${destaque} text-white shadow-lg`}
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${destaque} text-white shadow-lg sm:h-14 sm:w-14`}
         >
-          <Icon size={25} />
+          <Icon size={compact ? 22 : 24} />
         </div>
 
         <ChevronRight
-          size={19}
+          size={18}
           className="text-gray-400 transition group-hover:translate-x-1"
         />
       </div>
 
-      <div className="relative mt-4">
-        <p className="text-lg font-black">{titulo}</p>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+      <div className="relative mt-3">
+        <p className="text-sm font-black sm:text-base">{titulo}</p>
+        <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400 sm:text-sm">
           {descricao}
         </p>
       </div>
@@ -840,18 +860,18 @@ function MetricPremium({
     : "border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5";
 
   return (
-    <div className={`rounded-2xl border p-4 ${bg}`}>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <p className="text-xs font-black text-gray-500 dark:text-gray-400">
+    <div className={`rounded-2xl border p-3 sm:p-4 ${bg}`}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-[11px] font-black text-gray-500 dark:text-gray-400 sm:text-xs">
           {titulo}
         </p>
 
-        <Icon size={18} className={destaque} />
+        <Icon size={17} className={destaque} />
       </div>
 
-      <p className={`text-3xl font-black ${destaque}`}>{valor}</p>
+      <p className={`text-2xl font-black sm:text-3xl ${destaque}`}>{valor}</p>
 
-      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+      <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400 sm:text-xs">
         {descricao}
       </p>
     </div>
@@ -876,7 +896,7 @@ function EmptySearch() {
 
 function UsuarioEncontrado({ usuario, onAdmin, onComum, onCopyId }) {
   return (
-    <div className="mt-4 rounded-3xl border border-gray-200 bg-gray-50/90 p-5 dark:border-white/10 dark:bg-white/5">
+    <div className="mt-4 rounded-3xl border border-gray-200 bg-gray-50/90 p-4 dark:border-white/10 dark:bg-white/5 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-xl font-black">{usuario.nome}</p>
@@ -916,21 +936,21 @@ function UsuarioEncontrado({ usuario, onAdmin, onComum, onCopyId }) {
         </div>
       )}
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3">
         <button
           type="button"
           onClick={onAdmin}
-          className="rounded-2xl bg-yellow-500 py-3 font-black text-black transition active:scale-95"
+          className="rounded-2xl bg-yellow-500 py-3 text-sm font-black text-black transition active:scale-95 sm:text-base"
         >
-          👑 Tornar admin
+          👑 Admin
         </button>
 
         <button
           type="button"
           onClick={onComum}
-          className="rounded-2xl bg-blue-600 py-3 font-black text-white transition active:scale-95"
+          className="rounded-2xl bg-blue-600 py-3 text-sm font-black text-white transition active:scale-95 sm:text-base"
         >
-          👤 Tornar comum
+          👤 Comum
         </button>
       </div>
     </div>
@@ -947,11 +967,11 @@ function AreaMaster({
   onCopyId,
 }) {
   return (
-    <div className="rounded-[2rem] border border-emerald-200 bg-gradient-to-br from-emerald-700 via-green-800 to-slate-950 p-5 text-white shadow-2xl shadow-emerald-950/20">
+    <div className="rounded-[1.8rem] border border-emerald-200 bg-gradient-to-br from-emerald-700 via-green-800 to-slate-950 p-4 text-white shadow-2xl shadow-emerald-950/20 sm:p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
-            <Crown size={24} />
+          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 sm:h-12 sm:w-12">
+            <Crown size={23} />
           </div>
 
           <p className="text-2xl font-black">Área Master</p>
@@ -988,9 +1008,9 @@ function AreaMaster({
         <input
           value={buscaAdmin}
           onChange={(e) => setBuscaAdmin(e.target.value)}
-          placeholder="Buscar por nome, email ou ID"
+          placeholder="Buscar nome, email ou ID"
           className="
-            w-full rounded-2xl border border-white/10 bg-black/20
+            h-12 w-full rounded-2xl border border-white/10 bg-black/20
             py-3 pl-11 pr-4 font-semibold text-white outline-none
             placeholder:text-emerald-100/50
             focus:border-emerald-300/50 focus:ring-4 focus:ring-emerald-300/10
@@ -1054,9 +1074,7 @@ function AdminRow({ admin, onCopyId }) {
             onClick={onCopyId}
             className="mt-1 flex max-w-full items-center gap-1 text-xs font-bold text-emerald-100/90 transition hover:text-white active:scale-95"
           >
-            <span className="truncate">
-              ID: {admin.publicId || "sem ID"}
-            </span>
+            <span className="truncate">ID: {admin.publicId || "sem ID"}</span>
 
             <Copy size={12} className="shrink-0" />
           </button>
@@ -1081,40 +1099,9 @@ function CargoBadge({ tipo }) {
   );
 }
 
-function PreferenceCard({ icon: Icon, titulo, descricao, onClick, danger = false }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center justify-between rounded-3xl border border-gray-200 bg-gray-50/90 p-4 text-left transition hover:bg-gray-100 active:scale-[0.98] dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
-    >
-      <div className="flex min-w-0 items-center gap-4">
-        <div
-          className={`
-            flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white
-            ${danger ? "bg-red-600" : "bg-green-700"}
-          `}
-        >
-          <Icon size={21} />
-        </div>
-
-        <div className="min-w-0">
-          <p className="font-black">{titulo}</p>
-
-          <p className="truncate text-sm text-gray-500 dark:text-gray-400">
-            {descricao}
-          </p>
-        </div>
-      </div>
-
-      <ChevronRight size={18} className="text-gray-400" />
-    </button>
-  );
-}
-
 function Chip({ children }) {
   return (
-    <span className="rounded-full border border-white/10 bg-white/15 px-3 py-1 text-xs font-bold backdrop-blur-sm">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/15 px-3 py-1 text-xs font-bold backdrop-blur-sm">
       {children}
     </span>
   );
@@ -1129,11 +1116,16 @@ function Toast({ toast, fechar }) {
       initial={{ opacity: 0, y: -14 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -14 }}
-      className="fixed left-1/2 top-5 z-[99999] w-[92%] max-w-sm -translate-x-1/2"
+      className="
+        fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.75rem)]
+        z-[99999] flex justify-center px-3
+        pointer-events-none
+      "
     >
       <div
         className={`
-          flex items-center gap-3 rounded-3xl border p-4 shadow-2xl backdrop-blur-xl
+          pointer-events-auto flex w-full max-w-[calc(100vw-1.5rem)] items-center gap-3
+          rounded-3xl border p-4 shadow-2xl backdrop-blur-xl sm:max-w-md
           ${
             erro
               ? "border-red-300 bg-red-50/95 text-red-700 dark:border-red-500/20 dark:bg-red-500/15 dark:text-red-300"
@@ -1151,18 +1143,99 @@ function Toast({ toast, fechar }) {
           {erro ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
         </div>
 
-        <p className="flex-1 text-sm font-bold">{toast.msg}</p>
+        <p className="min-w-0 flex-1 text-sm font-bold">{toast.msg}</p>
 
         <button
           type="button"
           onClick={fechar}
-          className="flex h-9 w-9 items-center justify-center rounded-xl bg-black/5 transition active:scale-95 dark:bg-white/10"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/5 transition active:scale-95 dark:bg-white/10"
+          aria-label="Fechar aviso"
         >
           <X size={17} />
         </button>
       </div>
     </motion.div>
   );
+}
+
+function ModalConfirmarSair({ isVisitante, onCancel, onConfirm }) {
+  return (
+    <motion.div
+      onClick={onCancel}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="
+        fixed inset-0 z-[2147483647] flex items-center justify-center
+        bg-slate-950/75 p-4 backdrop-blur-md
+      "
+    >
+      <motion.div
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 22, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 22, scale: 0.96 }}
+        transition={{ duration: 0.18 }}
+        className="
+          w-full max-w-sm rounded-[2rem] border border-white/10
+          bg-white p-6 text-gray-950 shadow-2xl dark:bg-gray-950 dark:text-white
+        "
+      >
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-red-600 text-white shadow-lg shadow-red-600/25">
+          <LogOut size={30} />
+        </div>
+
+        <h2 className="text-center text-xl font-black">Sair da conta?</h2>
+
+        <p className="mt-2 text-center text-sm text-gray-500 dark:text-gray-400">
+          {isVisitante
+            ? "Você vai sair do modo visitante e voltar para a tela inicial."
+            : "Sua sessão será encerrada e o app voltará para a tela de login."}
+        </p>
+
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="
+              h-12 rounded-2xl bg-gray-100 font-black text-gray-700
+              transition active:scale-95 dark:bg-white/10 dark:text-white
+            "
+          >
+            Cancelar
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="
+              flex h-12 items-center justify-center gap-2 rounded-2xl
+              bg-red-600 font-black text-white shadow-lg shadow-red-600/20
+              transition hover:bg-red-700 active:scale-95
+            "
+          >
+            <LogOut size={18} />
+            Sair
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function obterIniciais(nome) {
+  const partes = String(nome || "U")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!partes.length) return "U";
+
+  if (partes.length === 1) {
+    return partes[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${partes[0][0]}${partes[1][0]}`.toUpperCase();
 }
 
 export default Menu;

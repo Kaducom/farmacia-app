@@ -1,13 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 
 import {
-  Pill,
   FileText,
-  Syringe,
-  Brain,
   Menu as MenuIcon,
-  UserRound,
+  Package,
+  Syringe,
 } from "lucide-react";
 
 import TabButton from "./TabButton";
@@ -27,12 +25,67 @@ function BottomNav({ page, isAdmin, onNavigate }) {
     };
   }, []);
 
-  const menuPages = [
-    "baseProdutos",
-    "mapeamentos",
-    "backup",
-    "notificacoes",
+  const paginasDoMenu = useMemo(
+    () => [
+      "menu",
+      "perfil",
+      "baseProdutos",
+      "mapeamentos",
+      "backup",
+      "notificacoes",
+    ],
+    []
+  );
+
+  const abasAdmin = [
+    {
+      id: "medicamentos",
+      label: "Produtos",
+      icon: Package,
+      active: page === "medicamentos",
+    },
+    {
+      id: "receitas",
+      label: "Receitas",
+      icon: FileText,
+      active: page === "receitas",
+    },
+    {
+      id: "posologia",
+      label: "Posologia",
+      icon: Syringe,
+      active: page === "posologia",
+    },
+    {
+      id: "menu",
+      label: "Menu",
+      icon: MenuIcon,
+      active: paginasDoMenu.includes(page),
+    },
   ];
+
+  const abasComum = [
+    {
+      id: "receitas",
+      label: "Receitas",
+      icon: FileText,
+      active: page === "receitas",
+    },
+    {
+      id: "posologia",
+      label: "Posologia",
+      icon: Syringe,
+      active: page === "posologia",
+    },
+    {
+      id: "menu",
+      label: "Menu",
+      icon: MenuIcon,
+      active: paginasDoMenu.includes(page),
+    },
+  ];
+
+  const abas = isAdmin ? abasAdmin : abasComum;
 
   return (
     <motion.nav
@@ -42,86 +95,33 @@ function BottomNav({ page, isAdmin, onNavigate }) {
         opacity: overlayAberto ? 0 : 1,
       }}
       transition={{
-        duration: 0.22,
-        ease: "easeOut",
+        duration: 0.24,
+        ease: [0.22, 1, 0.36, 1],
       }}
       className={`
         fixed bottom-0 left-0 z-50 w-full
-        border-t border-gray-200 bg-white/90 px-2 pt-2
-        app-bottom-nav-safe backdrop-blur-md
-        dark:border-gray-700 dark:bg-[#111827]/90
+        border-t border-gray-200/80 bg-white/86 px-2 pt-2
+        app-bottom-nav-safe shadow-[0_-18px_55px_rgba(15,23,42,0.10)]
+        backdrop-blur-2xl
+        dark:border-white/10 dark:bg-[#0b1220]/88 dark:shadow-black/35
         ${overlayAberto ? "pointer-events-none" : ""}
       `}
     >
-      <div className="mx-auto flex max-w-4xl justify-around">
-        {isAdmin ? (
-          <>
-            <TabButton
-              icon={Pill}
-              label="Meds"
-              active={page === "medicamentos"}
-              onClick={() => onNavigate("medicamentos")}
-            />
-
-            <TabButton
-              icon={Brain}
-              label="AMSI"
-              active={page === "doutor"}
-              onClick={() => onNavigate("doutor")}
-            />
-
-            <TabButton
-              icon={FileText}
-              label="Receitas"
-              active={page === "receitas"}
-              onClick={() => onNavigate("receitas")}
-            />
-
-            <TabButton
-              icon={Syringe}
-              label="Posologia"
-              active={page === "posologia"}
-              onClick={() => onNavigate("posologia")}
-            />
-
-            <TabButton
-              icon={MenuIcon}
-              label="Menu"
-              active={page === "menu" || menuPages.includes(page)}
-              onClick={() => onNavigate("menu")}
-            />
-          </>
-        ) : (
-          <>
-            <TabButton
-              icon={FileText}
-              label="Receitas"
-              active={page === "receitas"}
-              onClick={() => onNavigate("receitas")}
-            />
-
-            <TabButton
-              icon={Syringe}
-              label="Posologia"
-              active={page === "posologia"}
-              onClick={() => onNavigate("posologia")}
-            />
-
-            <TabButton
-              icon={UserRound}
-              label="Perfil"
-              active={page === "perfil"}
-              onClick={() => onNavigate("perfil")}
-            />
-
-            <TabButton
-              icon={MenuIcon}
-              label="Menu"
-              active={page === "menu"}
-              onClick={() => onNavigate("menu")}
-            />
-          </>
-        )}
+      <div
+        className={`
+          mx-auto grid max-w-4xl items-center gap-1
+          ${abas.length === 4 ? "grid-cols-4" : "grid-cols-3"}
+        `}
+      >
+        {abas.map((aba) => (
+          <TabButton
+            key={aba.id}
+            icon={aba.icon}
+            label={aba.label}
+            active={aba.active}
+            onClick={() => onNavigate(aba.id)}
+          />
+        ))}
       </div>
     </motion.nav>
   );

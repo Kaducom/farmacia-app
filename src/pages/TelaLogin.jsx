@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 
 import {
   ArrowRight,
+  Boxes,
   Calculator,
   CheckCircle2,
   Eye,
@@ -12,16 +13,20 @@ import {
   Lock,
   LogIn,
   Mail,
-  Pill,
+  Package,
+  Radar,
+  Rocket,
+  ScanBarcode,
   ShieldCheck,
   Sparkles,
   User,
   UserPlus,
   UserRoundCheck,
   X,
+  AlertTriangle,
 } from "lucide-react";
 
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 
 const contaInicial = {
   nome: "",
@@ -65,21 +70,21 @@ function TelaLogin() {
   const [carregando, setCarregando] = useState(false);
 
   const tituloModo = useMemo(() => {
-    if (modo === "criar") return "Crie sua conta";
-    if (modo === "visitante") return "Use agora, sem cadastro";
-    return "Bem-vindo de volta";
+    if (modo === "criar") return "Criar missão";
+    if (modo === "visitante") return "Entrar em modo visitante";
+    return "Bem-vindo ao AVISAI";
   }, [modo]);
 
   const textoModo = useMemo(() => {
     if (modo === "criar") {
-      return "Salve seu perfil e prepare o app para recursos de nuvem.";
+      return "Crie sua conta para preparar perfil, permissões, setores e sincronização.";
     }
 
     if (modo === "visitante") {
-      return "Perfeito para consulta rápida: Receitas e Posologia liberadas na hora.";
+      return "Use Receitas e Posologia agora, sem cadastro e sem burocracia.";
     }
 
-    return "Entre para acessar suas ferramentas e continuar o trabalho.";
+    return "Acesse sua central inteligente de produtos, validade, estoque e scanner.";
   }, [modo]);
 
   function avisar(texto, tipo = "ok") {
@@ -164,8 +169,8 @@ function TelaLogin() {
 
     avisar(
       res.publicId
-        ? `Conta criada ✨ Seu ID: ${res.publicId}. Agora é só entrar.`
-        : "Conta criada ✨ Agora é só entrar.",
+        ? `Conta criada 🚀 Seu ID: ${res.publicId}. Agora é só entrar.`
+        : "Conta criada 🚀 Agora é só entrar.",
       "ok"
     );
   }
@@ -184,13 +189,13 @@ function TelaLogin() {
   }
 
   return (
-    <div className="relative min-h-[100dvh] overflow-hidden bg-[#020617] text-white">
+    <div className="relative min-h-[100dvh] overflow-hidden bg-[#020806] text-white">
       <FundoLogin />
 
       <div
         className="
           relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-6xl
-          items-center justify-center px-4 py-6
+          items-center justify-center px-4 py-5
           sm:px-6 lg:grid lg:grid-cols-[0.95fr_1.05fr] lg:gap-8
         "
       >
@@ -199,40 +204,37 @@ function TelaLogin() {
         <motion.div
           initial={{ opacity: 0, y: 18, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.28, ease: "easeOut" }}
+          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
           className="
             w-full max-w-md overflow-hidden rounded-[2.2rem]
-            border border-white/10 bg-white/10 shadow-2xl shadow-black/40
+            border border-white/10 bg-white/10 shadow-2xl shadow-black/45
             backdrop-blur-2xl
           "
         >
           <div className="relative overflow-hidden p-5 sm:p-6">
-            <div className="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full bg-emerald-400/10 blur-2xl" />
-            <div className="pointer-events-none absolute -bottom-16 left-8 h-36 w-36 rounded-full bg-blue-400/10 blur-2xl" />
+            <div className="pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full bg-lime-400/10 blur-2xl" />
+            <div className="pointer-events-none absolute -bottom-16 left-8 h-36 w-36 rounded-full bg-emerald-500/10 blur-2xl" />
 
             <div className="relative">
-              <div
-                className="
-                  mx-auto mb-5 flex h-20 w-20 items-center justify-center
-                  rounded-[1.7rem] border border-white/15
-                  bg-gradient-to-br from-emerald-500 via-emerald-700 to-slate-950
-                  text-4xl shadow-xl shadow-emerald-600/25
-                "
-              >
-                💊
-              </div>
+              <LogoAvisai />
 
               <div className="text-center">
-                <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-100">
-                  <Sparkles size={13} />
-                  Farmácia App
+                <div
+                  className="
+                    mb-2 inline-flex items-center gap-1.5 rounded-full
+                    border border-emerald-300/20 bg-emerald-400/10 px-3 py-1
+                    text-[11px] font-black uppercase tracking-wide text-emerald-100
+                  "
+                >
+                  <Rocket size={13} />
+                  AVISAI
                 </div>
 
                 <h1 className="text-3xl font-black tracking-tight">
                   {tituloModo}
                 </h1>
 
-                <p className="mx-auto mt-2 max-w-xs text-sm text-gray-300">
+                <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-gray-300">
                   {textoModo}
                 </p>
               </div>
@@ -294,12 +296,12 @@ function TelaLogin() {
                     <BotaoPrincipal
                       onClick={entrar}
                       carregando={carregando}
-                      icon={LogIn}
-                      texto={carregando ? "Entrando..." : "Entrar"}
+                      icon={Rocket}
+                      texto={carregando ? "Decolando..." : "Decolar"}
                     />
 
                     <p className="rounded-2xl border border-white/10 bg-white/5 p-3 text-center text-xs text-gray-300">
-                      Use sua conta para acessar perfil, dados na nuvem e recursos liberados.
+                      Entre para acessar perfil, permissões, nuvem e sua área de trabalho.
                     </p>
                   </motion.div>
                 )}
@@ -360,11 +362,11 @@ function TelaLogin() {
                       onClick={criarConta}
                       carregando={carregando}
                       icon={UserRoundCheck}
-                      texto={carregando ? "Criando..." : "Criar conta"}
+                      texto={carregando ? "Criando missão..." : "Criar conta"}
                     />
 
                     <p className="rounded-2xl border border-white/10 bg-white/5 p-3 text-center text-xs text-gray-300">
-                      A conta entra como usuário comum. Depois um admin pode liberar permissões pelo ID público.
+                      A conta começa como usuário comum. Depois um admin pode liberar setores e permissões pelo ID público.
                     </p>
                   </motion.div>
                 )}
@@ -386,17 +388,17 @@ function TelaLogin() {
 
                         <div>
                           <p className="font-black text-emerald-100">
-                            Consulta rápida liberada
+                            Modo rápido liberado
                           </p>
 
                           <p className="mt-1 text-sm text-emerald-100/80">
-                            Entre sem conta para usar Receitas e Posologia na hora. Ideal para testar ou consultar rápido.
+                            Entre sem conta para usar Receitas e Posologia na hora. Perfeito para testar ou consultar rápido.
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-2 gap-3">
                       <MiniRecurso
                         icon={FileText}
                         titulo="Receitas"
@@ -417,13 +419,13 @@ function TelaLogin() {
                       className="
                         flex w-full items-center justify-center gap-2 rounded-2xl
                         bg-white py-3 font-black text-emerald-900 shadow-lg
-                        transition active:scale-95 disabled:opacity-60
+                        transition hover:bg-emerald-50 active:scale-95 disabled:opacity-60
                       "
                     >
                       {carregando ? (
                         <>
                           <Loader2 size={19} className="animate-spin" />
-                          Entrando...
+                          Decolando...
                         </>
                       ) : (
                         <>
@@ -451,12 +453,115 @@ function FundoLogin() {
   return (
     <div className="absolute inset-0 overflow-hidden">
       <div className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-emerald-500/20 blur-3xl" />
-      <div className="absolute right-[-80px] top-32 h-72 w-72 rounded-full bg-blue-500/20 blur-3xl" />
+      <div className="absolute right-[-80px] top-32 h-72 w-72 rounded-full bg-lime-500/16 blur-3xl" />
       <div className="absolute bottom-[-120px] left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-green-700/20 blur-3xl" />
-      <div className="absolute left-1/2 top-20 h-64 w-64 -translate-x-1/2 rotate-12 rounded-[3rem] border border-white/10 bg-white/5 backdrop-blur-sm" />
-      <div className="absolute left-[15%] bottom-24 h-24 w-24 -rotate-12 rounded-3xl border border-white/10 bg-white/5" />
-      <div className="absolute right-[12%] bottom-32 h-32 w-32 rounded-full border border-emerald-300/10 bg-emerald-300/5" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_35%),linear-gradient(to_bottom,rgba(15,23,42,0.25),rgba(2,6,23,1))]" />
+
+      <motion.div
+        animate={{
+          y: [-10, 12, -10],
+          rotate: [-2, 2, -2],
+        }}
+        transition={{
+          duration: 7,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+        className="
+          absolute left-1/2 top-16 h-72 w-72 -translate-x-1/2
+          rounded-[4rem] border border-white/10 bg-white/[0.045]
+          backdrop-blur-sm
+        "
+      />
+
+      <motion.div
+        animate={{
+          y: [0, -18, 0],
+          x: [0, 10, 0],
+        }}
+        transition={{
+          duration: 6,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+        className="absolute left-[12%] bottom-24 hidden h-24 w-24 -rotate-12 rounded-3xl border border-white/10 bg-white/5 sm:block"
+      />
+
+      <motion.div
+        animate={{
+          y: [0, 22, 0],
+          x: [0, -12, 0],
+        }}
+        transition={{
+          duration: 8,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+        className="absolute right-[10%] bottom-28 hidden h-32 w-32 rounded-full border border-emerald-300/10 bg-emerald-300/5 sm:block"
+      />
+
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,197,94,0.16),transparent_35%),linear-gradient(to_bottom,rgba(15,23,42,0.22),rgba(2,8,6,1))]" />
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:54px_54px] opacity-20" />
+    </div>
+  );
+}
+
+function LogoAvisai() {
+  return (
+    <div className="mb-5 flex flex-col items-center">
+      <motion.div
+        animate={{
+          y: [0, -8, 0],
+          rotate: [-1, 1, -1],
+        }}
+        transition={{
+          duration: 4.2,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+        className="relative"
+      >
+        <div className="absolute inset-0 rounded-[2rem] bg-emerald-400/30 blur-2xl" />
+
+        <div
+          className="
+            relative flex h-24 w-24 items-center justify-center overflow-hidden
+            rounded-[2rem] border border-white/15 bg-[#062018]
+            shadow-2xl shadow-emerald-600/25
+          "
+        >
+          <img
+            src="/icons/icon-512.png"
+            alt="AVISAI"
+            className="h-full w-full object-cover"
+          />
+        </div>
+
+        <motion.div
+          animate={{
+            y: [0, -7, 0],
+            opacity: [0.65, 1, 0.65],
+          }}
+          transition={{
+            duration: 1.4,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+          className="
+            absolute -right-3 -top-3 flex h-10 w-10 items-center justify-center
+            rounded-2xl border border-white/15 bg-emerald-500 text-white
+            shadow-lg shadow-emerald-500/30
+          "
+        >
+          <Rocket size={19} />
+        </motion.div>
+      </motion.div>
+
+      <div className="mt-3 text-center">
+        <p className="text-3xl font-black tracking-[0.18em]">AVISAI</p>
+        <p className="mt-1 text-[11px] font-black uppercase tracking-[0.24em] text-emerald-300">
+          Inteligência em saúde
+        </p>
+      </div>
     </div>
   );
 }
@@ -466,28 +571,65 @@ function HeroLogin() {
     <motion.div
       initial={{ opacity: 0, x: -18 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.32, ease: "easeOut" }}
+      transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
       className="hidden lg:block"
     >
       <div className="max-w-lg">
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-black text-emerald-100 backdrop-blur-xl">
-          <ShieldCheck size={18} />
-          Seu balcão digital
+          <Rocket size={18} />
+          Lançamento AVISAI
         </div>
 
         <h2 className="text-5xl font-black leading-tight tracking-tight">
-          Farmácia App com cara de ferramenta profissional.
+          Sua operação pronta para decolar.
         </h2>
 
         <p className="mt-5 text-base leading-7 text-gray-300">
-          Entrou, usou. Receita, posologia, AMSI, estoque e rotinas da farmácia em um app só, com visual limpo e fluxo rápido.
+          Produtos, validade, estoque, scanner, setores e rotinas inteligentes em um app só. O balcão cresceu, ganhou motor e virou nave.
         </p>
 
         <div className="mt-7 grid grid-cols-2 gap-3">
-          <CardHero icon={FileText} titulo="Receitas" texto="Validade em segundos" />
-          <CardHero icon={Calculator} titulo="Posologia" texto="Gotas, frascos e doses" />
-          <CardHero icon={Pill} titulo="Estoque" texto="Controle inteligente" />
-          <CardHero icon={Sparkles} titulo="Visitante" texto="Uso rápido sem conta" />
+          <CardHero
+            icon={Package}
+            titulo="Produtos"
+            texto="Validade e estoque"
+          />
+
+          <CardHero
+            icon={ScanBarcode}
+            titulo="Scanner"
+            texto="Cadastro rápido"
+          />
+
+          <CardHero
+            icon={Boxes}
+            titulo="Setores"
+            texto="Área certa para cada pessoa"
+          />
+
+          <CardHero
+            icon={Radar}
+            titulo="Alertas"
+            texto="Nada vence no escuro"
+          />
+        </div>
+
+        <div className="mt-6 rounded-[2rem] border border-emerald-300/15 bg-emerald-400/10 p-4 backdrop-blur-xl">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-200">
+              <ShieldCheck size={22} />
+            </div>
+
+            <div>
+              <p className="font-black text-emerald-100">
+                Gestão, confiança e cuidado.
+              </p>
+
+              <p className="mt-1 text-sm leading-6 text-emerald-100/75">
+                O AVISAI começa na farmácia, mas já nasce preparado para controlar qualquer produto por validade, setor e rotina.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </motion.div>
@@ -496,7 +638,7 @@ function HeroLogin() {
 
 function CardHero({ icon: Icon, titulo, texto }) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-xl">
+    <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-xl transition hover:bg-white/15">
       <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-200">
         <Icon size={21} />
       </div>
@@ -560,6 +702,7 @@ function Mensagem({ mensagem, tipo, fechar }) {
         type="button"
         onClick={fechar}
         className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/5 transition active:scale-95"
+        aria-label="Fechar mensagem"
       >
         <X size={15} />
       </button>
@@ -659,9 +802,9 @@ function BotaoPrincipal({ onClick, carregando, icon: Icon, texto }) {
       disabled={carregando}
       className="
         mt-2 flex w-full items-center justify-center gap-2 rounded-2xl
-        bg-emerald-700 py-3 font-black text-white
+        bg-gradient-to-r from-emerald-600 to-lime-500 py-3 font-black text-white
         shadow-lg shadow-emerald-700/25 transition
-        hover:bg-emerald-800 active:scale-95 disabled:opacity-60
+        hover:brightness-110 active:scale-95 disabled:opacity-60
       "
     >
       {carregando ? (

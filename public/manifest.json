@@ -1,23 +1,27 @@
 {
-  "name": "Farmácia",
-  "short_name": "Farmácia",
-  "description": "Controle de medicamentos, validade, estoque e scanner.",
+  "name": "Avisai",
+  "short_name": "Avisai",
+  "description": "Sistema inteligente para controle de produtos, validade, estoque, setores e scanner.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#047857",
+  "background_color": "#0B1F19",
+  "theme_color": "#0F5132",
   "orientation": "portrait",
+  "categories": ["productivity", "health", "business", "utilities"],
+  "lang": "pt-BR",
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icons/maskable-icon-512.png",

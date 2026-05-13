@@ -249,23 +249,23 @@ function Perfil() {
         onChange={escolherFoto}
       />
 
-      <div className="relative z-10 mx-auto max-w-5xl space-y-5 p-4 pb-32 text-gray-950 dark:text-white">
+      <div className="relative z-10 mx-auto max-w-5xl space-y-4 p-4 pb-32 text-gray-950 dark:text-white">
         {/* HERO */}
         <section
           className="
-            relative overflow-hidden rounded-[2.3rem]
+            relative overflow-hidden rounded-[2.1rem]
             bg-gradient-to-br from-emerald-700 via-green-800 to-slate-950
-            p-5 text-white shadow-2xl shadow-emerald-950/30 sm:p-6
+            p-4 text-white shadow-2xl shadow-emerald-950/30 sm:p-5
           "
         >
-          <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10" />
+          <div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-white/10" />
           <div className="absolute -bottom-24 left-6 h-52 w-52 rounded-full bg-emerald-300/10" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_34%)]" />
 
-          <div className="relative mb-5 flex items-center justify-between gap-3">
+          <div className="relative mb-4 flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-100">
-                <Sparkles size={14} />
+              <p className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-100">
+                <Sparkles size={13} />
                 Minha conta
               </p>
 
@@ -278,27 +278,41 @@ function Perfil() {
               type="button"
               onClick={() => setConfirmarSair(true)}
               className="
-                flex h-11 shrink-0 items-center gap-2 rounded-2xl
-                border border-red-200/20 bg-red-500/20 px-3 text-sm font-black
+                flex h-10 shrink-0 items-center gap-2 rounded-2xl
+                border border-red-200/20 bg-red-500/20 px-3 text-xs font-black
                 text-white shadow-lg backdrop-blur-md transition hover:bg-red-500/30
-                active:scale-95 sm:px-4
+                active:scale-95 sm:h-11 sm:text-sm
               "
             >
-              <LogOut size={18} />
-              <span className="hidden sm:inline">Sair</span>
+              <LogOut size={17} />
+              <span>Sair</span>
             </button>
           </div>
 
-          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
-            <AvatarPerfil
-              foto={fotoPerfil}
-              nome={nomePreview}
-              editando={editando && !isVisitante}
-              onClick={abrirSeletorFoto}
-            />
+          <div className="relative grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+            <div className="flex items-center gap-3 sm:block">
+              <AvatarPerfil
+                foto={fotoPerfil}
+                nome={nomePreview}
+                editando={editando && !isVisitante}
+                onClick={abrirSeletorFoto}
+              />
 
-            <div className="min-w-0 flex-1">
-              <div className="mb-2 flex flex-wrap gap-2">
+              <div className="min-w-0 sm:hidden">
+                <p className="truncate text-2xl font-black tracking-tight">
+                  {nomePreview}
+                </p>
+
+                <p className="truncate text-xs font-semibold text-emerald-100">
+                  {isVisitante
+                    ? "Modo visitante"
+                    : usuarioAtual?.email || "Conta Firebase"}
+                </p>
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <div className="mb-2 hidden flex-wrap gap-2 sm:flex">
                 <Chip>
                   <Sparkles size={13} />
                   {isVisitante ? "Uso rápido" : "Conta ativa"}
@@ -315,17 +329,23 @@ function Perfil() {
                 </Chip>
               </div>
 
-              <p className="truncate text-3xl font-black tracking-tight sm:text-4xl">
+              <p className="hidden truncate text-3xl font-black tracking-tight sm:block lg:text-4xl">
                 {nomePreview}
               </p>
 
-              <p className="mt-1 truncate text-sm font-semibold text-emerald-100">
+              <p className="hidden truncate text-sm font-semibold text-emerald-100 sm:block">
                 {isVisitante
                   ? "Modo visitante local"
                   : usuarioAtual?.email || "Conta Firebase"}
               </p>
 
-              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                <HeroMiniCard
+                  icon={BadgeCheck}
+                  label="Acesso"
+                  value={statusConta}
+                />
+
                 <HeroMiniCard
                   icon={Briefcase}
                   label="Cargo"
@@ -346,20 +366,20 @@ function Perfil() {
               </div>
             </div>
 
-            <div className="grid gap-2 sm:w-36">
+            <div className="grid gap-2 sm:w-32">
               {!editando ? (
                 <button
                   type="button"
                   onClick={() => setEditando(true)}
                   disabled={isVisitante}
                   className="
-                    flex h-12 items-center justify-center gap-2 rounded-2xl
-                    bg-white px-4 font-black text-emerald-800 shadow-lg
+                    flex h-11 items-center justify-center gap-2 rounded-2xl
+                    bg-white px-4 text-sm font-black text-emerald-800 shadow-lg
                     transition hover:bg-emerald-50 active:scale-95
                     disabled:cursor-not-allowed disabled:opacity-60
                   "
                 >
-                  <Pencil size={18} />
+                  <Pencil size={17} />
                   Editar
                 </button>
               ) : (
@@ -367,12 +387,12 @@ function Perfil() {
                   type="button"
                   onClick={cancelarEdicao}
                   className="
-                    flex h-12 items-center justify-center gap-2 rounded-2xl
-                    border border-white/20 bg-white/10 px-4 font-black text-white
+                    flex h-11 items-center justify-center gap-2 rounded-2xl
+                    border border-white/20 bg-white/10 px-4 text-sm font-black text-white
                     backdrop-blur-md transition hover:bg-white/15 active:scale-95
                   "
                 >
-                  <X size={18} />
+                  <X size={17} />
                   Cancelar
                 </button>
               )}
@@ -386,23 +406,23 @@ function Perfil() {
                 animate={{ opacity: 1, y: 0, height: "auto" }}
                 exit={{ opacity: 0, y: 12, height: 0 }}
                 transition={{ duration: 0.22 }}
-                className="relative mt-5 overflow-hidden"
+                className="relative mt-4 overflow-hidden"
               >
                 <div
                   className="
-                    rounded-[2rem] border border-white/15 bg-white/12 p-4
-                    shadow-inner backdrop-blur-md
+                    rounded-[1.7rem] border border-white/15 bg-white/12 p-3
+                    shadow-inner backdrop-blur-md sm:p-4
                   "
                 >
-                  <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="mb-3 flex items-start justify-between gap-3">
                     <div>
-                      <p className="flex items-center gap-2 font-black">
-                        <Pencil size={18} />
+                      <p className="flex items-center gap-2 text-sm font-black sm:text-base">
+                        <Pencil size={17} />
                         Editar perfil
                       </p>
 
-                      <p className="mt-1 text-sm text-emerald-100">
-                        Altere nome e foto direto no cartão principal.
+                      <p className="mt-0.5 text-xs text-emerald-100 sm:text-sm">
+                        Nome e foto no cartão principal.
                       </p>
                     </div>
 
@@ -411,20 +431,20 @@ function Perfil() {
                       onClick={removerFoto}
                       disabled={!fotoPerfil}
                       className="
-                        flex h-10 shrink-0 items-center gap-2 rounded-2xl
-                        bg-red-500/20 px-3 text-xs font-black text-white
+                        flex h-9 shrink-0 items-center gap-1.5 rounded-2xl
+                        bg-red-500/20 px-3 text-[11px] font-black text-white
                         transition active:scale-95 disabled:opacity-40
                       "
                     >
-                      <Trash2 size={15} />
+                      <Trash2 size={14} />
                       Foto
                     </button>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                     <div>
-                      <label className="mb-1.5 flex items-center gap-2 text-sm font-black text-emerald-100">
-                        <User size={16} />
+                      <label className="mb-1 flex items-center gap-2 text-xs font-black text-emerald-100">
+                        <User size={15} />
                         Nome
                       </label>
 
@@ -433,8 +453,8 @@ function Perfil() {
                         onChange={(e) => setNome(e.target.value)}
                         placeholder="Seu nome"
                         className="
-                          h-[52px] w-full rounded-2xl border border-white/15
-                          bg-white/15 px-4 font-black text-white outline-none
+                          h-12 w-full rounded-2xl border border-white/15
+                          bg-white/15 px-4 text-sm font-black text-white outline-none
                           placeholder:text-white/45
                           focus:border-white/35 focus:ring-4 focus:ring-white/10
                         "
@@ -445,38 +465,38 @@ function Perfil() {
                       type="button"
                       onClick={abrirSeletorFoto}
                       className="
-                        flex h-[52px] items-center justify-center gap-2 rounded-2xl
-                        bg-white/15 px-4 font-black text-white transition
+                        flex h-12 items-center justify-center gap-2 rounded-2xl
+                        bg-white/15 px-4 text-sm font-black text-white transition
                         hover:bg-white/20 active:scale-95
                       "
                     >
-                      <ImagePlus size={18} />
+                      <ImagePlus size={17} />
                       Trocar foto
                     </button>
                   </div>
 
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={salvarPerfil}
                       disabled={salvando}
                       className="
-                        flex h-12 items-center justify-center gap-2 rounded-2xl
-                        bg-white font-black text-emerald-800 shadow-lg
+                        flex h-11 items-center justify-center gap-2 rounded-2xl
+                        bg-white text-sm font-black text-emerald-800 shadow-lg
                         transition hover:bg-emerald-50 active:scale-95
                         disabled:opacity-60
                       "
                     >
-                      <Save size={19} />
-                      {salvando ? "Salvando..." : "Salvar alterações"}
+                      <Save size={17} />
+                      {salvando ? "Salvando..." : "Salvar"}
                     </button>
 
                     <button
                       type="button"
                       onClick={cancelarEdicao}
                       className="
-                        h-12 rounded-2xl border border-white/20 bg-white/10
-                        font-black text-white transition hover:bg-white/15
+                        h-11 rounded-2xl border border-white/20 bg-white/10
+                        text-sm font-black text-white transition hover:bg-white/15
                         active:scale-95
                       "
                     >
@@ -491,33 +511,31 @@ function Perfil() {
 
         {/* VISITANTE */}
         {isVisitante && (
-          <section className="rounded-[2rem] border border-blue-200 bg-blue-50/90 p-5 text-blue-800 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
+          <section className="rounded-[1.7rem] border border-blue-200 bg-blue-50/90 p-4 text-blue-800 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
             <div className="flex items-start gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white">
-                <Sparkles size={24} />
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white">
+                <Sparkles size={22} />
               </div>
 
               <div>
-                <h2 className="text-xl font-black">Modo visitante</h2>
+                <h2 className="text-lg font-black">Modo visitante</h2>
 
                 <p className="mt-1 text-sm">
-                  Ideal para usar na hora, sem criar conta. O visitante pode usar
-                  Receitas e Posologia normalmente. Para salvar perfil, nuvem,
-                  histórico compartilhado ou recursos avançados, basta criar uma
-                  conta.
+                  Use Receitas e Posologia sem criar conta. Para salvar perfil,
+                  nuvem e histórico compartilhado, crie uma conta.
                 </p>
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 grid grid-cols-2 gap-2">
                   <MiniAcesso
                     icon={ReceiptText}
                     titulo="Receitas"
-                    texto="Calcule validade de receita sem cadastro."
+                    texto="Validade rápida"
                   />
 
                   <MiniAcesso
                     icon={Stethoscope}
                     titulo="Posologia"
-                    texto="Calcule frascos, gotas e tratamento rápido."
+                    texto="Doses e frascos"
                   />
                 </div>
               </div>
@@ -526,48 +544,32 @@ function Perfil() {
         )}
 
         {/* CONTA */}
-        <section className="overflow-hidden rounded-[2rem] border border-gray-200 bg-white/90 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
-          <div className="border-b border-gray-200/80 p-5 dark:border-white/10">
+        <section className="overflow-hidden rounded-[1.8rem] border border-gray-200 bg-white/90 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
+          <div className="border-b border-gray-200/80 p-4 dark:border-white/10">
             <SectionHeader
               icon={Shield}
               title="Conta"
-              subtitle="Identificação, acesso e sincronização"
+              subtitle="Identificação e sincronização"
             />
           </div>
 
-          <div className="space-y-4 p-5">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <InfoRow
-                icon={isVisitante ? CloudOff : Cloud}
-                label="Acesso"
-                value={statusConta}
-              />
-
-              <InfoRow icon={Briefcase} label="Função" value={cargoExibido} />
-
-              <InfoRow
-                icon={Cloud}
-                label="Sincronização"
-                value={sincronizacao}
-              />
-            </div>
-
+          <div className="space-y-3 p-4">
             <div
               className="
-                rounded-[2rem] border border-gray-200 bg-gray-50/90 p-4
+                rounded-[1.5rem] border border-gray-200 bg-gray-50/90 p-3
                 dark:border-white/10 dark:bg-white/5
               "
             >
-              <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-700 text-white">
-                    <Clipboard size={20} />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-700 text-white">
+                    <Clipboard size={18} />
                   </div>
 
                   <div>
                     <p className="font-black">ID público</p>
 
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                       Usado para admin encontrar sua conta
                     </p>
                   </div>
@@ -575,7 +577,7 @@ function Perfil() {
               </div>
 
               <div className="flex gap-2">
-                <div className="min-w-0 flex-1 truncate rounded-2xl border border-gray-200 bg-white px-4 py-3 font-black dark:border-white/10 dark:bg-gray-950/60">
+                <div className="min-w-0 flex-1 truncate rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm font-black dark:border-white/10 dark:bg-gray-950/60">
                   {isVisitante
                     ? "Visitante sem ID fixo"
                     : usuarioAtual?.publicId || "Sem ID"}
@@ -586,16 +588,16 @@ function Perfil() {
                   onClick={usuarioAtual?.publicId ? copiarId : gerarId}
                   disabled={isVisitante}
                   className="
-                    flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
+                    flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl
                     bg-emerald-700 text-white transition hover:bg-emerald-800
                     active:scale-95 disabled:opacity-60
                   "
                   aria-label="Copiar ou gerar ID"
                 >
                   {usuarioAtual?.publicId ? (
-                    <Copy size={19} />
+                    <Copy size={18} />
                   ) : (
-                    <Save size={19} />
+                    <Save size={18} />
                   )}
                 </button>
               </div>
@@ -604,22 +606,22 @@ function Perfil() {
         </section>
 
         {/* APARÊNCIA */}
-        <section className="overflow-hidden rounded-[2rem] border border-gray-200 bg-white/90 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
-          <div className="border-b border-gray-200/80 p-5 dark:border-white/10">
+        <section className="overflow-hidden rounded-[1.8rem] border border-gray-200 bg-white/90 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-gray-950/75">
+          <div className="border-b border-gray-200/80 p-4 dark:border-white/10">
             <SectionHeader
               icon={Moon}
               title="Aparência"
-              subtitle="Ajuste rápido do tema visual"
+              subtitle="Tema visual do app"
             />
           </div>
 
-          <div className="p-5">
-            <div className="flex items-center justify-between rounded-2xl bg-gray-100/90 p-4 dark:bg-white/5">
+          <div className="p-4">
+            <div className="flex items-center justify-between rounded-2xl bg-gray-100/90 p-3 dark:bg-white/5">
               <div>
                 <p className="font-black">Modo Escuro</p>
 
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Tema atual: {dark ? "escuro" : "claro"}
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {dark ? "Visual noturno ativo" : "Visual claro ativo"}
                 </p>
               </div>
 
@@ -647,9 +649,9 @@ function AvatarPerfil({ foto, nome, editando, onClick }) {
       type="button"
       onClick={onClick}
       className="
-        group relative flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden
-        rounded-[2.2rem] border border-white/20 bg-white/20 shadow-xl
-        backdrop-blur-md transition active:scale-95
+        group relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden
+        rounded-[1.65rem] border border-white/20 bg-white/20 shadow-xl
+        backdrop-blur-md transition active:scale-95 sm:h-28 sm:w-28 sm:rounded-[2.2rem]
       "
       aria-label="Foto de perfil"
     >
@@ -660,14 +662,14 @@ function AvatarPerfil({ foto, nome, editando, onClick }) {
           className="h-full w-full object-cover"
         />
       ) : (
-        <span className="text-4xl font-black text-white">
+        <span className="text-2xl font-black text-white sm:text-4xl">
           {obterIniciais(nome)}
         </span>
       )}
 
       {editando && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/45 opacity-0 transition group-hover:opacity-100">
-          <Camera size={30} />
+          <Camera size={26} />
         </div>
       )}
     </button>
@@ -676,13 +678,15 @@ function AvatarPerfil({ foto, nome, editando, onClick }) {
 
 function HeroMiniCard({ icon: Icon, label, value }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/12 p-3 backdrop-blur-md">
-      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wide text-emerald-100/80">
-        <Icon size={13} />
+    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/12 p-2.5 backdrop-blur-md sm:p-3">
+      <div className="mb-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-emerald-100/80">
+        <Icon size={12} />
         {label}
       </div>
 
-      <p className="truncate text-sm font-black text-white">{value}</p>
+      <p className="truncate text-xs font-black text-white sm:text-sm">
+        {value}
+      </p>
     </div>
   );
 }
@@ -690,32 +694,16 @@ function HeroMiniCard({ icon: Icon, label, value }) {
 function SectionHeader({ icon: Icon, title, subtitle }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20">
-        <Icon size={21} />
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20">
+        <Icon size={19} />
       </div>
 
       <div>
-        <h2 className="text-xl font-black">{title}</h2>
+        <h2 className="text-lg font-black">{title}</h2>
 
-        <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
-      </div>
-    </div>
-  );
-}
-
-function InfoRow({ icon: Icon, label, value }) {
-  return (
-    <div className="flex min-w-0 items-center gap-3 rounded-2xl bg-gray-100/90 p-4 dark:bg-white/5">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-700 text-white">
-        <Icon size={20} />
-      </div>
-
-      <div className="min-w-0">
-        <p className="text-sm font-bold text-gray-500 dark:text-gray-400">
-          {label}
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          {subtitle}
         </p>
-
-        <p className="truncate font-black">{value}</p>
       </div>
     </div>
   );
@@ -723,13 +711,13 @@ function InfoRow({ icon: Icon, label, value }) {
 
 function MiniAcesso({ icon: Icon, titulo, texto }) {
   return (
-    <div className="rounded-2xl bg-white/70 p-4 dark:bg-black/20">
-      <div className="mb-2 flex items-center gap-2">
-        <Icon size={18} />
-        <p className="font-black">{titulo}</p>
+    <div className="rounded-2xl bg-white/70 p-3 dark:bg-black/20">
+      <div className="mb-1 flex items-center gap-2">
+        <Icon size={16} />
+        <p className="text-sm font-black">{titulo}</p>
       </div>
 
-      <p className="text-sm opacity-80">{texto}</p>
+      <p className="text-xs opacity-80">{texto}</p>
     </div>
   );
 }

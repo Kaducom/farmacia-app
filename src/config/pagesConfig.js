@@ -16,7 +16,7 @@ export const MENU_PAGES = [
 ];
 
 export const PAGE_TITLES = {
-  medicamentos: "Medicamentos",
+  medicamentos: "Produtos",
   receitas: "Receitas",
   posologia: "Posologia",
   doutor: "AMSI",
