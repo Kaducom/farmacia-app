@@ -148,7 +148,6 @@ function Medicamentos() {
   const [abrirScanner, setAbrirScanner] = useState(false);
   const [scannerKey, setScannerKey] = useState(0);
   const [modoReposicao, setModoReposicao] = useState(false);
-  const [scannerPreviewItens, setScannerPreviewItens] = useState([]);
 
   const [inputValidadeRapida, setInputValidadeRapida] = useState(null);
   const [codigoScanner, setCodigoScanner] = useState("");
@@ -752,14 +751,26 @@ async function remover(id) {
   try {
     const produto = await db.medicamentos.get(id);
 
+    if (!produto) {
+      setConfirmar(null);
+      addToast("Produto não encontrado 😕", "erro");
+      await carregar();
+      return;
+    }
+
     await db.medicamentos.delete(id);
 
     if (produto && !isVisitante && usuarioAtual?.uid) {
-      await excluirProdutoDaNuvem(usuarioAtual, produto);
+      const res = await excluirProdutoDaNuvem(usuarioAtual, produto);
+
+      if (!res.ok && !res.ignorado) {
+        console.warn("[sync-delete] Não marcou exclusão na nuvem:", res.erro);
+        addToast("Apaguei neste aparelho, mas a nuvem pode tentar trazer de volta ⚠️", "erro");
+      }
     }
 
     setConfirmar(null);
-    addToast("Produto excluído 🗑️");
+    addToast("Produto excluído da conta 🗑️☁️");
 
     await carregar();
   } catch (err) {
@@ -1208,43 +1219,11 @@ const lista = [...produtosNoEscopo]
   function fecharScannerSeguro() {
     setAbrirScanner(false);
     setFabOpen(false);
-    setScannerPreviewItens([]);
     setLoteScanner(null);
 
     setTimeout(() => {
       setScannerKey((prev) => prev + 1);
     }, 0);
-  }
-
-  function adicionarPreviewScanner(item) {
-    const agora = Date.now();
-
-    setScannerPreviewItens((prev) => {
-      const semMesmoLote = prev.filter(
-        (p) =>
-          !(
-            String(p.codigo || "") === String(item.codigo || "") &&
-            normalizarValidadeParaComparar(p.validade) ===
-              normalizarValidadeParaComparar(item.validade)
-          )
-      );
-
-      const novoItem = {
-        id: `${item.codigo}-${normalizarValidadeParaComparar(
-          item.validade
-        )}-${agora}`,
-        codigo: item.codigo ? String(item.codigo) : "",
-        nome: item.nome || "Produto",
-        imagem: item.imagem || null,
-        validade: item.validade || "",
-        setor: item.setor || "Medicamentos",
-        quantidade: Number(item.quantidade || 1),
-        tipo: item.tipo || "incrementado",
-        atualizadoEm: agora,
-      };
-
-      return [novoItem, ...semMesmoLote].slice(0, 5);
-    });
   }
 
   async function iniciarScanner() {
@@ -1253,8 +1232,6 @@ const lista = [...produtosNoEscopo]
     setConfirmar(null);
     setPreview(null);
     setLoteScanner(null);
-    setScannerPreviewItens([]);
-
     setScannerKey((prev) => prev + 1);
     setAbrirScanner(true);
   }
@@ -1465,17 +1442,12 @@ async function somarLoteExistente(lote, quantidadeSomar = 1, opcoes = {}) {
 
       await db.medicamentos.update(lote.id, {
         quantidade: novaQuantidade,
+        atualizadoEmLocal: Date.now(),
+        pendenteSync: true,
       });
 
-      adicionarPreviewScanner({
-        codigo: lote.codigo,
-        nome: lote.nome,
-        imagem: lote.imagem,
-        validade: lote.validade,
-        setor: lote.setor || "Medicamentos",
-        quantidade: novaQuantidade,
-        tipo: "incrementado",
-      });
+      const produtoAtualizado = await db.medicamentos.get(lote.id);
+      await salvarProdutoContaNaNuvem(produtoAtualizado);
 
       addToast(`+${qtdSomar} ${lote.nome || "produto"} • ${lote.validade} 📦`, "ok");
 
@@ -1657,17 +1629,12 @@ async function atualizarLoteDoScanner(lote, alteracoes = {}, opcoes = {}) {
 
         await db.medicamentos.update(loteMesmaValidade.id, {
           quantidade: novaQuantidade,
+          atualizadoEmLocal: Date.now(),
+          pendenteSync: true,
         });
 
-        adicionarPreviewScanner({
-          codigo: loteScanner.codigo,
-          nome: loteMesmaValidade.nome,
-          imagem: loteMesmaValidade.imagem,
-          validade: loteMesmaValidade.validade,
-          setor: loteMesmaValidade.setor || produto.setor || "Medicamentos",
-          quantidade: novaQuantidade,
-          tipo: "incrementado",
-        });
+        const produtoAtualizado = await db.medicamentos.get(loteMesmaValidade.id);
+        await salvarProdutoContaNaNuvem(produtoAtualizado);
 
         addToast(`Validade já existia. +${qtdSomar} nesse lote 📦`, "ok");
       } else {
@@ -1684,7 +1651,16 @@ async function atualizarLoteDoScanner(lote, alteracoes = {}, opcoes = {}) {
           quantidade: qtdSomar,
         };
 
-        await db.medicamentos.add(novoLote);
+        const agora = Date.now();
+        const idNovoLote = await db.medicamentos.add({
+          ...novoLote,
+          criadoEmLocal: agora,
+          atualizadoEmLocal: agora,
+          pendenteSync: true,
+        });
+
+        const produtoNovoLote = await db.medicamentos.get(idNovoLote);
+        await salvarProdutoContaNaNuvem(produtoNovoLote);
 
         await salvarProdutoNaBase({
           codigo: String(loteScanner.codigo),
@@ -2159,8 +2135,6 @@ return (
             onClose={fecharScannerSeguro}
             onScan={aoEscanear}
             modoContinuo={true}
-            itensPreview={scannerPreviewItens}
-            onLimparPreview={() => setScannerPreviewItens([])}
           />
         )}
       </AnimatePresence>
@@ -2179,6 +2153,9 @@ function SyncResumoProdutos({
 }) {
   const tudoOk = !isVisitante && total > 0 && pendentes === 0;
   const temPendencia = !isVisitante && pendentes > 0;
+    if (!isVisitante && !temPendencia) {
+     return null;
+}
 
   return (
     <motion.div

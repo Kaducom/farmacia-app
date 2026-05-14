@@ -1,6 +1,5 @@
 import {
   collection,
-  deleteDoc,
   doc,
   getDocs,
   serverTimestamp,
@@ -171,6 +170,8 @@ function montarPayloadProduto(usuarioAtual, produto, dadosImagem) {
     donoUid: usuarioAtual.uid,
     criadoEmLocal: Number(produto?.criadoEmLocal || agora),
     atualizadoEmLocal: Number(produto?.atualizadoEmLocal || agora),
+    deletado: false,
+    excluido: false,
     atualizadoEm: serverTimestamp(),
   };
 }
@@ -225,12 +226,35 @@ export async function excluirProdutoDaNuvem(usuarioAtual, produto) {
   try {
     const cloudId = criarCloudIdProduto(produto);
 
-    await deleteDoc(
-      doc(firestore, "usuarios", usuarioAtual.uid, "produtos", cloudId)
+    const refProduto = doc(
+      firestore,
+      "usuarios",
+      usuarioAtual.uid,
+      "produtos",
+      cloudId
+    );
+
+    await setDoc(
+      refProduto,
+      {
+        cloudId,
+        codigo: produto.codigo ? String(produto.codigo) : null,
+        nome: produto.nome || "",
+        validade: produto.validade || "",
+        setor: produto.setor || "Medicamentos",
+        donoUid: usuarioAtual.uid,
+        deletado: true,
+        excluido: true,
+        excluidoEm: serverTimestamp(),
+        atualizadoEmLocal: Date.now(),
+        atualizadoEm: serverTimestamp(),
+      },
+      { merge: true }
     );
 
     return {
       ok: true,
+      cloudId,
     };
   } catch (err) {
     console.error("[produtosCloud] Erro ao excluir:", err);
@@ -257,6 +281,7 @@ export async function baixarProdutosDaNuvem(usuarioAtual) {
   const snap = await getDocs(refProdutos);
 
   return snap.docs.map((docSnap) => {
+    const deletado = Boolean(dados.deletado || dados.excluido);
     const dados = docSnap.data() || {};
 
     return {
@@ -279,6 +304,8 @@ export async function baixarProdutosDaNuvem(usuarioAtual) {
       atualizadoEmLocal: Number(dados.atualizadoEmLocal || 0),
       sincronizadoEm: Date.now(),
       pendenteSync: false,
+      deletado: false,
+      excluido: false,
     };
   });
 }
@@ -304,6 +331,13 @@ export async function sincronizarProdutosDoUsuario(usuarioAtual) {
       baixarProdutosDaNuvem(usuarioAtual),
     ]);
 
+    const nuvemDeletados = nuvem.filter((produto) => produto.deletado || produto.excluido);
+    const nuvemAtivos = nuvem.filter((produto) => !produto.deletado && !produto.excluido);
+
+    const deletadosPorCloudId = new Set(
+      nuvemDeletados.map((produto) => produto.cloudId).filter(Boolean)
+        );
+
     const locaisPorCloudId = new Map();
 
     locais.forEach((produto) => {
@@ -317,11 +351,17 @@ export async function sincronizarProdutosDoUsuario(usuarioAtual) {
 
     const nuvemPorCloudId = new Map();
 
-    nuvem.forEach((produto) => {
-      nuvemPorCloudId.set(produto.cloudId, produto);
-    });
+    nuvemAtivos.forEach((produto) => {
+    nuvemPorCloudId.set(produto.cloudId, produto);
+  });
 
     for (const produtoLocal of locaisPorCloudId.values()) {
+      if (deletadosPorCloudId.has(produtoLocal.cloudId)) {
+        if (produtoLocal.id) {
+        await db.medicamentos.delete(produtoLocal.id);
+         }
+     continue;
+}
       const produtoNuvem = nuvemPorCloudId.get(produtoLocal.cloudId);
 
       if (!produtoNuvem) {
