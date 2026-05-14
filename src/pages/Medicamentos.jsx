@@ -5,7 +5,7 @@ import ToastStack from "../components/ToastStack";
 import Scanner from "../components/Scanner";
 import { motion, AnimatePresence } from "framer-motion";
 import CardProdutoSanfonado from "../components/produtos/CardProdutoSanfonado";
-import ModalLoteScanner from "../components/produtos/ModalLoteScanner";
+import ModalScannerProduto from "../components/produtos/ModalScannerProduto";
 import {
   filtrarProdutosPorEscopo,
   obterEscopoProdutos,
@@ -14,10 +14,22 @@ import {
 } from "../config/acessoProdutos";
 
 import {
+  excluirProdutoDaNuvem,
+  salvarProdutoNaNuvem,
+  sincronizarProdutosDoUsuario,
+} from "../services/produtosCloud";
+
+import {
   CalendarDays,
+  CheckCircle2,
+  Cloud,
+  CloudOff,
+  Clock3,
   ImageIcon,
+  Loader2,
   PackagePlus,
   Plus,
+  RefreshCcw,
   Trash2,
   X,
 } from "lucide-react";
@@ -143,6 +155,7 @@ function Medicamentos() {
 
   const [loteScanner, setLoteScanner] = useState(null);
   const [processandoLote, setProcessandoLote] = useState(false);
+  const [sincronizandoManual, setSincronizandoManual] = useState(false);
 
   const topRef = useRef(null);
 
@@ -151,15 +164,15 @@ function Medicamentos() {
   // =============================
 
   useEffect(() => {
-    setAbrirScanner(false);
-    setFabOpen(false);
+  setAbrirScanner(false);
+  setFabOpen(false);
 
-    carregar();
+  carregar({ sincronizar: true });
 
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-  }, []);
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission();
+  }
+}, [usuarioAtual?.uid, isVisitante]);
 
   useEffect(() => {
   const setoresPermitidosFiltro = obterSetoresParaFiltro(usuarioAtual);
@@ -244,34 +257,115 @@ function Medicamentos() {
   // 📦 BANCO DE DADOS
   // =============================
 
-  async function carregar() {
-    try {
-      const dados = await db.medicamentos.toArray();
-
-      const normalizados = dados.map((m) => ({
-        ...m,
-        quantidade: Number(m.quantidade || 1),
-        codigo: m.codigo ? String(m.codigo) : null,
-        setor: m.setor || "Medicamentos",
-      }));
-
-      normalizados.sort((a, b) => {
-        const dataA = parseDataSegura(a.validade);
-        const dataB = parseDataSegura(b.validade);
-
-        if (!dataA && !dataB) return 0;
-        if (!dataA) return 1;
-        if (!dataB) return -1;
-
-        return dataA - dataB;
-      });
-
-      setMedicamentos(normalizados);
-    } catch (err) {
-      console.error("Erro ao carregar produtos:", err);
-      addToast("Erro ao carregar produtos 😕", "erro");
-    }
+async function salvarProdutoContaNaNuvem(produto) {
+  if (isVisitante || !usuarioAtual?.uid || !produto?.id) {
+    return;
   }
+
+  const res = await salvarProdutoNaNuvem(usuarioAtual, produto);
+
+  if (!res.ok) {
+    await db.medicamentos.update(produto.id, {
+      pendenteSync: true,
+    });
+
+    console.warn("[sync-produtos] Não sincronizou:", res.erro);
+    return;
+  }
+
+  await db.medicamentos.update(produto.id, {
+    cloudId: res.cloudId,
+    imagem: res.payload?.imagem ?? produto.imagem ?? null,
+    imagemPath: res.payload?.imagemPath ?? produto.imagemPath ?? null,
+    imagemTipo: res.payload?.imagemTipo ?? produto.imagemTipo ?? null,
+    sincronizadoEm: Date.now(),
+    pendenteSync: false,
+  });
+}
+  
+async function carregar(opcoes = {}) {
+  try {
+    if (opcoes.sincronizar && !isVisitante && usuarioAtual?.uid) {
+      const resSync = await sincronizarProdutosDoUsuario(usuarioAtual);
+
+      if (resSync.ok) {
+        const totalSync =
+          Number(resSync.baixados || 0) +
+          Number(resSync.enviados || 0) +
+          Number(resSync.atualizados || 0);
+
+        if (totalSync > 0) {
+          addToast("Produtos sincronizados com a conta ☁️", "ok");
+        }
+      } else if (!resSync.ignorado) {
+        console.warn("[sync-produtos] Falha:", resSync.erro);
+      }
+    }
+
+    const dados = await db.medicamentos.toArray();
+
+    const normalizados = dados.map((m) => ({
+      ...m,
+      quantidade: Number(m.quantidade || 1),
+      codigo: m.codigo ? String(m.codigo) : null,
+      setor: m.setor || "Medicamentos",
+      atualizadoEmLocal: Number(m.atualizadoEmLocal || Date.now()),
+      pendenteSync: Boolean(m.pendenteSync),
+    }));
+
+    normalizados.sort((a, b) => {
+      const dataA = parseDataSegura(a.validade);
+      const dataB = parseDataSegura(b.validade);
+
+      if (!dataA && !dataB) return 0;
+      if (!dataA) return 1;
+      if (!dataB) return -1;
+
+      return dataA - dataB;
+    });
+
+    setMedicamentos(normalizados);
+  } catch (err) {
+    console.error("Erro ao carregar produtos:", err);
+    addToast("Erro ao carregar produtos 😕", "erro");
+  }
+}
+
+async function sincronizarAgora() {
+  if (isVisitante || !usuarioAtual?.uid) {
+    addToast("Visitante salva só neste aparelho 📱", "info");
+    return;
+  }
+
+  try {
+    setSincronizandoManual(true);
+
+    const res = await sincronizarProdutosDoUsuario(usuarioAtual);
+
+    if (!res.ok) {
+      addToast(res.erro || "Não consegui sincronizar agora 😕", "erro");
+      return;
+    }
+
+    const total =
+      Number(res.baixados || 0) +
+      Number(res.enviados || 0) +
+      Number(res.atualizados || 0);
+
+    if (total > 0) {
+      addToast("Produtos sincronizados com a conta ☁️", "ok");
+    } else {
+      addToast("Tudo já estava sincronizado ☁️✨", "ok");
+    }
+
+    await carregar();
+  } catch (err) {
+    console.error("Erro ao sincronizar manualmente:", err);
+    addToast("Erro ao sincronizar agora 😕", "erro");
+  } finally {
+    setSincronizandoManual(false);
+  }
+}
 
   // =============================
   // 🔔 TOASTS
@@ -376,6 +470,7 @@ function Medicamentos() {
 
       const mesmaValidade =
         normalizarValidadeParaComparar(m.validade) === validadeComparacao;
+
       const mesmoSetor = String(m.setor || "Medicamentos") === setorFinal;
 
       if (codigoFinal) {
@@ -416,18 +511,48 @@ function Medicamentos() {
         });
       }
 
+      const agora = Date.now();
+
       if (editando) {
-        await db.medicamentos.update(editando.id, dados);
+        await db.medicamentos.update(editando.id, {
+          ...dados,
+          atualizadoEmLocal: agora,
+          pendenteSync: true,
+        });
+
+        const produtoAtualizado = await db.medicamentos.get(editando.id);
+        await salvarProdutoContaNaNuvem(produtoAtualizado);
+
         addToast("Produto atualizado ✨");
       } else if (existente) {
+        const novaQuantidade = Number(existente.quantidade || 1) + qtd;
+
         await db.medicamentos.update(existente.id, {
-          quantidade: Number(existente.quantidade || 1) + qtd,
+          quantidade: novaQuantidade,
+          atualizadoEmLocal: agora,
+          pendenteSync: true,
         });
+
+        const produtoAtualizado = await db.medicamentos.get(existente.id);
+        await salvarProdutoContaNaNuvem(produtoAtualizado);
 
         addToast("Quantidade atualizada nesse lote 📦");
       } else {
-        await db.medicamentos.add(dados);
-        addToast("Produto salvo 📦");
+        const idNovo = await db.medicamentos.add({
+          ...dados,
+          atualizadoEmLocal: agora,
+          criadoEmLocal: agora,
+          pendenteSync: true,
+        });
+
+        const produtoNovo = await db.medicamentos.get(idNovo);
+        await salvarProdutoContaNaNuvem(produtoNovo);
+
+        addToast(
+          isVisitante
+            ? "Produto salvo neste aparelho 📦"
+            : "Produto salvo e enviado para sua conta ☁️📦"
+        );
       }
 
       limpar();
@@ -623,19 +748,25 @@ function Medicamentos() {
     };
   }
 
-  async function remover(id) {
-    try {
-      await db.medicamentos.delete(id);
+async function remover(id) {
+  try {
+    const produto = await db.medicamentos.get(id);
 
-      setConfirmar(null);
-      addToast("Produto excluído 🗑️");
+    await db.medicamentos.delete(id);
 
-      await carregar();
-    } catch (err) {
-      console.error("Erro ao remover produto:", err);
-      addToast("Erro ao excluir produto 😕", "erro");
+    if (produto && !isVisitante && usuarioAtual?.uid) {
+      await excluirProdutoDaNuvem(usuarioAtual, produto);
     }
+
+    setConfirmar(null);
+    addToast("Produto excluído 🗑️");
+
+    await carregar();
+  } catch (err) {
+    console.error("Erro ao remover produto:", err);
+    addToast("Erro ao excluir produto 😕", "erro");
   }
+}
 
 
   async function alterarQuantidadeMedicamento(id, delta) {
@@ -654,9 +785,14 @@ function Medicamentos() {
     }
 
     try {
-      await db.medicamentos.update(id, {
-        quantidade: novaQuantidade,
-      });
+await db.medicamentos.update(id, {
+  quantidade: novaQuantidade,
+  atualizadoEmLocal: Date.now(),
+  pendenteSync: true,
+});
+
+const produtoAtualizado = await db.medicamentos.get(id);
+await salvarProdutoContaNaNuvem(produtoAtualizado);
 
       setMedicamentos((prev) =>
         prev.map((item) =>
@@ -1008,6 +1144,14 @@ const produtosNoEscopo = filtrarProdutosPorEscopo(
   usuarioAtual
 );
 
+const produtosPendentesSync = produtosNoEscopo.filter(
+  (produto) => produto.pendenteSync
+).length;
+
+const produtosSincronizados = produtosNoEscopo.filter(
+  (produto) => !produto.pendenteSync && produto.sincronizadoEm
+).length;
+
 const lista = [...produtosNoEscopo]
   .filter((m) => {
     const setorProduto = m.setor || "Medicamentos";
@@ -1288,7 +1432,28 @@ const lista = [...produtosNoEscopo]
     }
   }
 
-  async function somarLoteExistente(lote, quantidadeSomar = 1) {
+  async function finalizarAcaoScannerProduto(codigo, opcoes = {}) {
+  await carregar();
+
+  if (opcoes?.manterAberto) {
+    const lotesAtualizados = await buscarLotesPorCodigo(codigo);
+
+    setLoteScanner((prev) => {
+      if (!prev) return prev;
+
+      return {
+        ...prev,
+        lotes: lotesAtualizados,
+      };
+    });
+
+    return;
+  }
+
+  setLoteScanner(null);
+}
+
+async function somarLoteExistente(lote, quantidadeSomar = 1, opcoes = {}) {
     if (!lote?.id || processandoLote) return;
 
     const qtdSomar = Math.max(1, Math.min(999, Number(quantidadeSomar || 1)));
@@ -1314,8 +1479,7 @@ const lista = [...produtosNoEscopo]
 
       addToast(`+${qtdSomar} ${lote.nome || "produto"} • ${lote.validade} 📦`, "ok");
 
-      setLoteScanner(null);
-      await carregar();
+      await finalizarAcaoScannerProduto(lote.codigo, opcoes);
     } catch (err) {
       console.error("Erro ao somar lote:", err);
       addToast("Erro ao somar lote 😕", "erro");
@@ -1324,7 +1488,133 @@ const lista = [...produtosNoEscopo]
     }
   }
 
-  async function salvarNovaValidadeDoScanner(validadeNova, quantidadeSomar = null) {
+  async function atualizarProdutoDoScanner(produtoEditado, opcoes = {}) {
+  if (!produtoEditado) return;
+
+  const codigo = String(
+    produtoEditado.codigo || loteScanner?.codigo || ""
+  ).trim();
+
+  if (!codigo) {
+    addToast("Código não encontrado para atualizar 😕", "erro");
+    return;
+  }
+
+  try {
+    setProcessandoLote(true);
+
+    const lotes = await buscarLotesPorCodigo(codigo);
+
+    const dadosAtualizados = {
+      nome: String(produtoEditado.nome || "").trim(),
+      imagem: produtoEditado.imagem || null,
+      setor: produtoEditado.setor || "Medicamentos",
+      diasRemover: Number(produtoEditado.diasRemover || 7),
+      diasPreVencido: produtoEditado.diasPreVencido
+        ? Number(produtoEditado.diasPreVencido)
+        : null,
+      atualizadoEmLocal: Date.now(),
+      pendenteSync: true,
+    };
+
+    for (const lote of lotes) {
+      await db.medicamentos.update(lote.id, dadosAtualizados);
+
+      const atualizado = await db.medicamentos.get(lote.id);
+      await salvarProdutoContaNaNuvem(atualizado);
+    }
+
+    if (codigo) {
+      await salvarProdutoNaBase({
+        codigo,
+        nome: dadosAtualizados.nome,
+        imagem: dadosAtualizados.imagem,
+        setor: dadosAtualizados.setor,
+        diasRemover: dadosAtualizados.diasRemover,
+        diasPreVencido: dadosAtualizados.diasPreVencido,
+      });
+    }
+
+    addToast("Produto atualizado pelo scanner ✨", "ok");
+
+    await finalizarAcaoScannerProduto(codigo, {
+      manterAberto: true,
+    });
+
+    setLoteScanner((prev) => {
+      if (!prev) return prev;
+
+      return {
+        ...prev,
+        produto: {
+          ...prev.produto,
+          ...dadosAtualizados,
+          codigo,
+        },
+      };
+    });
+  } catch (err) {
+    console.error("Erro ao atualizar produto pelo scanner:", err);
+    addToast("Erro ao atualizar produto 😕", "erro");
+  } finally {
+    setProcessandoLote(false);
+  }
+}
+
+async function atualizarLoteDoScanner(lote, alteracoes = {}, opcoes = {}) {
+  if (!lote?.id) {
+    addToast("Lote não encontrado 😕", "erro");
+    return;
+  }
+
+  try {
+    setProcessandoLote(true);
+
+    const validadeDigitada = String(
+      alteracoes.validade || lote.validade || ""
+    ).trim();
+
+    const dataValida = parseDataSegura(validadeDigitada);
+
+    if (!dataValida || Number.isNaN(dataValida.getTime())) {
+      addToast("Validade inválida ⚠️", "erro");
+      return;
+    }
+
+    const quantidadeNova = Math.max(
+      1,
+      Number(alteracoes.quantidade || lote.quantidade || 1)
+    );
+
+    await db.medicamentos.update(lote.id, {
+      validade: dataParaTextoBR(dataValida),
+      quantidade: quantidadeNova,
+      atualizadoEmLocal: Date.now(),
+      pendenteSync: true,
+    });
+
+    const atualizado = await db.medicamentos.get(lote.id);
+    await salvarProdutoContaNaNuvem(atualizado);
+
+    addToast("Lote atualizado ✨", "ok");
+
+    await finalizarAcaoScannerProduto(lote.codigo, {
+      manterAberto: true,
+      ...opcoes,
+    });
+  } catch (err) {
+    console.error("Erro ao atualizar lote pelo scanner:", err);
+    addToast("Erro ao atualizar lote 😕", "erro");
+  } finally {
+    setProcessandoLote(false);
+  }
+}
+
+  async function salvarNovaValidadeDoScanner(
+  validadeNova,
+  quantidadeSomar = null,
+  opcoes = {}
+) {
     if (processandoLote) return;
 
     const validadeDigitada = formatarValidadeDigitada(validadeNova);
@@ -1420,8 +1710,7 @@ const lista = [...produtosNoEscopo]
         addToast(`Novo lote criado • ${validadeFormatada} • x${qtdSomar} ✨`, "ok");
       }
 
-      setLoteScanner(null);
-      await carregar();
+      await finalizarAcaoScannerProduto(loteScanner.codigo, opcoes);
     } catch (err) {
       console.error("Erro ao salvar validade pelo scanner:", err);
       addToast("Erro ao salvar validade 😕", "erro");
@@ -1448,13 +1737,21 @@ const lista = [...produtosNoEscopo]
     }
 
     try {
-      await db.medicamentos.add({
+      const agora = Date.now();
+
+      const idNovo = await db.medicamentos.add({
         nome: inputValidadeRapida.nome,
         setor: inputValidadeRapida.setor || "Medicamentos",
         validade: dataParaTextoBR(dataValida),
         quantidade: 1,
         diasRemover: 7,
+        atualizadoEmLocal: agora,
+        criadoEmLocal: agora,
+        pendenteSync: true,
       });
+
+const produtoNovo = await db.medicamentos.get(idNovo);
+await salvarProdutoContaNaNuvem(produtoNovo);
 
       addToast("Produto adicionado ✨");
 
@@ -1493,6 +1790,14 @@ return (
         mostrarFiltroSetor={escopoProdutos.mostrarFiltroSetor}
         quantidadeFiltrada={lista.length}
         quantidadeTotal={produtosNoEscopo.length}
+      />
+      <SyncResumoProdutos
+        isVisitante={isVisitante}
+        total={produtosNoEscopo.length}
+        pendentes={produtosPendentesSync}
+        sincronizados={produtosSincronizados}
+        sincronizando={sincronizandoManual}
+        onSincronizar={sincronizarAgora}
       />
 
       {/* EMPTY STATE */}
@@ -1549,22 +1854,29 @@ return (
 {lista.length > 0 && (
   <motion.div layout className="relative z-0 mt-4 space-y-3">
     {lista.map((produto) => (
-      <CardProdutoSanfonado
-        key={produto.id}
-        produto={produto}
-        aberto={
-          cardsAbertos[String(produto.id)] ??
-          deveAbrirAutomaticamente(produto)
-        }
-        onToggle={() => alternarCardMedicamento(produto.id)}
-        calcularStatus={calcularStatus}
-        calcularDatas={calcularDatas}
-        formatarData={formatarData}
-        onPreview={setPreview}
-        onConfirmar={setConfirmar}
-        onEditar={prepararEdicaoProduto}
-        onAlterarQuantidade={alterarQuantidadeMedicamento}
-      />
+      <div key={produto.id} className="space-y-1.5">
+        {(isVisitante || produto.pendenteSync || !produto.sincronizadoEm) && (
+          <div className="flex justify-end">
+            <SyncBadgeProduto produto={produto} isVisitante={isVisitante} />
+          </div>
+        )}
+
+        <CardProdutoSanfonado
+          produto={produto}
+          aberto={
+            cardsAbertos[String(produto.id)] ??
+            deveAbrirAutomaticamente(produto)
+          }
+          onToggle={() => alternarCardMedicamento(produto.id)}
+          calcularStatus={calcularStatus}
+          calcularDatas={calcularDatas}
+          formatarData={formatarData}
+          onPreview={setPreview}
+          onConfirmar={setConfirmar}
+          onEditar={prepararEdicaoProduto}
+          onAlterarQuantidade={alterarQuantidadeMedicamento}
+        />
+      </div>
     ))}
   </motion.div>
 )}
@@ -1607,20 +1919,22 @@ return (
         ToastStack={ToastStack}
       />
 
-      {/* MODAL LOTE DO SCANNER */}
-      <AnimatePresence>
-        {loteScanner && (
-          <ModalLoteScanner
-            dados={loteScanner}
-            processando={processandoLote}
-            formatarData={formatarData}
-            formatarValidadeDigitada={formatarValidadeDigitada}
-            onFechar={() => setLoteScanner(null)}
-            onSomarLote={somarLoteExistente}
-            onNovaValidade={salvarNovaValidadeDoScanner}
-          />
-        )}
-      </AnimatePresence>
+        {/* MODAL PRODUTO DO SCANNER */}
+        <AnimatePresence>
+          {loteScanner && (
+            <ModalScannerProduto
+              dados={loteScanner}
+              processando={processandoLote}
+              formatarData={formatarData}
+              formatarValidadeDigitada={formatarValidadeDigitada}
+              onFechar={() => setLoteScanner(null)}
+              onSomarLote={somarLoteExistente}
+              onNovaValidade={salvarNovaValidadeDoScanner}
+              onAtualizarProduto={atualizarProdutoDoScanner}
+              onAtualizarLote={atualizarLoteDoScanner}
+            />
+          )}
+        </AnimatePresence>
 
       {/* PREVIEW IMAGEM */}
       <AnimatePresence>
@@ -1855,12 +2169,150 @@ return (
 );
 }
 
-// =============================
-// 📦 CARD SANFONADO PRODUTO
-// =============================
+function SyncResumoProdutos({
+  isVisitante,
+  total,
+  pendentes,
+  sincronizados,
+  sincronizando,
+  onSincronizar,
+}) {
+  const tudoOk = !isVisitante && total > 0 && pendentes === 0;
+  const temPendencia = !isVisitante && pendentes > 0;
 
-// =============================
-// 🧪 MODAL LOTE SCANNER
-// =============================
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+      className="
+        mt-3 rounded-[1.5rem] border border-gray-200 bg-white/75 p-3
+        shadow-lg shadow-black/5 backdrop-blur-xl
+        dark:border-white/10 dark:bg-gray-950/65
+      "
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div
+            className={`
+              flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg
+              ${
+                isVisitante
+                  ? "bg-slate-700 shadow-slate-700/20"
+                  : temPendencia
+                  ? "bg-amber-500 shadow-amber-500/20"
+                  : "bg-emerald-700 shadow-emerald-700/20"
+              }
+            `}
+          >
+            {isVisitante ? (
+              <CloudOff size={20} />
+            ) : temPendencia ? (
+              <Clock3 size={20} />
+            ) : (
+              <Cloud size={20} />
+            )}
+          </div>
+
+          <div className="min-w-0">
+            <p className="truncate text-sm font-black text-gray-900 dark:text-white">
+              {isVisitante
+                ? "Modo local"
+                : temPendencia
+                ? `${pendentes} produto${pendentes > 1 ? "s" : ""} pendente${pendentes > 1 ? "s" : ""}`
+                : tudoOk
+                ? "Tudo sincronizado"
+                : "Sincronização da conta"}
+            </p>
+
+            <p className="truncate text-xs font-semibold text-gray-500 dark:text-gray-400">
+              {isVisitante
+                ? "Visitante salva apenas neste aparelho"
+                : `${sincronizados}/${total} na nuvem`}
+            </p>
+          </div>
+        </div>
+
+        {temPendencia && (
+        <button
+          type="button"
+          onClick={onSincronizar}
+          disabled={sincronizando}
+            className="
+              flex h-10 shrink-0 items-center justify-center gap-2 rounded-2xl
+              bg-emerald-700 px-3 text-xs font-black text-white shadow-lg
+              shadow-emerald-700/20 transition hover:bg-emerald-800
+              active:scale-95 disabled:opacity-60
+            "
+          >
+            {sincronizando ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <RefreshCcw size={16} />
+            )}
+
+            <span className="hidden sm:inline">
+              {sincronizando ? "Sincronizando" : "Sincronizar"}
+            </span>
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function SyncBadgeProduto({ produto, isVisitante }) {
+  const pendente = Boolean(produto?.pendenteSync);
+  const sincronizado = Boolean(produto?.sincronizadoEm || produto?.cloudId);
+  const temFotoMini = produto?.imagemTipo === "base64-mini-firestore";
+
+  if (isVisitante) {
+    return (
+      <span
+        className="
+          inline-flex items-center gap-1.5 rounded-full border border-slate-300
+          bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700
+          shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-slate-200
+        "
+      >
+        <CloudOff size={13} />
+        Local
+      </span>
+    );
+  }
+
+  if (pendente) {
+    return (
+      <span
+        className="
+          inline-flex items-center gap-1.5 rounded-full border border-amber-300
+          bg-amber-50 px-2.5 py-1 text-[11px] font-black text-amber-700
+          shadow-sm dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300
+        "
+      >
+        <Clock3 size={13} />
+        Pendente
+      </span>
+    );
+  }
+
+if (sincronizado) {
+  return null;
+}
+
+  return (
+    <span
+      className="
+        inline-flex items-center gap-1.5 rounded-full border border-gray-300
+        bg-gray-50 px-2.5 py-1 text-[11px] font-black text-gray-600
+        shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-gray-300
+      "
+    >
+      <CloudOff size={13} />
+      Local
+    </span>
+  );
+}
 
 export default Medicamentos;
