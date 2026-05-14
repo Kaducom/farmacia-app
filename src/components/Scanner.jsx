@@ -311,6 +311,53 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
     }
   }
 
+  async function aplicarMelhoriasCamera() {
+  const stream = videoRef.current?.srcObject;
+  const track = stream?.getVideoTracks?.()[0];
+
+  if (!track?.getCapabilities) return;
+
+  const capacidades = track.getCapabilities();
+  const advanced = {};
+
+  if (
+    Array.isArray(capacidades.focusMode) &&
+    capacidades.focusMode.includes("continuous")
+  ) {
+    advanced.focusMode = "continuous";
+  }
+
+  if (
+    Array.isArray(capacidades.exposureMode) &&
+    capacidades.exposureMode.includes("continuous")
+  ) {
+    advanced.exposureMode = "continuous";
+  }
+
+  if (
+    Array.isArray(capacidades.whiteBalanceMode) &&
+    capacidades.whiteBalanceMode.includes("continuous")
+  ) {
+    advanced.whiteBalanceMode = "continuous";
+  }
+
+  if ("zoom" in capacidades) {
+    const min = Number(capacidades.zoom?.min || 1);
+    const max = Number(capacidades.zoom?.max || 1);
+    advanced.zoom = Math.min(max, Math.max(min, 1.08));
+  }
+
+  if (!Object.keys(advanced).length) return;
+
+  try {
+    await track.applyConstraints({
+      advanced: [advanced],
+    });
+  } catch (err) {
+    console.warn("Não consegui aplicar melhorias da câmera:", err);
+  }
+}
+
   async function iniciar(deviceId = "") {
     try {
       setSeguro(() => {
@@ -434,11 +481,12 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
           {
             audio: false,
             video: {
-              facingMode: { ideal: "environment" },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              aspectRatio: { ideal: 1.7777778 },
-            },
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30, max: 60 },
+            aspectRatio: { ideal: 1.7777778 },
+          },
           },
           video,
           callback
@@ -458,6 +506,7 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
         listarCameras();
         prepararRecursosCamera();
         aplicarZoomPrincipal();
+        aplicarMelhoriasCamera();
         checarPermissaoCamera();
       }, 500);
     } catch (err) {
@@ -811,13 +860,14 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
           muted
           playsInline
           className={`
-            absolute inset-0 h-full w-full object-cover transition duration-300
-            ${cameraLigada ? "opacity-100" : "opacity-20"}
-          `}
+          absolute inset-0 h-full w-full object-cover transition duration-300
+          [filter:brightness(1.18)_contrast(1.08)_saturate(1.08)]
+          ${cameraLigada ? "opacity-100" : "opacity-35"}
+        `}
         />
 
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.16),transparent_32%),linear-gradient(to_bottom,rgba(2,8,20,0.72),rgba(2,8,20,0.9),rgba(2,8,20,0.98))]" />
-        <div className="absolute inset-0 bg-black/20" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.08),transparent_34%),linear-gradient(to_bottom,rgba(2,8,20,0.16),rgba(2,8,20,0.08),rgba(2,8,20,0.24))]" />
+        <div className="absolute inset-0 bg-black/[0.04]" />
       </div>
 
       <div
@@ -873,12 +923,11 @@ function Scanner({ onClose, onScan, modoContinuo = false }) {
           <section
             className="
               relative min-h-0 flex-1 overflow-hidden rounded-[2rem]
-              border border-emerald-400/18 bg-slate-950/50
-              shadow-[0_20px_60px_rgba(0,0,0,0.35)]
-              backdrop-blur-sm
+              border border-emerald-400/22 bg-black/[0.04]
+              shadow-[0_20px_60px_rgba(0,0,0,0.28)]
             "
           >
-            <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(2,8,20,0.18),rgba(2,8,20,0.05),rgba(2,8,20,0.38))]" />
+            <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(2,8,20,0.04),rgba(2,8,20,0),rgba(2,8,20,0.10))]" />
 
             <div className="pointer-events-none absolute inset-0 z-20 p-3">
               <div
