@@ -281,10 +281,116 @@ async function salvarProdutoContaNaNuvem(produto) {
     pendenteSync: false,
   });
 }
+
+async function enviarProdutosLocaisParaConta(opcoes = {}) {
+  const { forcarTudo = false, silencioso = false } = opcoes;
+
+  if (isVisitante || !usuarioAtual?.uid) {
+    return {
+      ok: false,
+      enviados: 0,
+      falhas: 0,
+      ignorado: true,
+    };
+  }
+
+  let enviados = 0;
+  let falhas = 0;
+
+  try {
+    const locais = await db.medicamentos.toArray();
+
+    for (const produto of locais) {
+      if (!produto?.id) continue;
+      if (!produto?.nome || !produto?.validade) continue;
+
+      const precisaEnviar =
+        forcarTudo ||
+        produto.pendenteSync ||
+        !produto.cloudId ||
+        !produto.sincronizadoEm;
+
+      if (!precisaEnviar) continue;
+
+      const agora = Date.now();
+
+      await db.medicamentos.update(produto.id, {
+        atualizadoEmLocal: Number(produto.atualizadoEmLocal || agora),
+        pendenteSync: true,
+      });
+
+      const produtoAtualizado = await db.medicamentos.get(produto.id);
+      const res = await salvarProdutoNaNuvem(usuarioAtual, produtoAtualizado);
+
+      if (res.ok) {
+        await db.medicamentos.update(produto.id, {
+          cloudId: res.cloudId,
+          imagem: res.payload?.imagem ?? produtoAtualizado.imagem ?? null,
+          imagemPath:
+            res.payload?.imagemPath ?? produtoAtualizado.imagemPath ?? null,
+          imagemTipo:
+            res.payload?.imagemTipo ?? produtoAtualizado.imagemTipo ?? null,
+          sincronizadoEm: Date.now(),
+          pendenteSync: false,
+        });
+
+        enviados += 1;
+      } else {
+        await db.medicamentos.update(produto.id, {
+          pendenteSync: true,
+        });
+
+        falhas += 1;
+        console.warn("[sync-local-conta] Falha ao enviar:", res.erro);
+      }
+    }
+
+    if (!silencioso && enviados > 0) {
+      addToast(
+        `${enviados} produto${enviados > 1 ? "s" : ""} enviado${
+          enviados > 1 ? "s" : ""
+        } para a conta ☁️`,
+        "ok"
+      );
+    }
+
+    if (!silencioso && falhas > 0) {
+      addToast(
+        `${falhas} produto${falhas > 1 ? "s" : ""} ficou${
+          falhas > 1 ? "ram" : ""
+        } pendente${falhas > 1 ? "s" : ""} ⚠️`,
+        "erro"
+      );
+    }
+
+    return {
+      ok: true,
+      enviados,
+      falhas,
+    };
+  } catch (err) {
+    console.error("[sync-local-conta] Erro ao enviar produtos locais:", err);
+
+    if (!silencioso) {
+      addToast("Erro ao enviar produtos deste aparelho 😕", "erro");
+    }
+
+    return {
+      ok: false,
+      enviados,
+      falhas,
+      erro: err?.message || "Erro ao enviar produtos locais",
+    };
+  }
+}
   
 async function carregar(opcoes = {}) {
   try {
     if (opcoes.sincronizar && !isVisitante && usuarioAtual?.uid) {
+      await enviarProdutosLocaisParaConta({
+        silencioso: true,
+      });
+
       const resSync = await sincronizarProdutosDoUsuario(usuarioAtual);
 
       if (resSync.ok) {
@@ -303,14 +409,16 @@ async function carregar(opcoes = {}) {
 
     const dados = await db.medicamentos.toArray();
 
-    const normalizados = dados.map((m) => ({
-      ...m,
-      quantidade: Number(m.quantidade || 1),
-      codigo: m.codigo ? String(m.codigo) : null,
-      setor: m.setor || "Medicamentos",
-      atualizadoEmLocal: Number(m.atualizadoEmLocal || Date.now()),
-      pendenteSync: Boolean(m.pendenteSync),
-    }));
+    const normalizados = dados
+      .filter((m) => !m.deletado && !m.excluido)
+      .map((m) => ({
+        ...m,
+        quantidade: Number(m.quantidade || 1),
+        codigo: m.codigo ? String(m.codigo) : null,
+        setor: m.setor || "Medicamentos",
+        atualizadoEmLocal: Number(m.atualizadoEmLocal || Date.now()),
+        pendenteSync: Boolean(m.pendenteSync),
+      }));
 
     normalizados.sort((a, b) => {
       const dataA = parseDataSegura(a.validade);
@@ -339,6 +447,11 @@ async function sincronizarAgora() {
   try {
     setSincronizandoManual(true);
 
+    const envio = await enviarProdutosLocaisParaConta({
+      forcarTudo: true,
+      silencioso: false,
+    });
+
     const res = await sincronizarProdutosDoUsuario(usuarioAtual);
 
     if (!res.ok) {
@@ -349,10 +462,11 @@ async function sincronizarAgora() {
     const total =
       Number(res.baixados || 0) +
       Number(res.enviados || 0) +
-      Number(res.atualizados || 0);
+      Number(res.atualizados || 0) +
+      Number(envio.enviados || 0);
 
     if (total > 0) {
-      addToast("Produtos sincronizados com a conta ☁️", "ok");
+      addToast("Conta atualizada com este aparelho ☁️", "ok");
     } else {
       addToast("Tudo já estava sincronizado ☁️✨", "ok");
     }
@@ -763,7 +877,7 @@ async function remover(id) {
     if (produto && !isVisitante && usuarioAtual?.uid) {
       const res = await excluirProdutoDaNuvem(usuarioAtual, produto);
 
-      if (!res.ok && !res.ignorado) {
+      if (!res.ok && !res.ignorado) { 
         console.warn("[sync-delete] Não marcou exclusão na nuvem:", res.erro);
         addToast("Apaguei neste aparelho, mas a nuvem pode tentar trazer de volta ⚠️", "erro");
       }
@@ -1673,16 +1787,6 @@ async function atualizarLoteDoScanner(lote, alteracoes = {}, opcoes = {}) {
             : null,
         });
 
-        adicionarPreviewScanner({
-          codigo: loteScanner.codigo,
-          nome: nomeProduto,
-          imagem: produto.imagem || null,
-          validade: validadeFormatada,
-          setor: produto.setor || "Medicamentos",
-          quantidade: qtdSomar,
-          tipo: "novo-lote",
-        });
-
         addToast(`Novo lote criado • ${validadeFormatada} • x${qtdSomar} ✨`, "ok");
       }
 
@@ -1744,13 +1848,19 @@ await salvarProdutoContaNaNuvem(produtoNovo);
   // =============================
 
 return (
-  <div className="relative min-h-screen overflow-hidden">
+  <div
+    className="
+      relative min-h-dvh overflow-x-hidden overscroll-y-contain
+      bg-slate-50 dark:bg-slate-950
+    "
+  >
     <FundoBolhas variant="emerald" />
 
     <div
       ref={topRef}
       className="
-        relative z-10 mx-auto min-h-screen max-w-5xl px-4 pb-28 pt-4
+        relative z-10 mx-auto min-h-dvh max-w-5xl px-4
+        pb-[calc(11rem+env(safe-area-inset-bottom))] pt-4
         text-gray-900 dark:text-white
       "
     >
@@ -1828,7 +1938,12 @@ return (
 
 {/* LISTA */}
 {lista.length > 0 && (
-  <motion.div layout className="relative z-0 mt-4 space-y-3">
+  <motion.div
+    layout
+    className="
+      relative z-10 mt-4 space-y-3 pb-[calc(6rem+env(safe-area-inset-bottom))]
+    "
+  >
     {lista.map((produto) => (
       <div key={produto.id} className="space-y-1.5">
         {(isVisitante || produto.pendenteSync || !produto.sincronizadoEm) && (
@@ -1857,7 +1972,8 @@ return (
   </motion.div>
 )}
 
-      {/* FAB */}
+    {/* FAB */}
+    <div className="relative z-[80]">
       <FabMedicamentos
         fabOpen={fabOpen}
         setFabOpen={setFabOpen}
@@ -1867,6 +1983,7 @@ return (
         modoReposicao={modoReposicao}
         setModoReposicao={setModoReposicao}
       />
+    </div>
 
       {/* MODAL MEDICAMENTO */}
       <ModalMedicamento
@@ -2151,11 +2268,12 @@ function SyncResumoProdutos({
   sincronizando,
   onSincronizar,
 }) {
-  const tudoOk = !isVisitante && total > 0 && pendentes === 0;
   const temPendencia = !isVisitante && pendentes > 0;
-    if (!isVisitante && !temPendencia) {
-     return null;
-}
+  const tudoOk = !isVisitante && total > 0 && pendentes === 0;
+
+  if (!isVisitante && total === 0) {
+    return null;
+  }
 
   return (
     <motion.div
@@ -2163,17 +2281,22 @@ function SyncResumoProdutos({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className="
-        mt-3 rounded-[1.5rem] border border-gray-200 bg-white/75 p-3
-        shadow-lg shadow-black/5 backdrop-blur-xl
-        dark:border-white/10 dark:bg-gray-950/65
-      "
+      className={`
+        mt-3 rounded-[1.35rem] border p-2.5 shadow-lg backdrop-blur-xl
+        ${
+          isVisitante
+            ? "border-slate-300 bg-white/70 dark:border-white/10 dark:bg-white/[0.06]"
+            : temPendencia
+            ? "border-amber-300/70 bg-amber-50/85 dark:border-amber-500/20 dark:bg-amber-500/10"
+            : "border-emerald-300/60 bg-emerald-50/75 dark:border-emerald-500/15 dark:bg-emerald-500/8"
+        }
+      `}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
           <div
             className={`
-              flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg
+              flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg
               ${
                 isVisitante
                   ? "bg-slate-700 shadow-slate-700/20"
@@ -2184,53 +2307,55 @@ function SyncResumoProdutos({
             `}
           >
             {isVisitante ? (
-              <CloudOff size={20} />
+              <CloudOff size={18} />
             ) : temPendencia ? (
-              <Clock3 size={20} />
+              <Clock3 size={18} />
             ) : (
-              <Cloud size={20} />
+              <Cloud size={18} />
             )}
           </div>
 
           <div className="min-w-0">
-            <p className="truncate text-sm font-black text-gray-900 dark:text-white">
+            <p className="truncate text-xs font-black text-gray-900 dark:text-white">
               {isVisitante
                 ? "Modo local"
                 : temPendencia
-                ? `${pendentes} produto${pendentes > 1 ? "s" : ""} pendente${pendentes > 1 ? "s" : ""}`
-                : tudoOk
-                ? "Tudo sincronizado"
-                : "Sincronização da conta"}
+                ? `${pendentes} pendente${pendentes > 1 ? "s" : ""}`
+                : "Conta pronta"}
             </p>
 
-            <p className="truncate text-xs font-semibold text-gray-500 dark:text-gray-400">
+            <p className="truncate text-[11px] font-semibold text-gray-500 dark:text-gray-400">
               {isVisitante
-                ? "Visitante salva apenas neste aparelho"
+                ? "Salvo só neste aparelho"
                 : `${sincronizados}/${total} na nuvem`}
             </p>
           </div>
         </div>
 
-        {temPendencia && (
-        <button
-          type="button"
-          onClick={onSincronizar}
-          disabled={sincronizando}
-            className="
-              flex h-10 shrink-0 items-center justify-center gap-2 rounded-2xl
-              bg-emerald-700 px-3 text-xs font-black text-white shadow-lg
-              shadow-emerald-700/20 transition hover:bg-emerald-800
+        {!isVisitante && total > 0 && (
+          <button
+            type="button"
+            onClick={onSincronizar}
+            disabled={sincronizando}
+            className={`
+              flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-2xl
+              px-3 text-[11px] font-black text-white shadow-lg transition
               active:scale-95 disabled:opacity-60
-            "
+              ${
+                temPendencia
+                  ? "bg-amber-600 shadow-amber-600/20 hover:bg-amber-700"
+                  : "bg-emerald-700 shadow-emerald-700/20 hover:bg-emerald-800"
+              }
+            `}
           >
             {sincronizando ? (
-              <Loader2 size={16} className="animate-spin" />
+              <Loader2 size={15} className="animate-spin" />
             ) : (
-              <RefreshCcw size={16} />
+              <RefreshCcw size={15} />
             )}
 
-            <span className="hidden sm:inline">
-              {sincronizando ? "Sincronizando" : "Sincronizar"}
+            <span>
+              {sincronizando ? "Enviando" : temPendencia ? "Sync" : "Enviar"}
             </span>
           </button>
         )}
