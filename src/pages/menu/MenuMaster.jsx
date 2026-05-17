@@ -57,13 +57,6 @@ function MenuMaster({ setPagina }) {
     <PageShell>
       <FundoBolhas variant="emerald" />
 
-      <BackHeader
-        icon={Crown}
-        title="Central Master"
-        description="Ferramentas administrativas em páginas separadas"
-        setPagina={setPagina}
-      />
-
       <main className="relative z-10 mx-auto max-w-6xl space-y-4 p-4 pb-32">
         {!isAdmin ? (
           <EmptyState

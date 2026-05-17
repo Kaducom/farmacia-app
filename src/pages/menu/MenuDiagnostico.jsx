@@ -138,10 +138,13 @@ function MenuDiagnostico({ setPagina }) {
       <main className="relative z-10 mx-auto max-w-6xl space-y-4 p-4 pb-32">
         <section className="rounded-[1.8rem] border border-gray-200 bg-white/85 p-4 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70 sm:p-5">
           <SectionTitle
+
+
+
             icon={Database}
             title="Raio-X do estoque"
             description="Leitura local deste aparelho, com status de validade e sincronização."
-          />
+          />       
 
           <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
             <MetricPremium icon={Package} titulo="Produtos" valor={dados.totalProdutos} descricao="lotes ativos" />
