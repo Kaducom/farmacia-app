@@ -21,15 +21,11 @@ import {
 
 import {
   CalendarDays,
-  CheckCircle2,
-  Cloud,
   CloudOff,
   Clock3,
   ImageIcon,
-  Loader2,
   PackagePlus,
   Plus,
-  RefreshCcw,
   Trash2,
   X,
 } from "lucide-react";
@@ -114,6 +110,30 @@ async function compactarImagemParaFirestore(imagemBase64) {
 }
 
 
+function liberarScrollDaPagina() {
+  if (typeof document === "undefined") return;
+
+  document.body.classList.remove("app-overlay-open");
+  document.documentElement.classList.remove("app-overlay-open");
+
+  document.body.style.overflow = "";
+  document.body.style.position = "";
+  document.body.style.top = "";
+  document.body.style.left = "";
+  document.body.style.right = "";
+  document.body.style.width = "";
+  document.body.style.height = "";
+  document.body.style.touchAction = "";
+  document.body.style.overscrollBehavior = "";
+
+  document.documentElement.style.overflow = "";
+  document.documentElement.style.position = "";
+  document.documentElement.style.height = "";
+  document.documentElement.style.touchAction = "";
+  document.documentElement.style.overscrollBehavior = "";
+}
+
+
 function Medicamentos() {
   const { usuarioAtual, isVisitante } = useAuth();
 
@@ -154,9 +174,15 @@ function Medicamentos() {
 
   const [loteScanner, setLoteScanner] = useState(null);
   const [processandoLote, setProcessandoLote] = useState(false);
-  const [sincronizandoManual, setSincronizandoManual] = useState(false);
-
   const topRef = useRef(null);
+
+  useEffect(() => {
+    liberarScrollDaPagina();
+
+    return () => {
+      liberarScrollDaPagina();
+    };
+  }, []);
 
   // =============================
   // 🚀 INICIALIZAÇÃO
@@ -207,7 +233,9 @@ function Medicamentos() {
     })
   );
 
-  document.body.classList.toggle("app-overlay-open", overlayAberto);
+  if (!overlayAberto) {
+    liberarScrollDaPagina();
+  }
 
   return () => {
     window.dispatchEvent(
@@ -218,7 +246,7 @@ function Medicamentos() {
       })
     );
 
-    document.body.classList.remove("app-overlay-open");
+    liberarScrollDaPagina();
   };
 }, [
   abrirModal,
@@ -400,7 +428,7 @@ async function carregar(opcoes = {}) {
           Number(resSync.atualizados || 0);
 
         if (totalSync > 0) {
-          addToast("Produtos sincronizados com a conta ☁️", "ok");
+          console.log("[sync-produtos] Sincronização automática:", totalSync);
         }
       } else if (!resSync.ignorado) {
         console.warn("[sync-produtos] Falha:", resSync.erro);
@@ -418,6 +446,10 @@ async function carregar(opcoes = {}) {
         setor: m.setor || "Medicamentos",
         atualizadoEmLocal: Number(m.atualizadoEmLocal || Date.now()),
         pendenteSync: Boolean(m.pendenteSync),
+        produtoJaPre: Boolean(m.produtoJaPre),
+        modoDataRetirada: Boolean(m.modoDataRetirada),
+        dataRetiradaInformada: m.dataRetiradaInformada || null,
+        preVencimentoAtivadoEm: m.preVencimentoAtivadoEm || null,
       }));
 
     normalizados.sort((a, b) => {
@@ -435,48 +467,6 @@ async function carregar(opcoes = {}) {
   } catch (err) {
     console.error("Erro ao carregar produtos:", err);
     addToast("Erro ao carregar produtos 😕", "erro");
-  }
-}
-
-async function sincronizarAgora() {
-  if (isVisitante || !usuarioAtual?.uid) {
-    addToast("Visitante salva só neste aparelho 📱", "info");
-    return;
-  }
-
-  try {
-    setSincronizandoManual(true);
-
-    const envio = await enviarProdutosLocaisParaConta({
-      forcarTudo: true,
-      silencioso: false,
-    });
-
-    const res = await sincronizarProdutosDoUsuario(usuarioAtual);
-
-    if (!res.ok) {
-      addToast(res.erro || "Não consegui sincronizar agora 😕", "erro");
-      return;
-    }
-
-    const total =
-      Number(res.baixados || 0) +
-      Number(res.enviados || 0) +
-      Number(res.atualizados || 0) +
-      Number(envio.enviados || 0);
-
-    if (total > 0) {
-      addToast("Conta atualizada com este aparelho ☁️", "ok");
-    } else {
-      addToast("Tudo já estava sincronizado ☁️✨", "ok");
-    }
-
-    await carregar();
-  } catch (err) {
-    console.error("Erro ao sincronizar manualmente:", err);
-    addToast("Erro ao sincronizar agora 😕", "erro");
-  } finally {
-    setSincronizandoManual(false);
   }
 }
 
@@ -551,7 +541,49 @@ async function sincronizarAgora() {
   // 💾 SALVAR / EDITAR
   // =============================
 
-  async function salvar() {
+
+  function temChave(objeto, chave) {
+    return Object.prototype.hasOwnProperty.call(objeto || {}, chave);
+  }
+
+  function montarCamposInteligentesProduto(opcoes = {}, base = {}) {
+    const temProdutoJaPre = temChave(opcoes, "produtoJaPre");
+
+    const produtoJaPre = temProdutoJaPre
+      ? Boolean(opcoes.produtoJaPre)
+      : Boolean(base?.produtoJaPre || false);
+
+    const temDataRetirada = Boolean(
+      String(opcoes?.dataRetiradaInformada || "").trim()
+    );
+
+    const dataRetirada = temDataRetirada
+      ? parseDataSegura(opcoes.dataRetiradaInformada)
+      : null;
+
+    const campos = {
+      produtoJaPre,
+      preVencimentoAtivadoEm: produtoJaPre
+        ? Number(base?.preVencimentoAtivadoEm || Date.now())
+        : null,
+      modoDataRetirada: Boolean(base?.modoDataRetirada || false),
+      dataRetiradaInformada: base?.dataRetiradaInformada || null,
+    };
+
+    if (dataRetirada) {
+      campos.modoDataRetirada = true;
+      campos.dataRetiradaInformada = dataParaTextoBR(dataRetirada);
+    }
+
+    if (temChave(opcoes, "modoDataRetirada") && !opcoes.modoDataRetirada) {
+      campos.modoDataRetirada = false;
+      campos.dataRetiradaInformada = null;
+    }
+
+    return campos;
+  }
+
+  async function salvar(opcoesProduto = {}) {
     const nomeLimpo = nome.trim();
 
     if (!nomeLimpo || !validade) {
@@ -601,6 +633,11 @@ async function sincronizarAgora() {
       );
     });
 
+    const camposInteligentes = montarCamposInteligentesProduto(
+      opcoesProduto,
+      editando || {}
+    );
+
     const dados = {
       nome: nomeLimpo,
       validade: validadeFormatada,
@@ -610,6 +647,7 @@ async function sincronizarAgora() {
       diasRemover: Number(diasRemover) || 7,
       diasPreVencido: diasPre ? Number(diasPre) : null,
       quantidade: qtd,
+      ...camposInteligentes,
     };
 
     try {
@@ -1127,8 +1165,18 @@ await salvarProdutoContaNaNuvem(produtoAtualizado);
       };
     }
 
-    const removerDate = new Date(validadeDate);
-    removerDate.setDate(removerDate.getDate() - Number(med.diasRemover || 0));
+    const retiradaInformada = parseDataSegura(med.dataRetiradaInformada);
+
+    const removerDate =
+      med.modoDataRetirada && retiradaInformada
+        ? retiradaInformada
+        : new Date(validadeDate);
+
+    if (!med.modoDataRetirada || !retiradaInformada) {
+      removerDate.setDate(
+        removerDate.getDate() - Number(med.diasRemover || 0)
+      );
+    }
 
     let preDate = null;
 
@@ -1165,6 +1213,7 @@ await salvarProdutoContaNaNuvem(produtoAtualizado);
 
     if (hoje >= validadeLimpa) return "vencido";
     if (removerLimpa && hoje >= removerLimpa) return "remover";
+    if (Boolean(med.produtoJaPre)) return "pre";
     if (preLimpa && hoje >= preLimpa) return "pre";
 
     return "ok";
@@ -1197,6 +1246,10 @@ await salvarProdutoContaNaNuvem(produtoAtualizado);
 }
 
 function deveAbrirAutomaticamente(med) {
+  if (Boolean(med?.produtoJaPre)) {
+    return true;
+  }
+
   const status = calcularStatus(med);
 
   if (["vencido", "remover", "pre"].includes(status)) {
@@ -1269,13 +1322,6 @@ const produtosNoEscopo = filtrarProdutosPorEscopo(
   usuarioAtual
 );
 
-const produtosPendentesSync = produtosNoEscopo.filter(
-  (produto) => produto.pendenteSync
-).length;
-
-const produtosSincronizados = produtosNoEscopo.filter(
-  (produto) => !produto.pendenteSync && produto.sincronizadoEm
-).length;
 
 const lista = [...produtosNoEscopo]
   .filter((m) => {
@@ -1672,9 +1718,15 @@ async function atualizarLoteDoScanner(lote, alteracoes = {}, opcoes = {}) {
       Number(alteracoes.quantidade || lote.quantidade || 1)
     );
 
+    const camposInteligentes = montarCamposInteligentesProduto(
+      alteracoes,
+      lote
+    );
+
     await db.medicamentos.update(lote.id, {
       validade: dataParaTextoBR(dataValida),
       quantidade: quantidadeNova,
+      ...camposInteligentes,
       atualizadoEmLocal: Date.now(),
       pendenteSync: true,
     });
@@ -1727,6 +1779,8 @@ async function atualizarLoteDoScanner(lote, alteracoes = {}, opcoes = {}) {
       )
     );
 
+    const camposInteligentes = montarCamposInteligentesProduto(opcoes, produto);
+
     try {
       setProcessandoLote(true);
 
@@ -1743,6 +1797,7 @@ async function atualizarLoteDoScanner(lote, alteracoes = {}, opcoes = {}) {
 
         await db.medicamentos.update(loteMesmaValidade.id, {
           quantidade: novaQuantidade,
+          ...camposInteligentes,
           atualizadoEmLocal: Date.now(),
           pendenteSync: true,
         });
@@ -1763,6 +1818,7 @@ async function atualizarLoteDoScanner(lote, alteracoes = {}, opcoes = {}) {
             ? Number(produto.diasPreVencido)
             : null,
           quantidade: qtdSomar,
+          ...camposInteligentes,
         };
 
         const agora = Date.now();
@@ -1850,7 +1906,7 @@ await salvarProdutoContaNaNuvem(produtoNovo);
 return (
   <div
     className="
-      relative min-h-dvh overflow-x-hidden overscroll-y-contain
+      relative min-h-screen w-full overflow-x-hidden
       bg-slate-50 dark:bg-slate-950
     "
   >
@@ -1859,8 +1915,8 @@ return (
     <div
       ref={topRef}
       className="
-        relative z-10 mx-auto min-h-dvh max-w-5xl px-4
-        pb-[calc(11rem+env(safe-area-inset-bottom))] pt-4
+        relative z-10 mx-auto min-h-screen max-w-5xl px-4
+        pb-[calc(12rem+env(safe-area-inset-bottom))] pt-4
         text-gray-900 dark:text-white
       "
     >
@@ -1876,14 +1932,6 @@ return (
         mostrarFiltroSetor={escopoProdutos.mostrarFiltroSetor}
         quantidadeFiltrada={lista.length}
         quantidadeTotal={produtosNoEscopo.length}
-      />
-      <SyncResumoProdutos
-        isVisitante={isVisitante}
-        total={produtosNoEscopo.length}
-        pendentes={produtosPendentesSync}
-        sincronizados={produtosSincronizados}
-        sincronizando={sincronizandoManual}
-        onSincronizar={sincronizarAgora}
       />
 
       {/* EMPTY STATE */}
@@ -2260,115 +2308,9 @@ return (
 );
 }
 
-function SyncResumoProdutos({
-  isVisitante,
-  total,
-  pendentes,
-  sincronizados,
-  sincronizando,
-  onSincronizar,
-}) {
-  const temPendencia = !isVisitante && pendentes > 0;
-  const tudoOk = !isVisitante && total > 0 && pendentes === 0;
-
-  if (!isVisitante && total === 0) {
-    return null;
-  }
-
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
-      className={`
-        mt-3 rounded-[1.35rem] border p-2.5 shadow-lg backdrop-blur-xl
-        ${
-          isVisitante
-            ? "border-slate-300 bg-white/70 dark:border-white/10 dark:bg-white/[0.06]"
-            : temPendencia
-            ? "border-amber-300/70 bg-amber-50/85 dark:border-amber-500/20 dark:bg-amber-500/10"
-            : "border-emerald-300/60 bg-emerald-50/75 dark:border-emerald-500/15 dark:bg-emerald-500/8"
-        }
-      `}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div
-            className={`
-              flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg
-              ${
-                isVisitante
-                  ? "bg-slate-700 shadow-slate-700/20"
-                  : temPendencia
-                  ? "bg-amber-500 shadow-amber-500/20"
-                  : "bg-emerald-700 shadow-emerald-700/20"
-              }
-            `}
-          >
-            {isVisitante ? (
-              <CloudOff size={18} />
-            ) : temPendencia ? (
-              <Clock3 size={18} />
-            ) : (
-              <Cloud size={18} />
-            )}
-          </div>
-
-          <div className="min-w-0">
-            <p className="truncate text-xs font-black text-gray-900 dark:text-white">
-              {isVisitante
-                ? "Modo local"
-                : temPendencia
-                ? `${pendentes} pendente${pendentes > 1 ? "s" : ""}`
-                : "Conta pronta"}
-            </p>
-
-            <p className="truncate text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-              {isVisitante
-                ? "Salvo só neste aparelho"
-                : `${sincronizados}/${total} na nuvem`}
-            </p>
-          </div>
-        </div>
-
-        {!isVisitante && total > 0 && (
-          <button
-            type="button"
-            onClick={onSincronizar}
-            disabled={sincronizando}
-            className={`
-              flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-2xl
-              px-3 text-[11px] font-black text-white shadow-lg transition
-              active:scale-95 disabled:opacity-60
-              ${
-                temPendencia
-                  ? "bg-amber-600 shadow-amber-600/20 hover:bg-amber-700"
-                  : "bg-emerald-700 shadow-emerald-700/20 hover:bg-emerald-800"
-              }
-            `}
-          >
-            {sincronizando ? (
-              <Loader2 size={15} className="animate-spin" />
-            ) : (
-              <RefreshCcw size={15} />
-            )}
-
-            <span>
-              {sincronizando ? "Enviando" : temPendencia ? "Sync" : "Enviar"}
-            </span>
-          </button>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
 function SyncBadgeProduto({ produto, isVisitante }) {
   const pendente = Boolean(produto?.pendenteSync);
   const sincronizado = Boolean(produto?.sincronizadoEm || produto?.cloudId);
-  const temFotoMini = produto?.imagemTipo === "base64-mini-firestore";
-
   if (isVisitante) {
     return (
       <span
@@ -2399,9 +2341,9 @@ function SyncBadgeProduto({ produto, isVisitante }) {
     );
   }
 
-if (sincronizado) {
-  return null;
-}
+  if (sincronizado) {
+    return null;
+  }
 
   return (
     <span

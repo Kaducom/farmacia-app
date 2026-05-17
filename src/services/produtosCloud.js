@@ -65,16 +65,13 @@ function carregarImagem(imagemBase64) {
 
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Erro ao carregar imagem"));
-
     img.src = imagemBase64;
   });
 }
 
 async function gerarMiniaturaBase64(imagem) {
   if (!imagem || typeof imagem !== "string") return null;
-
   if (imagemEhUrlWeb(imagem)) return imagem;
-
   if (!imagemEhBase64DataUrl(imagem)) return null;
 
   if (imagem.length <= LIMITE_IMAGEM_MINI) {
@@ -83,7 +80,6 @@ async function gerarMiniaturaBase64(imagem) {
 
   try {
     const img = await carregarImagem(imagem);
-
     const canvas = document.createElement("canvas");
 
     const proporcao = Math.min(
@@ -147,6 +143,37 @@ async function prepararImagemParaFirestore(produto) {
   };
 }
 
+function numeroSeguro(valor, fallback = 0) {
+  const numero = Number(valor);
+
+  if (!Number.isFinite(numero)) return fallback;
+
+  return numero;
+}
+
+function numeroOuNull(valor) {
+  if (valor === null || valor === undefined || valor === "") return null;
+
+  const numero = Number(valor);
+
+  return Number.isFinite(numero) ? numero : null;
+}
+
+function montarCamposInteligentes(produto) {
+  const produtoJaPre = Boolean(produto?.produtoJaPre);
+  const modoDataRetirada = Boolean(produto?.modoDataRetirada);
+  const dataRetiradaInformada = produto?.dataRetiradaInformada || null;
+
+  return {
+    produtoJaPre,
+    modoDataRetirada,
+    dataRetiradaInformada,
+    preVencimentoAtivadoEm: produtoJaPre
+      ? numeroOuNull(produto?.preVencimentoAtivadoEm) || Date.now()
+      : null,
+  };
+}
+
 function montarPayloadProduto(usuarioAtual, produto, dadosImagem) {
   const agora = Date.now();
   const cloudId = criarCloudIdProduto(produto);
@@ -155,11 +182,13 @@ function montarPayloadProduto(usuarioAtual, produto, dadosImagem) {
     cloudId,
     nome: String(produto?.nome || "").trim(),
     validade: produto?.validade || "",
+
     imagem: dadosImagem?.imagem ?? null,
     imagemTipo: dadosImagem?.imagemTipo ?? null,
     imagemTamanho: dadosImagem?.imagemTamanho ?? 0,
     imagemMiniGeradaEm: dadosImagem?.imagemMiniGeradaEm ?? null,
     imagemPath: null,
+
     codigo: produto?.codigo ? String(produto.codigo) : null,
     setor: produto?.setor || "Medicamentos",
     diasRemover: Number(produto?.diasRemover || 7),
@@ -167,9 +196,13 @@ function montarPayloadProduto(usuarioAtual, produto, dadosImagem) {
       ? Number(produto.diasPreVencido)
       : null,
     quantidade: Number(produto?.quantidade || 1),
+
+    ...montarCamposInteligentes(produto),
+
     donoUid: usuarioAtual.uid,
     criadoEmLocal: Number(produto?.criadoEmLocal || agora),
     atualizadoEmLocal: Number(produto?.atualizadoEmLocal || agora),
+
     deletado: false,
     excluido: false,
     atualizadoEm: serverTimestamp(),
@@ -243,9 +276,11 @@ export async function excluirProdutoDaNuvem(usuarioAtual, produto) {
         validade: produto.validade || "",
         setor: produto.setor || "Medicamentos",
         donoUid: usuarioAtual.uid,
+
         deletado: true,
         excluido: true,
         excluidoEm: serverTimestamp(),
+
         atualizadoEmLocal: Date.now(),
         atualizadoEm: serverTimestamp(),
       },
@@ -281,18 +316,20 @@ export async function baixarProdutosDaNuvem(usuarioAtual) {
   const snap = await getDocs(refProdutos);
 
   return snap.docs.map((docSnap) => {
-    const deletado = Boolean(dados.deletado || dados.excluido);
     const dados = docSnap.data() || {};
+    const deletado = Boolean(dados.deletado || dados.excluido);
 
     return {
       cloudId: dados.cloudId || docSnap.id,
       nome: dados.nome || "",
       validade: dados.validade || "",
+
       imagem: dados.imagem || null,
       imagemPath: null,
       imagemTipo: dados.imagemTipo || null,
-      imagemTamanho: Number(dados.imagemTamanho || 0),
-      imagemMiniGeradaEm: Number(dados.imagemMiniGeradaEm || 0),
+      imagemTamanho: numeroSeguro(dados.imagemTamanho, 0),
+      imagemMiniGeradaEm: numeroSeguro(dados.imagemMiniGeradaEm, 0),
+
       codigo: dados.codigo ? String(dados.codigo) : null,
       setor: dados.setor || "Medicamentos",
       diasRemover: Number(dados.diasRemover || 7),
@@ -300,12 +337,20 @@ export async function baixarProdutosDaNuvem(usuarioAtual) {
         ? Number(dados.diasPreVencido)
         : null,
       quantidade: Number(dados.quantidade || 1),
-      criadoEmLocal: Number(dados.criadoEmLocal || 0),
-      atualizadoEmLocal: Number(dados.atualizadoEmLocal || 0),
+
+      produtoJaPre: Boolean(dados.produtoJaPre),
+      modoDataRetirada: Boolean(dados.modoDataRetirada),
+      dataRetiradaInformada: dados.dataRetiradaInformada || null,
+      preVencimentoAtivadoEm: numeroOuNull(dados.preVencimentoAtivadoEm),
+
+      criadoEmLocal: numeroSeguro(dados.criadoEmLocal, 0),
+      atualizadoEmLocal: numeroSeguro(dados.atualizadoEmLocal, 0),
+
       sincronizadoEm: Date.now(),
       pendenteSync: false,
-      deletado: false,
-      excluido: false,
+
+      deletado,
+      excluido: deletado,
     };
   });
 }
@@ -318,12 +363,14 @@ export async function sincronizarProdutosDoUsuario(usuarioAtual) {
       baixados: 0,
       enviados: 0,
       atualizados: 0,
+      removidos: 0,
     };
   }
 
   let baixados = 0;
   let enviados = 0;
   let atualizados = 0;
+  let removidos = 0;
 
   try {
     const [locais, nuvem] = await Promise.all([
@@ -331,12 +378,17 @@ export async function sincronizarProdutosDoUsuario(usuarioAtual) {
       baixarProdutosDaNuvem(usuarioAtual),
     ]);
 
-    const nuvemDeletados = nuvem.filter((produto) => produto.deletado || produto.excluido);
-    const nuvemAtivos = nuvem.filter((produto) => !produto.deletado && !produto.excluido);
+    const nuvemDeletados = nuvem.filter(
+      (produto) => produto.deletado || produto.excluido
+    );
+
+    const nuvemAtivos = nuvem.filter(
+      (produto) => !produto.deletado && !produto.excluido
+    );
 
     const deletadosPorCloudId = new Set(
       nuvemDeletados.map((produto) => produto.cloudId).filter(Boolean)
-        );
+    );
 
     const locaisPorCloudId = new Map();
 
@@ -352,16 +404,19 @@ export async function sincronizarProdutosDoUsuario(usuarioAtual) {
     const nuvemPorCloudId = new Map();
 
     nuvemAtivos.forEach((produto) => {
-    nuvemPorCloudId.set(produto.cloudId, produto);
-  });
+      nuvemPorCloudId.set(produto.cloudId, produto);
+    });
 
     for (const produtoLocal of locaisPorCloudId.values()) {
       if (deletadosPorCloudId.has(produtoLocal.cloudId)) {
         if (produtoLocal.id) {
-        await db.medicamentos.delete(produtoLocal.id);
-         }
-     continue;
-}
+          await db.medicamentos.delete(produtoLocal.id);
+          removidos += 1;
+        }
+
+        continue;
+      }
+
       const produtoNuvem = nuvemPorCloudId.get(produtoLocal.cloudId);
 
       if (!produtoNuvem) {
@@ -380,6 +435,18 @@ export async function sincronizarProdutosDoUsuario(usuarioAtual) {
               res.payload?.imagemMiniGeradaEm ??
               produtoLocal.imagemMiniGeradaEm ??
               null,
+
+            produtoJaPre: Boolean(res.payload?.produtoJaPre),
+            modoDataRetirada: Boolean(res.payload?.modoDataRetirada),
+            dataRetiradaInformada:
+              res.payload?.dataRetiradaInformada ??
+              produtoLocal.dataRetiradaInformada ??
+              null,
+            preVencimentoAtivadoEm:
+              res.payload?.preVencimentoAtivadoEm ??
+              produtoLocal.preVencimentoAtivadoEm ??
+              null,
+
             sincronizadoEm: Date.now(),
             pendenteSync: false,
           });
@@ -412,6 +479,18 @@ export async function sincronizarProdutosDoUsuario(usuarioAtual) {
               res.payload?.imagemMiniGeradaEm ??
               produtoLocal.imagemMiniGeradaEm ??
               null,
+
+            produtoJaPre: Boolean(res.payload?.produtoJaPre),
+            modoDataRetirada: Boolean(res.payload?.modoDataRetirada),
+            dataRetiradaInformada:
+              res.payload?.dataRetiradaInformada ??
+              produtoLocal.dataRetiradaInformada ??
+              null,
+            preVencimentoAtivadoEm:
+              res.payload?.preVencimentoAtivadoEm ??
+              produtoLocal.preVencimentoAtivadoEm ??
+              null,
+
             sincronizadoEm: Date.now(),
             pendenteSync: false,
           });
@@ -451,6 +530,7 @@ export async function sincronizarProdutosDoUsuario(usuarioAtual) {
       baixados,
       enviados,
       atualizados,
+      removidos,
     };
   } catch (err) {
     console.error("[produtosCloud] Erro ao sincronizar:", err);
@@ -461,6 +541,7 @@ export async function sincronizarProdutosDoUsuario(usuarioAtual) {
       baixados,
       enviados,
       atualizados,
+      removidos,
     };
   }
 }
