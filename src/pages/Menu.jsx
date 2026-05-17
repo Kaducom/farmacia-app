@@ -1,59 +1,38 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-
-import { AnimatePresence, motion } from "framer-motion";
-
-import {
-  AlertTriangle,
   Bell,
   BookOpenCheck,
   Boxes,
   Brain,
-  CalendarClock,
-  CalendarDays,
-  Camera,
-  CheckCircle2,
   ChevronRight,
-  Copy,
   Crown,
   Download,
   History,
-  ImageUp,
   LayoutDashboard,
-  Loader2,
   LogOut,
   Map,
   Moon,
   Package,
-  Pill,
   RefreshCcw,
   ScanBarcode,
-  Search,
   Settings,
   Shield,
   SlidersHorizontal,
-  Skull,
   Sparkles,
   Tags,
-  X,
 } from "lucide-react";
-
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
 
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/useAuth";
 import FundoBolhas from "../components/FundoBolhas";
-import { firestore } from "../firebase";
 import { db } from "../db";
+import {
+  HeroAvatar,
+  ModalConfirmarSair,
+  Toast,
+  obterIniciais,
+} from "./menu/components/MenuShared";
 
 const dashboardInicial = {
   totalMedicamentos: 0,
@@ -64,69 +43,9 @@ const dashboardInicial = {
   mapeamentos: 0,
 };
 
-const SETORES_PRODUTOS = [
-  "Medicamentos",
-  "Alimentos",
-  "Geladeira",
-  "Perfumaria",
-  "Higiene",
-  "Estoque geral",
-  "Outros",
-];
-
-const QUALIDADES_FOTO = [
-  { id: "economica", label: "Econômica", detalhe: "Mais leve para aparelhos antigos" },
-  { id: "normal", label: "Normal", detalhe: "Boa para rotina" },
-  { id: "boa", label: "Boa", detalhe: "Melhor visual neste aparelho" },
-];
-
-const CONFIG_PRODUTOS_PADRAO = {
-  setorPrincipal: "Medicamentos",
-  usarSetorPrincipalAoCadastrar: true,
-  focarSetorPrincipalNosBotoes: true,
-  datasAutomaticasPorSetor: true,
-  produtoJaPreVencimento: true,
-  permitirDataRetiradaDireta: true,
-  retiradaPadraoDias: 30,
-  preVencimentoPadraoDias: "",
-  qualidadeFotoLocal: "boa",
-  qualidadeFotoNuvem: "compacta",
-};
-
-function chaveConfigProdutos(uid) {
-  return `avisai:config-produtos:${uid || "visitante"}`;
-}
-
-function carregarConfigProdutos(uid) {
-  if (typeof window === "undefined") return CONFIG_PRODUTOS_PADRAO;
-
-  try {
-    const salvo = window.localStorage.getItem(chaveConfigProdutos(uid));
-
-    if (!salvo) return CONFIG_PRODUTOS_PADRAO;
-
-    return {
-      ...CONFIG_PRODUTOS_PADRAO,
-      ...JSON.parse(salvo),
-    };
-  } catch {
-    return CONFIG_PRODUTOS_PADRAO;
-  }
-}
-
 function Menu({ setPagina }) {
-  const { theme, toggleTheme } = useTheme();
-
-  const {
-    usuarioAtual,
-    isAdmin,
-    isVisitante,
-    logout,
-    buscarUsuarioPorId,
-    alterarTipoPorId,
-  } = useAuth();
-
-  const dark = theme === "dark";
+  const { theme } = useTheme();
+  const { usuarioAtual, isAdmin, isVisitante, logout } = useAuth();
   const toastTimerRef = useRef(null);
 
   const [toast, setToast] = useState(null);
@@ -134,133 +53,77 @@ function Menu({ setPagina }) {
   const [carregando, setCarregando] = useState(false);
   const [dashboard, setDashboard] = useState(dashboardInicial);
 
-  const [buscaId, setBuscaId] = useState("");
-  const [usuarioEncontrado, setUsuarioEncontrado] = useState(null);
-  const [loadingBusca, setLoadingBusca] = useState(false);
-
-  const [admins, setAdmins] = useState([]);
-  const [buscaAdmin, setBuscaAdmin] = useState("");
-  const [carregandoAdmins, setCarregandoAdmins] = useState(false);
-
-  const [configProdutos, setConfigProdutos] = useState(() =>
-    carregarConfigProdutos(usuarioAtual?.uid || (isVisitante ? "visitante" : "anonimo"))
-  );
+  const primeiroNome = usuarioAtual?.nome?.split(" ")?.[0] || "usuário";
+  const dark = theme === "dark";
 
   const saudacao = useMemo(() => {
     const agora = new Date();
     const hora = agora.getHours();
     const minuto = agora.getMinutes();
 
-    if ((hora >= 5 && hora < 12) || (hora === 12 && minuto === 0)) {
-      return "Bom dia";
-    }
-
-    if ((hora === 12 && minuto >= 1) || (hora > 12 && hora < 18)) {
-      return "Boa tarde";
-    }
-
+    if ((hora >= 5 && hora < 12) || (hora === 12 && minuto === 0)) return "Bom dia";
+    if ((hora === 12 && minuto >= 1) || (hora > 12 && hora < 18)) return "Boa tarde";
     return "Boa noite";
   }, []);
 
-  const primeiroNome = usuarioAtual?.nome?.split(" ")?.[0] || "usuário";
+  const cardsPrincipais = useMemo(() => {
+    const base = [
+      {
+        titulo: "Configurações de Produtos",
+        descricao: "Setor principal, pré-vencimento, retirada e fotos.",
+        icon: SlidersHorizontal,
+        pagina: "menuProdutosConfig",
+        destaque: "from-emerald-700 to-lime-500",
+        admin: false,
+      },
+      {
+        titulo: "Diagnóstico AVISAI",
+        descricao: "Locais, nuvem, pendentes, vencidos e etiquetas.",
+        icon: LayoutDashboard,
+        pagina: "menuDiagnostico",
+        destaque: "from-cyan-700 to-blue-500",
+        admin: false,
+      },
+      {
+        titulo: "Preferências",
+        descricao: `Visual ${dark ? "escuro" : "claro"}, tema e ajustes rápidos.`,
+        icon: Settings,
+        pagina: "menuPreferencias",
+        destaque: "from-slate-800 to-slate-500",
+        admin: false,
+      },
+    ];
 
-  const adminsFiltrados = useMemo(() => {
-    const termo = buscaAdmin.trim().toLowerCase();
+    if (!isAdmin) return base;
 
-    if (!termo) return admins;
-
-    return admins.filter((admin) => {
-      const nome = String(admin.nome || "").toLowerCase();
-      const email = String(admin.email || "").toLowerCase();
-      const publicId = String(admin.publicId || "").toLowerCase();
-
-      return (
-        nome.includes(termo) ||
-        email.includes(termo) ||
-        publicId.includes(termo)
-      );
-    });
-  }, [admins, buscaAdmin]);
-
-  const resumoConfigProdutos = useMemo(() => {
-    const retirada = Number(configProdutos.retiradaPadraoDias || 0);
-    const pre = Number(configProdutos.preVencimentoPadraoDias || 0);
-
-    if (configProdutos.setorPrincipal === "Medicamentos") {
-      return `Medicamentos • retirada ${retirada || 30} dias antes${pre ? ` • pré ${pre} dias` : ""}`;
-    }
-
-    return `${configProdutos.setorPrincipal} • regras automáticas ${
-      configProdutos.datasAutomaticasPorSetor ? "ativas" : "desligadas"
-    }`;
-  }, [configProdutos]);
-
-  const ferramentasAdmin = [
-    {
-      titulo: "Base Produtos",
-      descricao: "Produtos aprendidos",
-      icon: ScanBarcode,
-      pagina: "baseProdutos",
-      destaque: "from-orange-600 to-amber-500",
-    },
-    {
-      titulo: "Mapeamentos",
-      descricao: "Histórico de contagens",
-      icon: Map,
-      pagina: "mapeamentos",
-      destaque: "from-slate-700 to-slate-500",
-    },
-    {
-      titulo: "Notificações",
-      descricao: "Alertas e lembretes",
-      icon: Bell,
-      pagina: "notificacoes",
-      destaque: "from-pink-600 to-rose-500",
-    },
-    {
-      titulo: "Backup",
-      descricao: "Exportar dados",
-      icon: Download,
-      pagina: "backup",
-      destaque: "from-green-700 to-lime-500",
-    },
-    {
-      titulo: "Academia AMSI",
-      descricao: "Estudo e treino",
-      icon: Brain,
-      pagina: "doutor",
-      destaque: "from-cyan-700 to-blue-500",
-    },
-  ];
+    return [
+      {
+        titulo: "Central Master",
+        descricao: "Ferramentas administrativas fora da barra inferior.",
+        icon: Crown,
+        pagina: "menuMaster",
+        destaque: "from-amber-500 to-yellow-300",
+        admin: true,
+      },
+      {
+        titulo: "Gerenciar Acessos",
+        descricao: "Buscar ID, promover admin e revisar permissões.",
+        icon: Shield,
+        pagina: "menuAcessos",
+        destaque: "from-violet-700 to-fuchsia-500",
+        admin: true,
+      },
+      ...base,
+    ];
+  }, [dark, isAdmin]);
 
   useEffect(() => {
-    if (isAdmin) {
-      carregarDashboard();
-      carregarAdmins();
-    }
+    carregarResumo();
   }, [isAdmin]);
 
   useEffect(() => {
-    setConfigProdutos(
-      carregarConfigProdutos(usuarioAtual?.uid || (isVisitante ? "visitante" : "anonimo"))
-    );
-  }, [usuarioAtual?.uid, isVisitante]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    window.dispatchEvent(
-      new CustomEvent("avisai-config-produtos-change", {
-        detail: configProdutos,
-      })
-    );
-  }, [configProdutos]);
-
-  useEffect(() => {
     return () => {
-      if (toastTimerRef.current) {
-        clearTimeout(toastTimerRef.current);
-      }
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
 
@@ -283,97 +146,50 @@ function Menu({ setPagina }) {
   function mostrarToast(msg, tipo = "ok") {
     setToast({ msg, tipo });
 
-    if (navigator.vibrate) {
-      navigator.vibrate(30);
-    }
+    if (navigator.vibrate) navigator.vibrate(30);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
 
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-
-    toastTimerRef.current = setTimeout(() => {
-      setToast(null);
-    }, 3000);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
   }
 
-  function normalizarData(valor) {
-    if (!valor) return null;
-
-    if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
-      return valor;
-    }
-
-    if (typeof valor === "string") {
-      if (valor.includes("-")) {
-        const [ano, mes, dia] = valor.split("-").map(Number);
-        return new Date(ano, mes - 1, dia);
-      }
-
-      if (valor.includes("/")) {
-        const [dia, mes, ano] = valor.split("/").map(Number);
-        return new Date(ano, mes - 1, dia);
-      }
-    }
-
-    const data = new Date(valor);
-    return Number.isNaN(data.getTime()) ? null : data;
-  }
-
-  function diferencaEmDias(dataFinal, dataInicial) {
-    const umDia = 1000 * 60 * 60 * 24;
-
-    const inicio = new Date(dataInicial);
-    inicio.setHours(0, 0, 0, 0);
-
-    const fim = new Date(dataFinal);
-    fim.setHours(0, 0, 0, 0);
-
-    return Math.ceil((fim - inicio) / umDia);
-  }
-
-  async function carregarDashboard() {
+  async function carregarResumo() {
     try {
       setCarregando(true);
 
-      const [medicamentos, produtosAprendidos, mapeamentos] =
-        await Promise.all([
-          db.medicamentos.toArray(),
-          db.produtosCodigo.count(),
-          db.mapeamentos.count(),
-        ]);
+      const [medicamentos, produtosAprendidos, mapeamentos] = await Promise.all([
+        db.medicamentos.toArray(),
+        db.produtosCodigo.count(),
+        db.mapeamentos.count(),
+      ]);
 
       const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
 
-      const totalUnidades = medicamentos.reduce((total, item) => {
-        return total + Number(item.quantidade || 1);
-      }, 0);
+      const totalUnidades = medicamentos.reduce(
+        (total, item) => total + Number(item.quantidade || 1),
+        0
+      );
 
       let vencidos = 0;
       let proximos = 0;
 
       medicamentos.forEach((item) => {
         const validade = normalizarData(item.validade);
-
         if (!validade) return;
 
-        const dias = diferencaEmDias(validade, hoje);
+        validade.setHours(0, 0, 0, 0);
+        const dias = Math.ceil((validade - hoje) / (1000 * 60 * 60 * 24));
+        const limite = Math.max(
+          Number(item.diasPre || item.diasPreVencido || 30),
+          Number(item.diasRemover || 7)
+        );
 
-        const diasPreVencido = Number(item.diasPre || item.diasPreVencido || 30);
-        const diasRemover = Number(item.diasRemover || 7);
-        const limiteAlerta = Math.max(diasPreVencido, diasRemover);
-
-        if (dias < 0) {
-          vencidos += 1;
-          return;
-        }
-
-        if (dias <= limiteAlerta) {
-          proximos += 1;
-        }
+        if (dias < 0) vencidos += 1;
+        else if (dias <= limite) proximos += 1;
       });
 
       setDashboard({
-        totalMedicamentos: medicamentos.length,
+        totalMedicamentos: medicamentos.filter((m) => !m.deletado && !m.excluido).length,
         totalUnidades,
         vencidos,
         proximos,
@@ -382,101 +198,9 @@ function Menu({ setPagina }) {
       });
     } catch (err) {
       console.error(err);
-      mostrarToast("Erro ao carregar dashboard 😕", "erro");
+      mostrarToast("Erro ao carregar resumo 😕", "erro");
     } finally {
       setCarregando(false);
-    }
-  }
-
-  async function carregarAdmins() {
-    if (!isAdmin) return;
-
-    try {
-      setCarregandoAdmins(true);
-
-      const q = query(
-        collection(firestore, "usuarios"),
-        where("tipo", "==", "admin")
-      );
-
-      const snap = await getDocs(q);
-
-      const lista = snap.docs
-        .map((docSnap) => ({
-          uid: docSnap.id,
-          ...docSnap.data(),
-        }))
-        .sort((a, b) =>
-          String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR")
-        );
-
-      setAdmins(lista);
-    } catch (err) {
-      console.error(err);
-      mostrarToast("Não consegui carregar os admins 😕", "erro");
-    } finally {
-      setCarregandoAdmins(false);
-    }
-  }
-
-  async function buscarPorId() {
-    if (!buscaId.trim()) {
-      mostrarToast("Digite um ID 😅", "erro");
-      return;
-    }
-
-    try {
-      setLoadingBusca(true);
-
-      const res = await buscarUsuarioPorId(buscaId.trim());
-
-      if (!res.ok) {
-        mostrarToast(res.erro, "erro");
-        setUsuarioEncontrado(null);
-        return;
-      }
-
-      setUsuarioEncontrado(res.usuario);
-      mostrarToast("Usuário encontrado 🔍", "ok");
-    } catch (err) {
-      console.error(err);
-      mostrarToast("Erro ao buscar usuário", "erro");
-    } finally {
-      setLoadingBusca(false);
-    }
-  }
-
-  async function alterarPermissao(tipo) {
-    if (!usuarioEncontrado) return;
-
-    const res = await alterarTipoPorId(usuarioEncontrado.publicId, tipo);
-
-    if (!res.ok) {
-      mostrarToast(res.erro, "erro");
-      return;
-    }
-
-    setUsuarioEncontrado(res.usuario);
-
-    mostrarToast(
-      tipo === "admin" ? "Usuário promovido 👑" : "Usuário rebaixado 👤",
-      "ok"
-    );
-
-    carregarAdmins();
-  }
-
-  async function copiarTexto(texto, label = "Texto") {
-    if (!texto) {
-      mostrarToast("Nada para copiar 😅", "erro");
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(texto);
-      mostrarToast(`${label} copiado 📋`, "ok");
-    } catch {
-      mostrarToast("Não foi possível copiar", "erro");
     }
   }
 
@@ -485,48 +209,20 @@ function Menu({ setPagina }) {
     await logout();
   }
 
-  function alterarConfigProdutos(campo, valor) {
-    setConfigProdutos((prev) => ({
-      ...prev,
-      [campo]: valor,
-    }));
-  }
+  async function copiarId() {
+    const id = usuarioAtual?.publicId;
 
-  function salvarConfigProdutos() {
-    try {
-      const chave = chaveConfigProdutos(
-        usuarioAtual?.uid || (isVisitante ? "visitante" : "anonimo")
-      );
-
-      window.localStorage.setItem(chave, JSON.stringify(configProdutos));
-
-      window.dispatchEvent(
-        new CustomEvent("avisai-config-produtos-change", {
-          detail: configProdutos,
-        })
-      );
-
-      mostrarToast("Preferências de produtos salvas ⚙️", "ok");
-    } catch (err) {
-      console.error(err);
-      mostrarToast("Não consegui salvar as preferências 😕", "erro");
+    if (!id) {
+      mostrarToast("ID ainda não disponível 😅", "erro");
+      return;
     }
-  }
-
-  function resetarConfigProdutos() {
-    setConfigProdutos(CONFIG_PRODUTOS_PADRAO);
 
     try {
-      const chave = chaveConfigProdutos(
-        usuarioAtual?.uid || (isVisitante ? "visitante" : "anonimo")
-      );
-
-      window.localStorage.removeItem(chave);
+      await navigator.clipboard.writeText(id);
+      mostrarToast("ID copiado 📋", "ok");
     } catch {
-      // localStorage pode estar bloqueado. O estado em tela ainda volta ao padrão.
+      mostrarToast("Não foi possível copiar", "erro");
     }
-
-    mostrarToast("Configurações voltaram ao padrão ✨", "ok");
   }
 
   return (
@@ -548,697 +244,206 @@ function Menu({ setPagina }) {
       </AnimatePresence>
 
       <div className="relative z-10 mx-auto max-w-6xl space-y-4 p-4 pb-32 text-gray-950 dark:text-white">
-        <MenuHero
-          saudacao={saudacao}
-          primeiroNome={primeiroNome}
-          usuarioAtual={usuarioAtual}
-          isAdmin={isAdmin}
-          isVisitante={isVisitante}
-          dashboard={dashboard}
-          onPerfil={() => setPagina("perfil")}
-          onLogout={() => setConfirmarSair(true)}
-          onCopyId={() => copiarTexto(usuarioAtual?.publicId, "ID")}
-        />
+        <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-700 via-green-800 to-slate-950 p-4 text-white shadow-2xl shadow-emerald-950/30 md:p-5">
+          <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-sm" />
+          <div className="absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-emerald-300/10" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_35%)]" />
 
-        {isAdmin && (
-          <section className="rounded-[1.8rem] border border-gray-200 bg-white/85 p-4 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70 sm:p-5">
-            <SectionTitle
-              icon={Crown}
-              title="Ferramentas Master"
-              description="Recursos administrativos fora da barra inferior"
-            />
+          <div className="relative grid gap-4 lg:grid-cols-[1.15fr_0.85fr] lg:items-stretch">
+            <div className="flex flex-col justify-between gap-5">
+              <div className="flex items-start gap-3">
+                <HeroAvatar usuarioAtual={usuarioAtual} nome={primeiroNome} />
 
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
-              {ferramentasAdmin.map((acao) => (
-                <ActionCard
-                  key={acao.pagina}
-                  {...acao}
-                  compact
-                  onClick={() => setPagina(acao.pagina)}
-                />
-              ))}
-            </div>
-          </section>
-        )}
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">
+                    {saudacao}
+                  </p>
 
-        {isAdmin && (
-          <section className="rounded-[1.8rem] border border-gray-200 bg-white/85 p-4 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70 sm:p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <SectionTitle
-                icon={LayoutDashboard}
-                title="Painel do estoque"
-                description="Leitura rápida dos dados locais deste aparelho"
-                noMargin
-              />
+                  <h1 className="mt-1 truncate text-3xl font-black md:text-4xl">
+                    {primeiroNome}
+                  </h1>
 
-              <button
-                type="button"
-                onClick={carregarDashboard}
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-green-700 text-white shadow-lg shadow-emerald-700/20 transition active:scale-95 sm:h-14 sm:w-14"
-                aria-label="Atualizar dashboard"
-              >
-                {carregando ? (
-                  <Loader2 size={24} className="animate-spin" />
-                ) : (
-                  <RefreshCcw size={24} />
-                )}
-              </button>
-            </div>
+                  <p className="mt-1 truncate text-sm text-emerald-100">
+                    {isVisitante ? "Acesso rápido sem conta" : usuarioAtual?.email || "Conta ativa"}
+                  </p>
 
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-6">
-              <MetricPremium
-                icon={Package}
-                titulo="Itens"
-                valor={dashboard.totalMedicamentos}
-                descricao="cadastrados"
-              />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Chip>{isVisitante ? "✨ Visitante" : "Conta ativa"}</Chip>
+                    {isAdmin && <Chip>👑 Master</Chip>}
+                    {!isAdmin && <Chip>Controle de produtos</Chip>}
 
-              <MetricPremium
-                icon={Boxes}
-                titulo="Unidades"
-                valor={dashboard.totalUnidades}
-                descricao="no total"
-              />
-
-              <MetricPremium
-                icon={Skull}
-                titulo="Vencidos"
-                valor={dashboard.vencidos}
-                descricao="atenção"
-                alerta={dashboard.vencidos > 0}
-              />
-
-              <MetricPremium
-                icon={CalendarClock}
-                titulo="Próximos"
-                valor={dashboard.proximos}
-                descricao="alerta"
-                aviso={dashboard.proximos > 0}
-              />
-
-              <MetricPremium
-                icon={BookOpenCheck}
-                titulo="Base"
-                valor={dashboard.produtosAprendidos}
-                descricao="scanner"
-              />
-
-              <MetricPremium
-                icon={History}
-                titulo="Mapas"
-                valor={dashboard.mapeamentos}
-                descricao="históricos"
-              />
-            </div>
-          </section>
-        )}
-
-        {isAdmin && (
-          <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-            <div className="rounded-[1.8rem] border border-gray-200 bg-white/85 p-4 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70 sm:p-5">
-              <SectionTitle
-                icon={Shield}
-                title="Gerenciar acessos"
-                description="Busque pelo ID público para editar a permissão"
-              />
-
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                <div className="relative">
-                  <Search
-                    size={18}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-                  />
-
-                  <input
-                    value={buscaId}
-                    onChange={(e) => setBuscaId(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        buscarPorId();
-                      }
-                    }}
-                    placeholder="ID do usuário"
-                    className="h-12 w-full rounded-2xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 font-semibold outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-white/5"
-                  />
+                    {usuarioAtual?.publicId && !isVisitante && (
+                      <button
+                        type="button"
+                        onClick={copiarId}
+                        className="rounded-full border border-white/10 bg-white/15 px-3 py-1 text-xs font-bold backdrop-blur-sm transition active:scale-95"
+                      >
+                        ID: {usuarioAtual.publicId}
+                      </button>
+                    )}
+                  </div>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:max-w-sm">
+                <button
+                  type="button"
+                  onClick={() => setPagina("perfil")}
+                  className="flex h-12 items-center justify-center rounded-2xl bg-white text-sm font-black text-green-800 shadow-lg transition hover:bg-emerald-50 active:scale-95"
+                >
+                  Meu perfil
+                </button>
 
                 <button
                   type="button"
-                  onClick={buscarPorId}
-                  disabled={loadingBusca}
-                  className="h-12 rounded-2xl bg-emerald-700 px-5 font-bold text-white shadow-lg shadow-emerald-700/15 transition active:scale-95 disabled:opacity-60"
+                  onClick={() => setConfirmarSair(true)}
+                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/20 bg-red-500/20 text-sm font-black text-white backdrop-blur-sm transition hover:bg-red-500/30 active:scale-95"
                 >
-                  {loadingBusca ? (
-                    <Loader2 size={20} className="animate-spin" />
-                  ) : (
-                    "Buscar"
-                  )}
+                  <LogOut size={17} />
+                  Sair
                 </button>
               </div>
-
-              {usuarioEncontrado ? (
-                <UsuarioEncontrado
-                  usuario={usuarioEncontrado}
-                  onAdmin={() => alterarPermissao("admin")}
-                  onComum={() => alterarPermissao("comum")}
-                  onCopyId={() => copiarTexto(usuarioEncontrado.publicId, "ID")}
-                />
-              ) : (
-                <EmptySearch />
-              )}
             </div>
 
-            <AreaMaster
-              admins={adminsFiltrados}
-              totalAdmins={admins.length}
-              buscaAdmin={buscaAdmin}
-              setBuscaAdmin={setBuscaAdmin}
-              carregandoAdmins={carregandoAdmins}
-              onRefresh={carregarAdmins}
-              onCopyId={(id) => copiarTexto(id, "ID")}
-            />
-          </section>
-        )}
+            <div className="rounded-[1.7rem] border border-white/10 bg-white/10 p-3 backdrop-blur-xl sm:p-4">
+              <p className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-[0.15em] text-emerald-100">
+                <Sparkles size={15} />
+                Resumo rápido
+              </p>
 
-        <ProdutosConfigSection
-          config={configProdutos}
-          resumo={resumoConfigProdutos}
-          onChange={alterarConfigProdutos}
-          onSalvar={salvarConfigProdutos}
-          onReset={resetarConfigProdutos}
-        />
-
-        <section className="rounded-[1.8rem] border border-gray-200 bg-white/85 p-4 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70 sm:p-5">
-          <SectionTitle
-            icon={Settings}
-            title="Preferências"
-            description="Ajustes rápidos do visual"
-          />
-
-          <div className="rounded-3xl border border-gray-200 bg-gray-50/90 p-4 dark:border-white/10 dark:bg-white/5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800 text-white dark:bg-white/10">
-                  <Moon size={21} />
-                </div>
-
-                <div className="min-w-0">
-                  <p className="font-black">Modo Escuro</p>
-
-                  <p className="truncate text-sm text-gray-500 dark:text-gray-400">
-                    {dark ? "Visual noturno ativo" : "Visual claro ativo"}
-                  </p>
-                </div>
+              <div className="grid grid-cols-2 gap-2">
+                <HeroMiniStat label="Produtos" value={dashboard.totalMedicamentos} detail="cadastrados" />
+                <HeroMiniStat label="Alertas" value={dashboard.proximos} detail="pré/retirada" />
+                <HeroMiniStat label="Unidades" value={dashboard.totalUnidades} detail="no aparelho" />
+                <HeroMiniStat label="Vencidos" value={dashboard.vencidos} detail="atenção" />
               </div>
 
               <button
                 type="button"
-                onClick={toggleTheme}
-                className={`flex h-8 w-16 shrink-0 items-center rounded-full px-1 transition-all ${
-                  dark ? "justify-end bg-green-500" : "justify-start bg-gray-400"
-                }`}
-                aria-label="Alternar tema"
+                onClick={carregarResumo}
+                className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-black/15 text-sm font-black text-emerald-100 transition active:scale-95"
               >
-                <div className="h-6 w-6 rounded-full bg-white shadow-md" />
+                <RefreshCcw size={17} className={carregando ? "animate-spin" : ""} />
+                Atualizar resumo
               </button>
             </div>
           </div>
         </section>
-      </div>
-    </div>
-  );
-}
 
-function ProdutosConfigSection({ config, resumo, onChange, onSalvar, onReset }) {
-  const qualidadeAtual =
-    QUALIDADES_FOTO.find((q) => q.id === config.qualidadeFotoLocal) ||
-    QUALIDADES_FOTO[2];
-
-  return (
-    <section className="rounded-[1.8rem] border border-gray-200 bg-white/85 p-4 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70 sm:p-5">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <SectionTitle
-          icon={SlidersHorizontal}
-          title="Configurações de Produtos"
-          description="Deixe cadastro, datas e fotos com a cara da sua seção"
-          noMargin
-        />
-
-        <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
-          {resumo}
-        </div>
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
-        <div className="space-y-3">
-          <div className="rounded-3xl border border-gray-200 bg-gray-50/90 p-4 dark:border-white/10 dark:bg-white/5">
-            <div className="mb-3 flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20">
-                <Tags size={22} />
-              </div>
-
-              <div className="min-w-0">
-                <p className="font-black">Setor principal</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  O app prioriza esse setor no cadastro e scanner
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {SETORES_PRODUTOS.map((setor) => {
-                const ativo = config.setorPrincipal === setor;
-
-                return (
-                  <button
-                    key={setor}
-                    type="button"
-                    onClick={() => onChange("setorPrincipal", setor)}
-                    className={`rounded-2xl border px-3 py-3 text-left text-xs font-black transition active:scale-95 ${
-                      ativo
-                        ? "border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"
-                        : "border-gray-200 bg-white text-gray-700 hover:bg-emerald-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10"
-                    }`}
-                  >
-                    {setor}
-                  </button>
-                );
-              })}
+        <section className="rounded-[1.8rem] border border-gray-200 bg-white/85 p-4 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70 sm:p-5">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-xl font-black">
+                <Package size={22} />
+                Central AVISAI
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Menu limpo, subpáginas fortes. Agora cada área respira melhor no celular.
+              </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <ConfigMiniCard
-              icon={Pill}
-              titulo="Modo balcão"
-              texto="Medicamentos ficam como atalho principal no cadastro."
-              ativo={config.usarSetorPrincipalAoCadastrar}
-            />
-
-            <ConfigMiniCard
-              icon={ImageUp}
-              titulo="Fotos locais"
-              texto={`${qualidadeAtual.label}: ${qualidadeAtual.detalhe}.`}
-              ativo
-            />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {cardsPrincipais.map((card) => (
+              <MenuCard
+                key={card.pagina}
+                {...card}
+                onClick={() => setPagina(card.pagina)}
+              />
+            ))}
           </div>
-        </div>
+        </section>
 
-        <div className="space-y-3">
-          <div className="rounded-3xl border border-gray-200 bg-gray-50/90 p-4 dark:border-white/10 dark:bg-white/5">
-            <div className="mb-3 flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white dark:bg-white/10">
-                <CalendarDays size={22} />
-              </div>
+        {isAdmin && (
+          <section className="rounded-[1.8rem] border border-gray-200 bg-white/85 p-4 shadow-xl shadow-black/5 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70 sm:p-5">
+            <h2 className="flex items-center gap-2 text-xl font-black">
+              <Crown size={22} />
+              Atalhos Master
+            </h2>
 
-              <div className="min-w-0">
-                <p className="font-black">Datas inteligentes</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Base para pré-vencimento, retirada e etiqueta pronta
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              <NumberField
-                label="Retirar antes"
-                value={config.retiradaPadraoDias}
-                onChange={(valor) => onChange("retiradaPadraoDias", valor)}
-                sufixo="dias"
-              />
-
-              <NumberField
-                label="Pré padrão"
-                value={config.preVencimentoPadraoDias}
-                onChange={(valor) => onChange("preVencimentoPadraoDias", valor)}
-                placeholder="Opcional"
-                sufixo="dias"
-              />
-            </div>
-
-            <div className="mt-3 grid gap-2">
-              <TogglePreferencia
-                icon={Package}
-                titulo="Usar setor principal ao cadastrar"
-                texto="Ao abrir o modal, já entra no setor que você escolheu."
-                ativo={config.usarSetorPrincipalAoCadastrar}
-                onToggle={() =>
-                  onChange(
-                    "usarSetorPrincipalAoCadastrar",
-                    !config.usarSetorPrincipalAoCadastrar
-                  )
-                }
-              />
-
-              <TogglePreferencia
-                icon={Tags}
-                titulo="Mostrar só botões úteis"
-                texto="Reduz botões de setores que não fazem parte da sua rotina."
-                ativo={config.focarSetorPrincipalNosBotoes}
-                onToggle={() =>
-                  onChange(
-                    "focarSetorPrincipalNosBotoes",
-                    !config.focarSetorPrincipalNosBotoes
-                  )
-                }
-              />
-
-              <TogglePreferencia
-                icon={CalendarDays}
-                titulo="Datas automáticas por setor"
-                texto="Medicamentos, alimentos e outros podem ter regras diferentes."
-                ativo={config.datasAutomaticasPorSetor}
-                onToggle={() =>
-                  onChange(
-                    "datasAutomaticasPorSetor",
-                    !config.datasAutomaticasPorSetor
-                  )
-                }
-              />
-
-              <TogglePreferencia
-                icon={CheckCircle2}
-                titulo="Produto já em pré-vencimento"
-                texto="Libera atalho para cadastrar etiqueta que já chega separada."
-                ativo={config.produtoJaPreVencimento}
-                onToggle={() =>
-                  onChange("produtoJaPreVencimento", !config.produtoJaPreVencimento)
-                }
-              />
-
-              <TogglePreferencia
-                icon={CalendarClock}
-                titulo="Tenho só a data de retirada"
-                texto="Quando a etiqueta já informa a data de retirada, sem precisar calcular."
-                ativo={config.permitirDataRetiradaDireta}
-                onToggle={() =>
-                  onChange(
-                    "permitirDataRetiradaDireta",
-                    !config.permitirDataRetiradaDireta
-                  )
-                }
-              />
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-gray-200 bg-gray-50/90 p-4 dark:border-white/10 dark:bg-white/5">
-            <div className="mb-3 flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20">
-                <Camera size={22} />
-              </div>
-
-              <div className="min-w-0">
-                <p className="font-black">Qualidade das fotos</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Foto neste aparelho bonita, nuvem compactada
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              {QUALIDADES_FOTO.map((qualidade) => {
-                const ativo = config.qualidadeFotoLocal === qualidade.id;
-
-                return (
-                  <button
-                    key={qualidade.id}
-                    type="button"
-                    onClick={() => onChange("qualidadeFotoLocal", qualidade.id)}
-                    className={`rounded-2xl border px-2 py-3 text-xs font-black transition active:scale-95 ${
-                      ativo
-                        ? "border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"
-                        : "border-gray-200 bg-white text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200"
-                    }`}
-                  >
-                    {qualidade.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <p className="mt-3 rounded-2xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
-              Próximo encaixe: o ModalMedicamento vai ler essas preferências e já abrir com setor, botões e regras certas.
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Entradas rápidas para as telas administrativas antigas.
             </p>
-          </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={onReset}
-              className="h-12 rounded-2xl border border-gray-200 bg-white text-sm font-black text-gray-700 transition active:scale-95 dark:border-white/10 dark:bg-white/5 dark:text-white"
-            >
-              Resetar
-            </button>
-
-            <button
-              type="button"
-              onClick={onSalvar}
-              className="h-12 rounded-2xl bg-emerald-700 text-sm font-black text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-800 active:scale-95"
-            >
-              Salvar ajustes
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ConfigMiniCard({ icon: Icon, titulo, texto, ativo }) {
-  return (
-    <div className="rounded-3xl border border-gray-200 bg-gray-50/90 p-4 dark:border-white/10 dark:bg-white/5">
-      <div className="flex items-start gap-3">
-        <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white ${
-            ativo ? "bg-emerald-700" : "bg-slate-500"
-          }`}
-        >
-          <Icon size={20} />
-        </div>
-
-        <div className="min-w-0">
-          <p className="font-black">{titulo}</p>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{texto}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NumberField({ label, value, onChange, placeholder = "0", sufixo }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-black text-gray-500 dark:text-gray-400">
-        {label}
-      </span>
-
-      <div className="relative">
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value.replace(/\D/g, ""))}
-          inputMode="numeric"
-          placeholder={placeholder}
-          className={`h-12 w-full rounded-2xl border border-gray-200 bg-white px-4 text-sm font-black text-gray-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 dark:border-white/10 dark:bg-white/5 dark:text-white ${
-            sufixo ? "pr-14" : ""
-          }`}
-        />
-
-        {sufixo && (
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-black text-gray-400">
-            {sufixo}
-          </span>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
+              <MiniTool icon={ScanBarcode} titulo="Base" pagina="baseProdutos" setPagina={setPagina} />
+              <MiniTool icon={Map} titulo="Mapas" pagina="mapeamentos" setPagina={setPagina} />
+              <MiniTool icon={Bell} titulo="Alertas" pagina="notificacoes" setPagina={setPagina} />
+              <MiniTool icon={Download} titulo="Backup" pagina="backup" setPagina={setPagina} />
+              <MiniTool icon={Brain} titulo="AMSI" pagina="doutor" setPagina={setPagina} />
+            </div>
+          </section>
         )}
       </div>
-    </label>
+    </div>
   );
 }
 
-function TogglePreferencia({ icon: Icon, titulo, texto, ativo, onToggle }) {
+function normalizarData(valor) {
+  if (!valor) return null;
+  if (valor instanceof Date && !Number.isNaN(valor.getTime())) return valor;
+
+  const texto = String(valor).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
+    const [ano, mes, dia] = texto.split("-").map(Number);
+    return new Date(ano, mes - 1, dia);
+  }
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(texto)) {
+    const [dia, mes, ano] = texto.split("/").map(Number);
+    return new Date(ano, mes - 1, dia);
+  }
+
+  const data = new Date(texto);
+  return Number.isNaN(data.getTime()) ? null : data;
+}
+
+function MenuCard({ icon: Icon, titulo, descricao, destaque, admin, onClick }) {
   return (
     <button
       type="button"
-      onClick={onToggle}
-      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-3 text-left transition active:scale-[0.99] dark:border-white/10 dark:bg-white/5"
+      onClick={onClick}
+      className="group relative min-h-[150px] overflow-hidden rounded-[1.65rem] border border-gray-200 bg-gray-50 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl active:scale-[0.98] dark:border-white/10 dark:bg-white/5"
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <div
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white ${
-            ativo ? "bg-emerald-700" : "bg-slate-500"
-          }`}
-        >
-          <Icon size={18} />
+      <div className={`absolute -right-12 -top-12 h-32 w-32 rounded-full bg-gradient-to-br ${destaque} opacity-20 blur-xl transition group-hover:opacity-35`} />
+
+      <div className="relative flex items-center justify-between gap-3">
+        <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${destaque} text-white shadow-lg`}>
+          <Icon size={25} />
         </div>
 
-        <div className="min-w-0">
-          <p className="text-sm font-black">{titulo}</p>
-          <p className="mt-0.5 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">
-            {texto}
-          </p>
-        </div>
+        <ChevronRight size={19} className="text-gray-400 transition group-hover:translate-x-1" />
       </div>
 
-      <span
-        className={`flex h-7 w-12 shrink-0 items-center rounded-full px-1 transition-all ${
-          ativo ? "justify-end bg-emerald-500" : "justify-start bg-gray-400"
-        }`}
-      >
-        <span className="h-5 w-5 rounded-full bg-white shadow-md" />
-      </span>
+      <div className="relative mt-4">
+        <div className="flex items-center gap-2">
+          <p className="text-base font-black">{titulo}</p>
+          {admin && (
+            <span className="rounded-full bg-yellow-400 px-2 py-0.5 text-[10px] font-black text-black">
+              admin
+            </span>
+          )}
+        </div>
+
+        <p className="mt-1 line-clamp-2 text-sm text-gray-500 dark:text-gray-400">
+          {descricao}
+        </p>
+      </div>
     </button>
   );
 }
 
-function MenuHero({
-  saudacao,
-  primeiroNome,
-  usuarioAtual,
-  isAdmin,
-  isVisitante,
-  dashboard,
-  onPerfil,
-  onLogout,
-  onCopyId,
-}) {
-  const subtitulo = isVisitante
-    ? "Acesso rápido sem conta"
-    : usuarioAtual?.email || "Conta ativa";
-
+function MiniTool({ icon: Icon, titulo, pagina, setPagina }) {
   return (
-    <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-700 via-green-800 to-slate-950 p-4 text-white shadow-2xl shadow-emerald-950/30 md:p-5">
-      <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-sm" />
-      <div className="absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-emerald-300/10" />
-      <div className="absolute right-28 top-24 h-10 w-10 rounded-full bg-white/10 blur-sm" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_35%)]" />
-
-      <div className="relative grid gap-4 lg:grid-cols-[1.15fr_0.85fr] lg:items-stretch">
-        <div className="flex flex-col justify-between gap-5">
-          <div className="flex items-start gap-3">
-            <HeroAvatar usuarioAtual={usuarioAtual} nome={primeiroNome} />
-
-            <div className="min-w-0">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">
-                {saudacao}
-              </p>
-
-              <h1 className="mt-1 truncate text-3xl font-black md:text-4xl">
-                {primeiroNome}
-              </h1>
-
-              <p className="mt-1 truncate text-sm text-emerald-100">
-                {subtitulo}
-              </p>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Chip>{isVisitante ? "✨ Visitante" : "Conta ativa"}</Chip>
-
-                {usuarioAtual?.publicId && !isVisitante && (
-                  <button
-                    type="button"
-                    onClick={onCopyId}
-                    className="rounded-full border border-white/10 bg-white/15 px-3 py-1 text-xs font-bold backdrop-blur-sm transition active:scale-95"
-                  >
-                    ID: {usuarioAtual.publicId}
-                  </button>
-                )}
-
-                {isAdmin && <Chip>👑 Painel master</Chip>}
-                {!isAdmin && <Chip>Receitas + Posologia</Chip>}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 sm:max-w-sm">
-            <button
-              type="button"
-              onClick={onPerfil}
-              className="
-                flex h-12 items-center justify-center rounded-2xl bg-white
-                text-sm font-black text-green-800 shadow-lg transition
-                hover:bg-emerald-50 active:scale-95
-              "
-            >
-              Meu perfil
-            </button>
-
-            <button
-              type="button"
-              onClick={onLogout}
-              className="
-                flex h-12 items-center justify-center gap-2 rounded-2xl
-                border border-white/20 bg-red-500/20 text-sm font-black
-                text-white backdrop-blur-sm transition hover:bg-red-500/30
-                active:scale-95
-              "
-            >
-              <LogOut size={17} />
-              Sair
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-[1.7rem] border border-white/10 bg-white/10 p-3 backdrop-blur-xl sm:p-4">
-          <p className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-[0.15em] text-emerald-100">
-            <Sparkles size={15} />
-            Resumo rápido
-          </p>
-
-          <div className="grid grid-cols-2 gap-2">
-            <HeroMiniStat
-              label={isAdmin ? "Itens" : "Receitas"}
-              value={isAdmin ? dashboard.totalMedicamentos : "Livre"}
-              detail={isAdmin ? "estoque" : "sem conta"}
-            />
-
-            <HeroMiniStat
-              label={isAdmin ? "Alertas" : "Posologia"}
-              value={isAdmin ? dashboard.proximos : "Livre"}
-              detail={isAdmin ? "próximos" : "uso rápido"}
-            />
-          </div>
-
-          {!isAdmin && (
-            <p className="mt-3 rounded-2xl bg-black/15 p-3 text-xs font-semibold text-emerald-100/90">
-              Use as ferramentas principais sem burocracia. Para nuvem e permissões, crie uma conta.
-            </p>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function HeroAvatar({ usuarioAtual, nome }) {
-  const foto = usuarioAtual?.fotoPerfil;
-
-  return (
-    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[1.45rem] border border-white/20 bg-white/15 shadow-xl backdrop-blur-md sm:h-20 sm:w-20 sm:rounded-[1.7rem]">
-      {foto ? (
-        <img
-          src={foto}
-          alt={nome || "Usuário"}
-          className="h-full w-full object-cover"
-        />
-      ) : (
-        <span className="text-2xl font-black text-white sm:text-3xl">
-          {obterIniciais(nome)}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function SectionTitle({ icon: Icon, title, description, noMargin = false }) {
-  return (
-    <div className={noMargin ? "" : "mb-3"}>
-      <h2 className="flex items-center gap-2 text-lg font-black sm:text-xl">
-        <Icon size={21} />
-        {title}
-      </h2>
-
-      <p className="text-xs text-gray-500 dark:text-gray-400 sm:text-sm">
-        {description}
-      </p>
-    </div>
+    <button
+      type="button"
+      onClick={() => setPagina(pagina)}
+      className="flex min-h-[86px] flex-col items-center justify-center gap-2 rounded-3xl border border-gray-200 bg-gray-50 p-3 text-center transition active:scale-95 dark:border-white/10 dark:bg-white/5"
+    >
+      <Icon size={22} className="text-emerald-600 dark:text-emerald-300" />
+      <span className="text-xs font-black">{titulo}</span>
+    </button>
   );
 }
 
@@ -1252,450 +457,12 @@ function HeroMiniStat({ label, value, detail }) {
   );
 }
 
-function ActionCard({
-  icon: Icon,
-  titulo,
-  descricao,
-  destaque,
-  onClick,
-  compact = false,
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`
-        group relative overflow-hidden rounded-[1.45rem] border border-gray-200
-        bg-gray-50 p-3 text-left shadow-sm transition hover:-translate-y-0.5
-        hover:shadow-xl active:scale-[0.98]
-        dark:border-white/10 dark:bg-white/5 sm:rounded-[1.7rem] sm:p-4
-        ${compact ? "min-h-[128px]" : "min-h-[136px]"}
-      `}
-    >
-      <div
-        className={`absolute -right-10 -top-10 h-28 w-28 rounded-full bg-gradient-to-br ${destaque} opacity-20 blur-xl transition group-hover:opacity-35`}
-      />
-
-      <div className="relative flex items-center justify-between gap-3">
-        <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${destaque} text-white shadow-lg sm:h-14 sm:w-14`}
-        >
-          <Icon size={compact ? 22 : 24} />
-        </div>
-
-        <ChevronRight
-          size={18}
-          className="text-gray-400 transition group-hover:translate-x-1"
-        />
-      </div>
-
-      <div className="relative mt-3">
-        <p className="text-sm font-black sm:text-base">{titulo}</p>
-        <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400 sm:text-sm">
-          {descricao}
-        </p>
-      </div>
-    </button>
-  );
-}
-
-function MetricPremium({
-  icon: Icon,
-  titulo,
-  valor,
-  descricao,
-  alerta = false,
-  aviso = false,
-}) {
-  const destaque = alerta
-    ? "text-red-500"
-    : aviso
-    ? "text-amber-500"
-    : "text-emerald-600 dark:text-emerald-300";
-
-  const bg = alerta
-    ? "border-red-200 bg-red-50 dark:border-red-500/20 dark:bg-red-500/10"
-    : aviso
-    ? "border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10"
-    : "border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5";
-
-  return (
-    <div className={`rounded-2xl border p-3 sm:p-4 ${bg}`}>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-[11px] font-black text-gray-500 dark:text-gray-400 sm:text-xs">
-          {titulo}
-        </p>
-
-        <Icon size={17} className={destaque} />
-      </div>
-
-      <p className={`text-2xl font-black sm:text-3xl ${destaque}`}>{valor}</p>
-
-      <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400 sm:text-xs">
-        {descricao}
-      </p>
-    </div>
-  );
-}
-
-function EmptySearch() {
-  return (
-    <div className="mt-4 rounded-3xl border border-dashed border-gray-300 bg-gray-50/80 p-5 text-center dark:border-white/10 dark:bg-white/5">
-      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-700 text-white">
-        <Search size={22} />
-      </div>
-
-      <p className="font-black">Nenhum usuário selecionado</p>
-
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        Digite o ID público para abrir o cartão de permissão.
-      </p>
-    </div>
-  );
-}
-
-function UsuarioEncontrado({ usuario, onAdmin, onComum, onCopyId }) {
-  return (
-    <div className="mt-4 rounded-3xl border border-gray-200 bg-gray-50/90 p-4 dark:border-white/10 dark:bg-white/5 sm:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-xl font-black">{usuario.nome}</p>
-
-          <p className="truncate text-sm text-gray-500 dark:text-gray-400">
-            {usuario.email || "Email não informado"}
-          </p>
-
-          <button
-            type="button"
-            onClick={onCopyId}
-            className="mt-1 flex items-center gap-2 text-sm font-bold text-gray-500 transition hover:text-emerald-600 dark:text-gray-400 dark:hover:text-emerald-300"
-          >
-            ID: {usuario.publicId}
-            <Copy size={14} />
-          </button>
-        </div>
-
-        <CargoBadge tipo={usuario.tipo} />
-      </div>
-
-      {(usuario.permissaoAtualizadaPor || usuario.criadoPor) && (
-        <div className="mt-4 rounded-2xl bg-black/5 p-3 text-sm dark:bg-white/5">
-          <p>
-            👤 Última alteração por:
-            <span className="font-bold">
-              {" "}
-              {usuario.permissaoAtualizadaPor || usuario.criadoPor}
-            </span>
-          </p>
-
-          {usuario.permissaoAtualizadaEm && (
-            <p className="mt-1 text-xs text-gray-500">
-              {new Date(usuario.permissaoAtualizadaEm).toLocaleString("pt-BR")}
-            </p>
-          )}
-        </div>
-      )}
-
-      <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3">
-        <button
-          type="button"
-          onClick={onAdmin}
-          className="rounded-2xl bg-yellow-500 py-3 text-sm font-black text-black transition active:scale-95 sm:text-base"
-        >
-          👑 Admin
-        </button>
-
-        <button
-          type="button"
-          onClick={onComum}
-          className="rounded-2xl bg-blue-600 py-3 text-sm font-black text-white transition active:scale-95 sm:text-base"
-        >
-          👤 Comum
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function AreaMaster({
-  admins,
-  totalAdmins,
-  buscaAdmin,
-  setBuscaAdmin,
-  carregandoAdmins,
-  onRefresh,
-  onCopyId,
-}) {
-  return (
-    <div className="rounded-[1.8rem] border border-emerald-200 bg-gradient-to-br from-emerald-700 via-green-800 to-slate-950 p-4 text-white shadow-2xl shadow-emerald-950/20 sm:p-5">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 sm:h-12 sm:w-12">
-            <Crown size={23} />
-          </div>
-
-          <p className="text-2xl font-black">Área Master</p>
-
-          <p className="mt-1 text-sm text-emerald-100">
-            {buscaAdmin.trim()
-              ? `${admins.length} de ${totalAdmins} admins`
-              : totalAdmins === 1
-              ? "1 administrador ativo"
-              : `${totalAdmins} administradores ativos`}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 transition active:scale-95"
-          aria-label="Atualizar admins"
-        >
-          {carregandoAdmins ? (
-            <Loader2 size={21} className="animate-spin" />
-          ) : (
-            <RefreshCcw size={21} />
-          )}
-        </button>
-      </div>
-
-      <div className="relative mb-4">
-        <Search
-          size={18}
-          className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-100/70"
-        />
-
-        <input
-          value={buscaAdmin}
-          onChange={(e) => setBuscaAdmin(e.target.value)}
-          placeholder="Buscar nome, email ou ID"
-          className="
-            h-12 w-full rounded-2xl border border-white/10 bg-black/20
-            py-3 pl-11 pr-4 font-semibold text-white outline-none
-            placeholder:text-emerald-100/50
-            focus:border-emerald-300/50 focus:ring-4 focus:ring-emerald-300/10
-          "
-        />
-      </div>
-
-      <div className="max-h-[350px] space-y-2 overflow-y-auto pr-1">
-        {admins.length === 0 && !carregandoAdmins && (
-          <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-emerald-100">
-            {buscaAdmin.trim()
-              ? "Nenhum admin encontrado nessa busca."
-              : "Nenhum admin encontrado ainda."}
-          </div>
-        )}
-
-        {carregandoAdmins && (
-          <div className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-emerald-100">
-            Carregando administradores...
-          </div>
-        )}
-
-        {admins.map((admin) => (
-          <AdminRow
-            key={admin.uid || admin.publicId}
-            admin={admin}
-            onCopyId={() => onCopyId(admin.publicId)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AdminRow({ admin, onCopyId }) {
-  const nome = admin.nome || "Admin sem nome";
-  const inicial = nome.trim().charAt(0).toUpperCase() || "A";
-
-  return (
-    <div className="group rounded-2xl border border-white/10 bg-white/10 px-3 py-3 backdrop-blur-sm transition hover:bg-white/15">
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-lg font-black text-emerald-800 shadow-md">
-          {inicial}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate font-black">{nome}</p>
-
-            <span className="shrink-0 rounded-full bg-yellow-400 px-2 py-0.5 text-[10px] font-black text-black">
-              Admin
-            </span>
-          </div>
-
-          <p className="truncate text-xs text-emerald-100/80">
-            {admin.email || "Email não informado"}
-          </p>
-
-          <button
-            type="button"
-            onClick={onCopyId}
-            className="mt-1 flex max-w-full items-center gap-1 text-xs font-bold text-emerald-100/90 transition hover:text-white active:scale-95"
-          >
-            <span className="truncate">ID: {admin.publicId || "sem ID"}</span>
-
-            <Copy size={12} className="shrink-0" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CargoBadge({ tipo }) {
-  const admin = tipo === "admin";
-
-  return (
-    <span
-      className={`
-        rounded-full px-3 py-1 text-xs font-black
-        ${admin ? "bg-yellow-500 text-black" : "bg-blue-600 text-white"}
-      `}
-    >
-      {admin ? "Admin" : "Comum"}
-    </span>
-  );
-}
-
 function Chip({ children }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/15 px-3 py-1 text-xs font-bold backdrop-blur-sm">
       {children}
     </span>
   );
-}
-
-function Toast({ toast, fechar }) {
-  const erro = toast.tipo === "erro";
-  const info = toast.tipo === "info";
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -14 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -14 }}
-      className="
-        fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.75rem)]
-        z-[99999] flex justify-center px-3
-        pointer-events-none
-      "
-    >
-      <div
-        className={`
-          pointer-events-auto flex w-full max-w-[calc(100vw-1.5rem)] items-center gap-3
-          rounded-3xl border p-4 shadow-2xl backdrop-blur-xl sm:max-w-md
-          ${
-            erro
-              ? "border-red-300 bg-red-50/95 text-red-700 dark:border-red-500/20 dark:bg-red-500/15 dark:text-red-300"
-              : info
-              ? "border-blue-300 bg-blue-50/95 text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/15 dark:text-blue-300"
-              : "border-emerald-300 bg-emerald-50/95 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/15 dark:text-emerald-300"
-          }
-        `}
-      >
-        <div
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white ${
-            erro ? "bg-red-500" : info ? "bg-blue-500" : "bg-emerald-600"
-          }`}
-        >
-          {erro ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
-        </div>
-
-        <p className="min-w-0 flex-1 text-sm font-bold">{toast.msg}</p>
-
-        <button
-          type="button"
-          onClick={fechar}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/5 transition active:scale-95 dark:bg-white/10"
-          aria-label="Fechar aviso"
-        >
-          <X size={17} />
-        </button>
-      </div>
-    </motion.div>
-  );
-}
-
-function ModalConfirmarSair({ isVisitante, onCancel, onConfirm }) {
-  return (
-    <motion.div
-      onClick={onCancel}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="
-        fixed inset-0 z-[2147483647] flex items-center justify-center
-        bg-slate-950/75 p-4 backdrop-blur-md
-      "
-    >
-      <motion.div
-        onClick={(e) => e.stopPropagation()}
-        initial={{ opacity: 0, y: 22, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 22, scale: 0.96 }}
-        transition={{ duration: 0.18 }}
-        className="
-          w-full max-w-sm rounded-[2rem] border border-white/10
-          bg-white p-6 text-gray-950 shadow-2xl dark:bg-gray-950 dark:text-white
-        "
-      >
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-red-600 text-white shadow-lg shadow-red-600/25">
-          <LogOut size={30} />
-        </div>
-
-        <h2 className="text-center text-xl font-black">Sair da conta?</h2>
-
-        <p className="mt-2 text-center text-sm text-gray-500 dark:text-gray-400">
-          {isVisitante
-            ? "Você vai sair do modo visitante e voltar para a tela inicial."
-            : "Sua sessão será encerrada e o app voltará para a tela de login."}
-        </p>
-
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="
-              h-12 rounded-2xl bg-gray-100 font-black text-gray-700
-              transition active:scale-95 dark:bg-white/10 dark:text-white
-            "
-          >
-            Cancelar
-          </button>
-
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="
-              flex h-12 items-center justify-center gap-2 rounded-2xl
-              bg-red-600 font-black text-white shadow-lg shadow-red-600/20
-              transition hover:bg-red-700 active:scale-95
-            "
-          >
-            <LogOut size={18} />
-            Sair
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-function obterIniciais(nome) {
-  const partes = String(nome || "U")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (!partes.length) return "U";
-
-  if (partes.length === 1) {
-    return partes[0].slice(0, 2).toUpperCase();
-  }
-
-  return `${partes[0][0]}${partes[1][0]}`.toUpperCase();
 }
 
 export default Menu;

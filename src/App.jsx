@@ -34,8 +34,39 @@ const Backup = lazy(() => import("./pages/Backup"));
 const Perfil = lazy(() => import("./pages/Perfil"));
 const Notificacoes = lazy(() => import("./pages/Notificacoes"));
 
+// =============================
+// 🚀 SUBPAGES DO MENU AVISAI
+// =============================
+const MenuMaster = lazy(() => import("./pages/menu/MenuMaster"));
+const MenuAcessos = lazy(() => import("./pages/menu/MenuAcessos"));
+const MenuDiagnostico = lazy(() => import("./pages/menu/MenuDiagnostico"));
+const MenuProdutosConfig = lazy(() => import("./pages/menu/MenuProdutosConfig"));
+const MenuPreferencias = lazy(() => import("./pages/menu/MenuPreferencias"));
+
+const MENU_SUBPAGES = [
+  "menuMaster",
+  "menuAcessos",
+  "menuDiagnostico",
+  "menuProdutosConfig",
+  "menuPreferencias",
+];
+
+const COMMON_EXTRA_ALLOWED_PAGES = [
+  "menuProdutosConfig",
+  "menuPreferencias",
+];
+
+const LOCAL_PAGE_TITLES = {
+  menuMaster: "Central Master",
+  menuAcessos: "Gerenciar Acessos",
+  menuDiagnostico: "Diagnóstico AVISAI",
+  menuProdutosConfig: "Configurações de Produtos",
+  menuPreferencias: "Preferências",
+};
+
 const HEADER_BACK_PAGES = [
   ...MENU_PAGES,
+  ...MENU_SUBPAGES,
   "perfil",
 ];
 
@@ -46,6 +77,13 @@ function App() {
   const [overlayAberto, setOverlayAberto] = useState(false);
 
   const primeiraPaginaDefinida = useRef(false);
+
+  function paginaPermitidaParaComum(nomePagina) {
+    return (
+      COMMON_ALLOWED_PAGES.includes(nomePagina) ||
+      COMMON_EXTRA_ALLOWED_PAGES.includes(nomePagina)
+    );
+  }
 
   useEffect(() => {
     function ouvirOverlay(e) {
@@ -85,7 +123,7 @@ function App() {
       return;
     }
 
-    if (!isAdmin && !COMMON_ALLOWED_PAGES.includes(pagina)) {
+    if (!isAdmin && !paginaPermitidaParaComum(pagina)) {
       setPagina(COMMON_START_PAGE);
     }
   }, [loading, usuarioAtual, isAdmin, pagina]);
@@ -114,7 +152,7 @@ function App() {
   }
 
   function irPara(proximaPagina) {
-    if (!isAdmin && !COMMON_ALLOWED_PAGES.includes(proximaPagina)) {
+    if (!isAdmin && !paginaPermitidaParaComum(proximaPagina)) {
       limparOverlay();
       setPagina(COMMON_START_PAGE);
       return;
@@ -132,7 +170,7 @@ function App() {
       return;
     }
 
-    if (MENU_PAGES.includes(pagina)) {
+    if (MENU_PAGES.includes(pagina) || MENU_SUBPAGES.includes(pagina)) {
       setPagina("menu");
       return;
     }
@@ -141,7 +179,7 @@ function App() {
   }
 
   function renderPagina() {
-    if (!isAdmin && !COMMON_ALLOWED_PAGES.includes(pagina)) {
+    if (!isAdmin && !paginaPermitidaParaComum(pagina)) {
       return <Receitas />;
     }
 
@@ -176,10 +214,31 @@ function App() {
       case "notificacoes":
         return isAdmin ? <Notificacoes /> : <Receitas />;
 
+      // =============================
+      // 🚀 SUBPAGES DO MENU
+      // =============================
+      case "menuMaster":
+        return isAdmin ? <MenuMaster setPagina={irPara} /> : <Receitas />;
+
+      case "menuAcessos":
+        return isAdmin ? <MenuAcessos setPagina={irPara} /> : <Receitas />;
+
+      case "menuDiagnostico":
+        return isAdmin ? <MenuDiagnostico setPagina={irPara} /> : <Receitas />;
+
+      case "menuProdutosConfig":
+        return <MenuProdutosConfig setPagina={irPara} />;
+
+      case "menuPreferencias":
+        return <MenuPreferencias setPagina={irPara} />;
+
       default:
         return isAdmin ? <Medicamentos /> : <Receitas />;
     }
   }
+
+  const tituloPagina =
+    PAGE_TITLES[pagina] || LOCAL_PAGE_TITLES[pagina] || "Avisai";
 
   return (
     <div className="min-h-[100dvh] bg-gray-100 text-black transition-colors duration-300 dark:bg-[#0f172a] dark:text-white">
@@ -194,7 +253,7 @@ function App() {
             className="relative z-[90]"
           >
             <AppHeader
-              title={PAGE_TITLES[pagina] || "Farmácia App"}
+              title={tituloPagina}
               showBack={mostrarVoltar}
               onBack={voltarPagina}
             />
